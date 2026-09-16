@@ -162,10 +162,10 @@ class AIOSEO extends Source
 				continue;
 			}
 
-			$type = (int) ($row['type'] ?? $row['redirect_type'] ?? 301);
+			$type = (int) ($row['type'] ?? 301);
 			$ok   = $manager->insert([
 				'from_url'            => $from,
-				'to_url'              => (string) ($row['target_url'] ?? $row['to_url'] ?? ''),
+				'to_url'              => (string) ($row['target_url'] ?? ''),
 				'redirect_type'       => in_array($type, [301, 302, 307, 410, 451], true) ? $type : 301,
 				'match_type'          => ! empty($row['regex']) ? 'regex' : 'exact',
 				'note'                => __('Imported from All in One SEO', 'mihdan-index-now'),
