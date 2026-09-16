@@ -22,6 +22,7 @@
 	overflow: auto;
 }
 
-#crawlwp_importer table tr th {
+#crawlwp_importer table tr th,
+#submit_crawlwp_importer {
 	display: none;
 }
