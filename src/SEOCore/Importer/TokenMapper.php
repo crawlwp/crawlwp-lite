@@ -199,8 +199,8 @@ class TokenMapper
 
 			/* WooCommerce SEO add-on. */
 			'%%wc_shortdesc%%'         => '{{ post.excerpt }}',
-			'%%wc_price%%'             => '',
-			'%%wc_sku%%'               => '',
+			'%%wc_price%%'             => '{{ product.price }}',
+			'%%wc_sku%%'               => '{{ product.sku }}',
 			'%%wc_brand%%'             => '',
 		];
 	}
@@ -267,8 +267,8 @@ class TokenMapper
 
 			/* WooCommerce and BuddyPress modules. */
 			'%wc_shortdesc%'           => '{{ post.excerpt }}',
-			'%wc_price%'               => '',
-			'%wc_sku%'                 => '',
+			'%wc_price%'               => '{{ product.price }}',
+			'%wc_sku%'                 => '{{ product.sku }}',
 			'%wc_brand%'               => '',
 			'%group_name%'             => '',
 			'%group_desc%'             => '',
@@ -421,10 +421,11 @@ class TokenMapper
 			'%%wc_single_cat%%'             => '{{ post.category }}',
 			'%%wc_single_tag%%'             => '{{ post.tag }}',
 			'%%wc_single_short_desc%%'      => '{{ post.excerpt }}',
-			'%%wc_single_price_exc_tax%%'   => '',
-			'%%wc_single_price%%'           => '',
-			'%%wc_get_price%%'              => '',
-			'%%wc_sku%%'                    => '',
+			'%%wc_single_price_exc_tax%%'   => '{{ product.price }}',
+			'%%wc_single_price%%'           => '{{ product.price }}',
+			'%%wc_get_price%%'              => '{{ product.price }}',
+			'%%wc_single_price_inc_tax%%'   => '{{ product.price_with_tax }}',
+			'%%wc_sku%%'                    => '{{ product.sku }}',
 		];
 	}
 

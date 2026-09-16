@@ -311,6 +311,10 @@ class Variables
 			return $this->resolve_post_token(substr($token, 5));
 		}
 
+		if (strpos($token, 'product.') === 0) {
+			return $this->resolve_product_token(substr($token, 8));
+		}
+
 		if (strpos($token, 'term.') === 0) {
 			return $this->resolve_term_token(substr($token, 5));
 		}
@@ -428,6 +432,179 @@ class Variables
 		}
 
 		return '';
+	}
+
+	private function resolve_product_token(string $key): string
+	{
+		$product = $this->context['product'] ?? null;
+		$post    = null;
+
+		if (is_object($product) && method_exists($product, 'get_id')) {
+			$post = get_post($product->get_id());
+		} else {
+			$post = $this->context['post'] ?? $this->context['posts_page'] ?? null;
+
+			if (! $post instanceof \WP_Post) {
+				$queried = function_exists('get_queried_object') ? get_queried_object() : null;
+				if ($queried instanceof \WP_Post) {
+					$post = $queried;
+				} elseif (function_exists('get_post')) {
+					$post = get_post();
+				}
+			}
+
+			if (! $post instanceof \WP_Post || $post->post_type !== 'product') {
+				return '';
+			}
+
+			if (function_exists('wc_get_product')) {
+				$product = wc_get_product($post);
+			}
+		}
+
+		if (! $product) {
+			return '';
+		}
+
+		switch ($key) {
+			case 'price':
+				return method_exists($product, 'get_price') ? $product->get_price() : '';
+
+			case 'price_with_tax':
+				if (! method_exists($product, 'get_price')) {
+					return '';
+				}
+				$price = $product->get_price();
+				if ($price === '' || $price === null) {
+					return '';
+				}
+				if (function_exists('wc_get_price_including_tax')) {
+					return (string) wc_get_price_including_tax($product, ['price' => $price]);
+				}
+				return $price;
+
+			case 'sale_from':
+				if (method_exists($product, 'get_date_on_sale_from') && $product->get_date_on_sale_from()) {
+					return gmdate('Y-m-d', $product->get_date_on_sale_from()->getTimestamp());
+				}
+				return '';
+
+			case 'sale_to':
+				$today     = gmdate('Y-m-d');
+				$timestamp = function_exists('wc_string_to_timestamp')
+					? (int) wc_string_to_timestamp('+1 month')
+					: (int) strtotime('+1 month');
+				$sale_to   = gmdate('Y-m-d', $timestamp);
+				$sale_from = '';
+				if (method_exists($product, 'get_date_on_sale_from') && $product->get_date_on_sale_from()) {
+					$sale_from = gmdate('Y-m-d', $product->get_date_on_sale_from()->getTimestamp());
+				}
+
+				if (method_exists($product, 'is_on_sale') && $product->is_on_sale()) {
+					if (method_exists($product, 'get_date_on_sale_to') && $product->get_date_on_sale_to()) {
+						$sale_to = gmdate('Y-m-d', $product->get_date_on_sale_to()->getTimestamp());
+					}
+				} else {
+					if ($sale_from !== '' && $sale_from > $today) {
+						$from_ts = function_exists('wc_string_to_timestamp')
+							? (int) wc_string_to_timestamp($sale_from)
+							: (int) strtotime($sale_from);
+						$day_sec = defined('DAY_IN_SECONDS') ? DAY_IN_SECONDS : 86400;
+						$sale_to = gmdate('Y-m-d', $from_ts - $day_sec);
+					} elseif ($sale_from === $today) {
+						$sale_to = $today;
+					}
+				}
+				return $sale_to;
+
+			case 'sku':
+				return method_exists($product, 'get_sku') ? $product->get_sku() : '';
+
+			case 'stock':
+				$status = method_exists($product, 'get_stock_status')
+					? strtolower($product->get_stock_status())
+					: 'instock';
+				if (function_exists('wc_get_product_stock_status_options')) {
+					$options = wc_get_product_stock_status_options();
+					if (isset($options[$status])) {
+						return (string) $options[$status];
+					}
+				}
+				$statuses = self::product_stock_statuses();
+				return $statuses[$status] ?? __('In stock', 'mihdan-index-now');
+
+			case 'currency':
+				return function_exists('get_woocommerce_currency')
+					? get_woocommerce_currency()
+					: '';
+
+			case 'rating':
+				$rating = method_exists($product, 'get_average_rating') ? $product->get_average_rating() : 0;
+				return (float) $rating > 0 ? (string) $rating : '';
+
+			case 'review_count':
+				$count = method_exists($product, 'get_review_count') ? $product->get_review_count() : 0;
+				return $count > 0 ? (string) $count : '0';
+
+			case 'low_price':
+				if (method_exists($product, 'is_type') && $product->is_type('variable')) {
+					$min_price = method_exists($product, 'get_variation_price')
+						? $product->get_variation_price('min', false)
+						: '';
+					if ($min_price !== '' && $min_price !== null && function_exists('wc_get_price_including_tax')) {
+						return (string) wc_get_price_including_tax($product, ['price' => $min_price]);
+					}
+					return (string) $min_price;
+				}
+				return '';
+
+			case 'high_price':
+				if (method_exists($product, 'is_type') && $product->is_type('variable')) {
+					$max_price = method_exists($product, 'get_variation_price')
+						? $product->get_variation_price('max', false)
+						: '';
+					if ($max_price !== '' && $max_price !== null && function_exists('wc_get_price_including_tax')) {
+						return (string) wc_get_price_including_tax($product, ['price' => $max_price]);
+					}
+					return (string) $max_price;
+				}
+				return '';
+
+			case 'offer_count':
+				if (method_exists($product, 'is_type') && $product->is_type('variable')) {
+					$children = method_exists($product, 'get_children') ? $product->get_children() : [];
+					return (string) count($children);
+				}
+				return '';
+		}
+
+		return '';
+	}
+
+	public static function product_stock_statuses(): array
+	{
+		return [
+			'instock'              => __('In stock', 'mihdan-index-now'),
+			'outofstock'           => __('Out of stock', 'mihdan-index-now'),
+			'onbackorder'          => __('Back order', 'mihdan-index-now'),
+			'discontinued'         => __('Discontinued', 'mihdan-index-now'),
+			'instoreonly'          => __('In store only', 'mihdan-index-now'),
+			'in_store_only'        => __('In store only', 'mihdan-index-now'),
+			'in-store-only'        => __('In store only', 'mihdan-index-now'),
+			'limitedavailability'  => __('Limited availability', 'mihdan-index-now'),
+			'limited_availability' => __('Limited availability', 'mihdan-index-now'),
+			'limited-availability' => __('Limited availability', 'mihdan-index-now'),
+			'onlineonly'           => __('Online only', 'mihdan-index-now'),
+			'online_only'          => __('Online only', 'mihdan-index-now'),
+			'online-only'          => __('Online only', 'mihdan-index-now'),
+			'preorder'             => __('Pre order', 'mihdan-index-now'),
+			'pre_order'            => __('Pre order', 'mihdan-index-now'),
+			'pre-order'            => __('Pre order', 'mihdan-index-now'),
+			'presale'              => __('Pre sale', 'mihdan-index-now'),
+			'pre_sale'             => __('Pre sale', 'mihdan-index-now'),
+			'pre-sale'             => __('Pre sale', 'mihdan-index-now'),
+			'soldout'              => __('Sold out', 'mihdan-index-now'),
+		];
 	}
 
 	private function resolve_term_token(string $key): string
@@ -886,6 +1063,23 @@ class Variables
 					'date.day'              => __('Day of the date archive', 'mihdan-index-now'),
 					'search.query'          => __('Search query', 'mihdan-index-now'),
 					'search.results_count'  => __('Number of search results', 'mihdan-index-now'),
+				],
+			],
+			'woocommerce' => [
+				'label'     => __('WooCommerce', 'mihdan-index-now'),
+				'variables' => [
+					'product.price'          => __('Price', 'mihdan-index-now'),
+					'product.price_with_tax' => __('Price including tax', 'mihdan-index-now'),
+					'product.sale_from'      => __('Sale price date "From"', 'mihdan-index-now'),
+					'product.sale_to'        => __('Sale price date "To"', 'mihdan-index-now'),
+					'product.sku'            => __('SKU', 'mihdan-index-now'),
+					'product.stock'          => __('Stock status', 'mihdan-index-now'),
+					'product.currency'       => __('Currency', 'mihdan-index-now'),
+					'product.rating'         => __('Rating value', 'mihdan-index-now'),
+					'product.review_count'   => __('Review count', 'mihdan-index-now'),
+					'product.low_price'      => __('Low price (variable product)', 'mihdan-index-now'),
+					'product.high_price'     => __('High price (variable product)', 'mihdan-index-now'),
+					'product.offer_count'    => __('Offer count (variable product)', 'mihdan-index-now'),
 				],
 			],
 		];

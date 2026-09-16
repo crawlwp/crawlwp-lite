@@ -78,6 +78,13 @@
         'current.year':          crawlwpSEO.currentYear || '',
         'post.author':           crawlwpSEO.author || ''
       };
+
+      if (crawlwpSEO.product && typeof crawlwpSEO.product === 'object') {
+        var self = this;
+        $.each(crawlwpSEO.product, function(key, val) {
+          self.TOKENS['product.' + key] = val != null ? String(val) : '';
+        });
+      }
     },
 
     cacheElements: function() {

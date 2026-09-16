@@ -1306,6 +1306,7 @@ if (!function_exists('get_post_thumbnail_id')) {
 }
 
 // Classes under test. Loaded explicitly so the suite never depends on vendor/.
+require_once CRAWLWP_TESTS_PLUGIN_DIR . '/src/SEOCore/TitleMeta/Variables.php';
 require_once CRAWLWP_TESTS_PLUGIN_DIR . '/src/SEOCore/Importer/TokenMapper.php';
 require_once CRAWLWP_TESTS_PLUGIN_DIR . '/src/SEOCore/Schema/Graph.php';
 require_once CRAWLWP_TESTS_PLUGIN_DIR . '/src/SEOCore/InternalLinks/InternalLinksUpsell.php';
@@ -1322,6 +1323,78 @@ require_once CRAWLWP_TESTS_PLUGIN_DIR . '/src/SEOCore/MetaBox/FieldProcessor.php
 require_once CRAWLWP_TESTS_PLUGIN_DIR . '/src/SEOCore/MetaBox/SeoSignals.php';
 require_once CRAWLWP_TESTS_PLUGIN_DIR . '/src/SEOCore/MetaBox/Assets.php';
 require_once CRAWLWP_TESTS_PLUGIN_DIR . '/src/SEOCore/Integrations/Elementor.php';
+
+if (! class_exists('WC_Product')) {
+	class WC_Product {
+		public int $id = 0;
+		public string $price = '';
+		public string $sku = '';
+		public string $stock_status = 'instock';
+		public float $average_rating = 0.0;
+		public int $review_count = 0;
+		public bool $on_sale = false;
+		public ?object $date_on_sale_from = null;
+		public ?object $date_on_sale_to = null;
+		public string $type = 'simple';
+		public array $variation_prices = [];
+		public array $children = [];
+
+		public function get_id(): int { return $this->id; }
+		public function get_price(): string { return $this->price; }
+		public function get_sku(): string { return $this->sku; }
+		public function get_stock_status(): string { return $this->stock_status; }
+		public function get_average_rating(): float { return $this->average_rating; }
+		public function get_review_count(): int { return $this->review_count; }
+		public function is_on_sale(): bool { return $this->on_sale; }
+		public function get_date_on_sale_from(): ?object { return $this->date_on_sale_from; }
+		public function get_date_on_sale_to(): ?object { return $this->date_on_sale_to; }
+		public function is_type(string $type): bool { return $this->type === $type; }
+		public function get_variation_price(string $type = 'min', bool $for_display = false) {
+			return $this->variation_prices[$type] ?? '';
+		}
+		public function get_children(): array { return $this->children; }
+	}
+}
+
+if (! function_exists('wc_get_product')) {
+	function wc_get_product($the_product = false) {
+		if ($the_product instanceof WC_Product) {
+			return $the_product;
+		}
+		$id = $the_product instanceof \WP_Post ? $the_product->ID : (int) $the_product;
+		return $GLOBALS['crawlwp_test_state']['wc_products'][$id] ?? null;
+	}
+}
+
+if (! function_exists('get_woocommerce_currency')) {
+	function get_woocommerce_currency(): string {
+		return $GLOBALS['crawlwp_test_state']['wc_currency'] ?? 'USD';
+	}
+}
+
+if (! function_exists('wc_get_price_including_tax')) {
+	function wc_get_price_including_tax($product, array $args = []) {
+		$price = $args['price'] ?? ($product ? $product->get_price() : 0);
+		$tax_rate = $GLOBALS['crawlwp_test_state']['wc_tax_rate'] ?? 1.2;
+		return is_numeric($price) ? (float) $price * $tax_rate : $price;
+	}
+}
+
+if (! function_exists('wc_get_product_stock_status_options')) {
+	function wc_get_product_stock_status_options(): array {
+		return [
+			'instock'     => 'In stock',
+			'outofstock'  => 'Out of stock',
+			'onbackorder' => 'On backorder',
+		];
+	}
+}
+
+if (! function_exists('wc_string_to_timestamp')) {
+	function wc_string_to_timestamp(string $time_string, ?int $from_timestamp = null): int {
+		return strtotime($time_string, $from_timestamp ?? time()) ?: time();
+	}
+}
 
 if (! class_exists('Elementor\Controls_Manager')) {
 	eval('namespace Elementor; class Controls_Manager {

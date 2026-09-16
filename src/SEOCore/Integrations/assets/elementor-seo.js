@@ -97,7 +97,24 @@
     buildVarHtml: function(varType) {
       var data = window.crawlwpSEO || {};
       var btnLabel = (data.i18n && data.i18n.insertVariable) ? data.i18n.insertVariable : 'Insert variable';
-      var vars = VAR_CONFIGS[varType] || VAR_CONFIGS.title;
+      var vars = (VAR_CONFIGS[varType] || VAR_CONFIGS.title).slice();
+
+      if (data.product) {
+        vars = vars.concat([
+          { token: '{{ product.price }}', label: 'Price' },
+          { token: '{{ product.price_with_tax }}', label: 'Price including tax' },
+          { token: '{{ product.sale_from }}', label: 'Sale price date "From"' },
+          { token: '{{ product.sale_to }}', label: 'Sale price date "To"' },
+          { token: '{{ product.sku }}', label: 'SKU' },
+          { token: '{{ product.stock }}', label: 'Stock status' },
+          { token: '{{ product.currency }}', label: 'Currency' },
+          { token: '{{ product.rating }}', label: 'Rating value' },
+          { token: '{{ product.review_count }}', label: 'Review count' },
+          { token: '{{ product.low_price }}', label: 'Low price (variable product)' },
+          { token: '{{ product.high_price }}', label: 'High price (variable product)' },
+          { token: '{{ product.offer_count }}', label: 'Offer count (variable product)' }
+        ]);
+      }
 
       var itemsHtml = '';
       $.each(vars, function(i, item) {

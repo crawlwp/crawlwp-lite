@@ -127,12 +127,13 @@ class Assets
 	 */
 	private function entity_variables(): array
 	{
-		$defs    = Variables::definitions();
-		$general = isset($defs['general']) ? [$defs['general']] : [];
-		$post    = isset($defs['post'])    ? [$defs['post']]    : [];
-		$term    = isset($defs['term'])    ? [$defs['term']]    : [];
-		$author  = isset($defs['author'])  ? [$defs['author']]  : [];
-		$archive = isset($defs['archive']) ? [$defs['archive']] : [];
+		$defs        = Variables::definitions();
+		$general     = isset($defs['general'])     ? [$defs['general']]     : [];
+		$post        = isset($defs['post'])        ? [$defs['post']]        : [];
+		$term        = isset($defs['term'])        ? [$defs['term']]        : [];
+		$author      = isset($defs['author'])      ? [$defs['author']]      : [];
+		$archive     = isset($defs['archive'])     ? [$defs['archive']]     : [];
+		$woocommerce = isset($defs['woocommerce']) ? [$defs['woocommerce']] : [];
 
 		$map = [];
 
@@ -142,8 +143,12 @@ class Assets
 		foreach (Entities::post_types() as $post_type) {
 			$key = Entities::post_type_key($post_type->name);
 
-			/* Singular post type: post tokens + general */
-			$map[$key] = $this->format_variables(array_merge($post, $general));
+			/* Singular post type: post tokens + general (plus WooCommerce if product) */
+			$groups = $post_type->name === 'product' && ! empty($woocommerce)
+				? array_merge($post, $woocommerce, $general)
+				: array_merge($post, $general);
+
+			$map[$key] = $this->format_variables($groups);
 
 			/* Archive sub-section uses a synthetic _archive entity key */
 			$map[$key . '_archive'] = $this->format_variables(array_merge($archive, $general));
@@ -296,6 +301,21 @@ class Assets
 			$samples['post.title']            = (string) $post_type->labels->singular_name;
 			$samples['post.auto_description'] = '';
 
+			if ($post_type->name === 'product') {
+				$samples['product.price']          = '19.99';
+				$samples['product.price_with_tax'] = '19.99';
+				$samples['product.sale_from']      = '';
+				$samples['product.sale_to']        = '';
+				$samples['product.sku']            = 'SAMPLE-SKU';
+				$samples['product.stock']          = __('In stock', 'mihdan-index-now');
+				$samples['product.currency']       = function_exists('get_woocommerce_currency') ? get_woocommerce_currency() : 'USD';
+				$samples['product.rating']         = '4.5';
+				$samples['product.review_count']   = '10';
+				$samples['product.low_price']      = '15.00';
+				$samples['product.high_price']     = '25.00';
+				$samples['product.offer_count']    = '3';
+			}
+
 			return $samples;
 		}
 
@@ -305,6 +325,16 @@ class Assets
 
 		foreach (['title', 'auto_description', 'excerpt', 'author', 'category', 'tag', 'date', 'modified', 'url'] as $key) {
 			$samples['post.' . $key] = Variables::replace('{{ post.' . $key . ' }}', $context);
+		}
+
+		if ($post_type->name === 'product') {
+			$wc_keys = [
+				'price', 'price_with_tax', 'sale_from', 'sale_to', 'sku', 'stock',
+				'currency', 'rating', 'review_count', 'low_price', 'high_price', 'offer_count',
+			];
+			foreach ($wc_keys as $wc_key) {
+				$samples['product.' . $wc_key] = Variables::replace('{{ product.' . $wc_key . ' }}', $context);
+			}
 		}
 
 		return $samples;

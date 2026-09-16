@@ -21,6 +21,27 @@ $cwp_ai_button = static function (string $target, string $field): void {
   </button>
   <?php
 };
+
+$cwp_is_product = ($post instanceof \WP_Post && $post->post_type === 'product');
+$cwp_wc_var_items = static function () use ($cwp_is_product): void {
+  if (! $cwp_is_product) {
+    return;
+  }
+  ?>
+  <button class="cwp-var-item" type="button" data-token="{{ product.price }}"><code>{{ product.price }}</code><span><?php esc_html_e('Price', 'mihdan-index-now'); ?></span></button>
+  <button class="cwp-var-item" type="button" data-token="{{ product.price_with_tax }}"><code>{{ product.price_with_tax }}</code><span><?php esc_html_e('Price including tax', 'mihdan-index-now'); ?></span></button>
+  <button class="cwp-var-item" type="button" data-token="{{ product.sale_from }}"><code>{{ product.sale_from }}</code><span><?php esc_html_e('Sale price date "From"', 'mihdan-index-now'); ?></span></button>
+  <button class="cwp-var-item" type="button" data-token="{{ product.sale_to }}"><code>{{ product.sale_to }}</code><span><?php esc_html_e('Sale price date "To"', 'mihdan-index-now'); ?></span></button>
+  <button class="cwp-var-item" type="button" data-token="{{ product.sku }}"><code>{{ product.sku }}</code><span><?php esc_html_e('SKU', 'mihdan-index-now'); ?></span></button>
+  <button class="cwp-var-item" type="button" data-token="{{ product.stock }}"><code>{{ product.stock }}</code><span><?php esc_html_e('Stock status', 'mihdan-index-now'); ?></span></button>
+  <button class="cwp-var-item" type="button" data-token="{{ product.currency }}"><code>{{ product.currency }}</code><span><?php esc_html_e('Currency', 'mihdan-index-now'); ?></span></button>
+  <button class="cwp-var-item" type="button" data-token="{{ product.rating }}"><code>{{ product.rating }}</code><span><?php esc_html_e('Rating value', 'mihdan-index-now'); ?></span></button>
+  <button class="cwp-var-item" type="button" data-token="{{ product.review_count }}"><code>{{ product.review_count }}</code><span><?php esc_html_e('Review count', 'mihdan-index-now'); ?></span></button>
+  <button class="cwp-var-item" type="button" data-token="{{ product.low_price }}"><code>{{ product.low_price }}</code><span><?php esc_html_e('Low price (variable product)', 'mihdan-index-now'); ?></span></button>
+  <button class="cwp-var-item" type="button" data-token="{{ product.high_price }}"><code>{{ product.high_price }}</code><span><?php esc_html_e('High price (variable product)', 'mihdan-index-now'); ?></span></button>
+  <button class="cwp-var-item" type="button" data-token="{{ product.offer_count }}"><code>{{ product.offer_count }}</code><span><?php esc_html_e('Offer count (variable product)', 'mihdan-index-now'); ?></span></button>
+  <?php
+};
 ?>
 <div class="cwp-metabox" id="crawlwp-seo-metabox-inner">
 
@@ -86,6 +107,7 @@ $cwp_ai_button = static function (string $target, string $field): void {
             <button class="cwp-var-item" type="button" data-token="{{ post.auto_description }}"><code>{{ post.auto_description }}</code><span><?php esc_html_e('Post excerpt', 'mihdan-index-now'); ?></span></button>
             <button class="cwp-var-item" type="button" data-token="{{ current.year }}"><code>{{ current.year }}</code><span><?php esc_html_e('Current year', 'mihdan-index-now'); ?></span></button>
             <button class="cwp-var-item" type="button" data-token="{{ post.author }}"><code>{{ post.author }}</code><span><?php esc_html_e('Author name', 'mihdan-index-now'); ?></span></button>
+            <?php $cwp_wc_var_items(); ?>
           </div>
         </div>
       </div>
@@ -117,6 +139,7 @@ $cwp_ai_button = static function (string $target, string $field): void {
             <button class="cwp-var-item" type="button" data-token="{{ site.title }}"><code>{{ site.title }}</code><span><?php esc_html_e('Site name', 'mihdan-index-now'); ?></span></button>
             <button class="cwp-var-item" type="button" data-token="{{ post.category }}"><code>{{ post.category }}</code><span><?php esc_html_e('Primary category', 'mihdan-index-now'); ?></span></button>
             <button class="cwp-var-item" type="button" data-token="{{ current.year }}"><code>{{ current.year }}</code><span><?php esc_html_e('Current year', 'mihdan-index-now'); ?></span></button>
+            <?php $cwp_wc_var_items(); ?>
           </div>
         </div>
       </div>
@@ -216,6 +239,7 @@ $cwp_ai_button = static function (string $target, string $field): void {
               <button class="cwp-var-item" type="button" data-token="{{ post.auto_description }}"><code>{{ post.auto_description }}</code><span><?php esc_html_e('Post excerpt', 'mihdan-index-now'); ?></span></button>
               <button class="cwp-var-item" type="button" data-token="{{ current.year }}"><code>{{ current.year }}</code><span><?php esc_html_e('Current year', 'mihdan-index-now'); ?></span></button>
               <button class="cwp-var-item" type="button" data-token="{{ post.author }}"><code>{{ post.author }}</code><span><?php esc_html_e('Author name', 'mihdan-index-now'); ?></span></button>
+              <?php $cwp_wc_var_items(); ?>
             </div>
           </div>
         </div>
@@ -238,6 +262,7 @@ $cwp_ai_button = static function (string $target, string $field): void {
               <button class="cwp-var-item" type="button" data-token="{{ site.title }}"><code>{{ site.title }}</code><span><?php esc_html_e('Site name', 'mihdan-index-now'); ?></span></button>
               <button class="cwp-var-item" type="button" data-token="{{ post.category }}"><code>{{ post.category }}</code><span><?php esc_html_e('Primary category', 'mihdan-index-now'); ?></span></button>
               <button class="cwp-var-item" type="button" data-token="{{ current.year }}"><code>{{ current.year }}</code><span><?php esc_html_e('Current year', 'mihdan-index-now'); ?></span></button>
+              <?php $cwp_wc_var_items(); ?>
             </div>
           </div>
         </div>
@@ -328,6 +353,7 @@ $cwp_ai_button = static function (string $target, string $field): void {
               <button class="cwp-var-item" type="button" data-token="{{ post.auto_description }}"><code>{{ post.auto_description }}</code><span><?php esc_html_e('Post excerpt', 'mihdan-index-now'); ?></span></button>
               <button class="cwp-var-item" type="button" data-token="{{ current.year }}"><code>{{ current.year }}</code><span><?php esc_html_e('Current year', 'mihdan-index-now'); ?></span></button>
               <button class="cwp-var-item" type="button" data-token="{{ post.author }}"><code>{{ post.author }}</code><span><?php esc_html_e('Author name', 'mihdan-index-now'); ?></span></button>
+              <?php $cwp_wc_var_items(); ?>
             </div>
           </div>
         </div>
@@ -350,6 +376,7 @@ $cwp_ai_button = static function (string $target, string $field): void {
               <button class="cwp-var-item" type="button" data-token="{{ site.title }}"><code>{{ site.title }}</code><span><?php esc_html_e('Site name', 'mihdan-index-now'); ?></span></button>
               <button class="cwp-var-item" type="button" data-token="{{ post.category }}"><code>{{ post.category }}</code><span><?php esc_html_e('Primary category', 'mihdan-index-now'); ?></span></button>
               <button class="cwp-var-item" type="button" data-token="{{ current.year }}"><code>{{ current.year }}</code><span><?php esc_html_e('Current year', 'mihdan-index-now'); ?></span></button>
+              <?php $cwp_wc_var_items(); ?>
             </div>
           </div>
         </div>

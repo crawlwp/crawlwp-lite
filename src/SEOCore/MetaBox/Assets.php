@@ -130,6 +130,24 @@ class Assets
 			'i18n'             => self::get_i18n_strings(),
 		];
 
+		if ($post instanceof \WP_Post && $post->post_type === 'product') {
+			$context = ['post' => $post];
+			$localize_data['product'] = [
+				'price'          => Variables::replace('{{ product.price }}', $context),
+				'price_with_tax' => Variables::replace('{{ product.price_with_tax }}', $context),
+				'sale_from'      => Variables::replace('{{ product.sale_from }}', $context),
+				'sale_to'        => Variables::replace('{{ product.sale_to }}', $context),
+				'sku'            => Variables::replace('{{ product.sku }}', $context),
+				'stock'          => Variables::replace('{{ product.stock }}', $context),
+				'currency'       => Variables::replace('{{ product.currency }}', $context),
+				'rating'         => Variables::replace('{{ product.rating }}', $context),
+				'review_count'   => Variables::replace('{{ product.review_count }}', $context),
+				'low_price'      => Variables::replace('{{ product.low_price }}', $context),
+				'high_price'     => Variables::replace('{{ product.high_price }}', $context),
+				'offer_count'    => Variables::replace('{{ product.offer_count }}', $context),
+			];
+		}
+
 		/**
 		 * Let add-on plugins (e.g. mihdan-index-now-pro) inject extra data into
 		 * the metabox's localized `crawlwpSEO` object — nonces, feature flags,
