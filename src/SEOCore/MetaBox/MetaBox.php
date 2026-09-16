@@ -10,7 +10,7 @@ class MetaBox
 		add_action('save_post', [$this, 'save']);
 	}
 
-	public function register()
+	public function register($post_type = '')
 	{
 		$post_types = get_post_types(['public' => true]);
 
@@ -19,22 +19,17 @@ class MetaBox
 			esc_html__('CrawlWP SEO', 'mihdan-index-now')
 		);
 
-		$post_type = Param::get( 'post_type' );
-		if ( ! $post_type ) {
-			$post_type = get_post_type( Param::get( 'post', 0, FILTER_VALIDATE_INT ) );
-		}
-
 		$priority = 'product' === $post_type ? 'default' : 'high';
 
 		$context    = apply_filters( 'crawlwp_seo_meta_box_context', 'normal' );
 		$priority   = apply_filters( 'crawlwp_seo_meta_box_priority', $priority );
 
-		foreach ($post_types as $post_type) {
+		foreach ($post_types as $_post_type) {
 			add_meta_box(
 				'crawlwp-seo-metabox',
 				$title,
 				[$this, 'render'],
-				$post_type,
+				$_post_type,
 				$context,
 				$priority
 			);
