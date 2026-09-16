@@ -429,6 +429,14 @@ class Writer
 			'sitemap_settings' => $payload['sitemap'] ?? [],
 		];
 
+		if (is_array($rows['site_info']) && array_key_exists('logo', $rows['site_info'])) {
+			$rows['site_info']['logo'] = self::global_image_url($rows['site_info']['logo']);
+		}
+
+		if (is_array($rows['social']) && array_key_exists('social_image_fallback', $rows['social'])) {
+			$rows['social']['social_image_fallback'] = self::global_image_url($rows['social']['social_image_fallback']);
+		}
+
 		foreach ($rows as $section => $fields) {
 			if (! is_array($fields) || $fields === []) {
 				continue;
@@ -446,6 +454,28 @@ class Writer
 			'imported' => $imported,
 			'skipped'  => $skipped,
 		];
+	}
+
+	/**
+	 * WPOSA image fields store URLs, while several SEO plugins store attachment IDs.
+	 *
+	 * @param mixed $value
+	 */
+	private static function global_image_url($value): string
+	{
+		if (is_numeric($value)) {
+			$attachment_id = (int) $value;
+
+			if ($attachment_id <= 0) {
+				return '';
+			}
+
+			$url = wp_get_attachment_url($attachment_id);
+
+			return is_string($url) ? esc_url_raw($url) : '';
+		}
+
+		return is_string($value) ? esc_url_raw($value) : '';
 	}
 
 	/**

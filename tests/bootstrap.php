@@ -1284,6 +1284,13 @@ if (!function_exists('wp_get_attachment_image_url')) {
 	}
 }
 
+if (!function_exists('wp_get_attachment_url')) {
+	function wp_get_attachment_url($attachment_id)
+	{
+		return $attachment_id > 0 ? 'https://example.test/uploads/' . $attachment_id . '.jpg' : false;
+	}
+}
+
 if (!function_exists('strip_shortcodes')) {
 	function strip_shortcodes($content)
 	{
