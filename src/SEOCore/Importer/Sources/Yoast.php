@@ -39,9 +39,9 @@ class Yoast extends Source
 		$redirects = get_option('wpseo-premium-redirects-base', []);
 
 		return [
-			'posts'     => $this->count_meta('_yoast_wpseo_title') + $this->count_meta('_yoast_wpseo_metadesc'),
+			'posts'     => $this->count_objects_with_meta('post', ['_yoast_wpseo_title', '_yoast_wpseo_metadesc']),
 			'terms'     => $this->count_yoast_terms(),
-			'users'     => $this->count_user_meta('wpseo_title') + $this->count_user_meta('wpseo_metadesc'),
+			'users'     => $this->count_objects_with_meta('user', ['wpseo_title', 'wpseo_metadesc']),
 			'redirects' => is_array($redirects) ? count($redirects) : 0,
 		];
 	}
@@ -464,16 +464,6 @@ class Yoast extends Source
 		));
 
 		return $found !== null;
-	}
-
-	private function count_meta(string $key): int
-	{
-		global $wpdb;
-
-		return (int) $wpdb->get_var($wpdb->prepare(
-			"SELECT COUNT(*) FROM {$wpdb->postmeta} WHERE meta_key = %s AND meta_value <> ''",
-			$key
-		));
 	}
 
 	private function count_yoast_terms(): int

@@ -201,6 +201,34 @@ abstract class Source
 		));
 	}
 
+	/**
+	 * Number of distinct objects holding a non-empty value for any meta key.
+	 *
+	 * @param string[] $keys
+	 */
+	protected function count_objects_with_meta(string $object_type, array $keys): int
+	{
+		global $wpdb;
+
+		$tables = [
+			'post' => [$wpdb->postmeta, 'post_id'],
+			'term' => [$wpdb->termmeta, 'term_id'],
+			'user' => [$wpdb->usermeta, 'user_id'],
+		];
+
+		if (! isset($tables[$object_type]) || $keys === []) {
+			return 0;
+		}
+
+		[$table, $id_column] = $tables[$object_type];
+		$placeholders         = implode(', ', array_fill(0, count($keys), '%s'));
+
+		return (int) $wpdb->get_var($wpdb->prepare(
+			"SELECT COUNT(DISTINCT {$id_column}) FROM {$table} WHERE meta_key IN ({$placeholders}) AND meta_value <> ''",
+			...$keys
+		));
+	}
+
 	protected function table_exists(string $table): bool
 	{
 		global $wpdb;

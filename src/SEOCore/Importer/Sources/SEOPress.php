@@ -31,8 +31,8 @@ class SEOPress extends Source
 	public function counts(): array
 	{
 		return [
-			'posts'     => $this->count_meta('_seopress_titles_title') + $this->count_meta('_seopress_titles_desc'),
-			'terms'     => $this->count_term_meta('_seopress_titles_title') + $this->count_term_meta('_seopress_titles_desc'),
+			'posts'     => $this->count_objects_with_meta('post', ['_seopress_titles_title', '_seopress_titles_desc']),
+			'terms'     => $this->count_objects_with_meta('term', ['_seopress_titles_title', '_seopress_titles_desc']),
 			'users'     => 0,
 			'redirects' => $this->count_redirects(),
 		];
@@ -418,23 +418,4 @@ class SEOPress extends Source
 		return $found !== null;
 	}
 
-	private function count_meta(string $key): int
-	{
-		global $wpdb;
-
-		return (int) $wpdb->get_var($wpdb->prepare(
-			"SELECT COUNT(*) FROM {$wpdb->postmeta} WHERE meta_key = %s AND meta_value <> ''",
-			$key
-		));
-	}
-
-	private function count_term_meta(string $key): int
-	{
-		global $wpdb;
-
-		return (int) $wpdb->get_var($wpdb->prepare(
-			"SELECT COUNT(*) FROM {$wpdb->termmeta} WHERE meta_key = %s AND meta_value <> ''",
-			$key
-		));
-	}
 }

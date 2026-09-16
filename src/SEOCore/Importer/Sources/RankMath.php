@@ -30,9 +30,9 @@ class RankMath extends Source
 	public function counts(): array
 	{
 		return [
-			'posts'     => $this->count_meta('rank_math_title') + $this->count_meta('rank_math_description'),
+			'posts'     => $this->count_objects_with_meta('post', ['rank_math_title', 'rank_math_description']),
 			'terms'     => $this->count_term_meta('rank_math_title'),
-			'users'     => $this->count_user_meta('rank_math_title') + $this->count_user_meta('rank_math_description'),
+			'users'     => $this->count_objects_with_meta('user', ['rank_math_title', 'rank_math_description']),
 			'redirects' => $this->count_table($this->redirects_table()),
 		];
 	}
@@ -477,16 +477,6 @@ class RankMath extends Source
 		));
 
 		return $found !== null;
-	}
-
-	private function count_meta(string $key): int
-	{
-		global $wpdb;
-
-		return (int) $wpdb->get_var($wpdb->prepare(
-			"SELECT COUNT(*) FROM {$wpdb->postmeta} WHERE meta_key = %s AND meta_value <> ''",
-			$key
-		));
 	}
 
 	private function count_term_meta(string $key): int

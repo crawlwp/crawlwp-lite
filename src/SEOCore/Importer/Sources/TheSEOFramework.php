@@ -29,7 +29,7 @@ class TheSEOFramework extends Source
 	public function counts(): array
 	{
 		return [
-			'posts'     => $this->count_meta('_genesis_title') + $this->count_meta('_genesis_description'),
+			'posts'     => $this->count_objects_with_meta('post', ['_genesis_title', '_genesis_description']),
 			'terms'     => $this->count_term_meta('autodescription-term-settings'),
 			'users'     => 0,
 			'redirects' => 0,
@@ -294,16 +294,6 @@ class TheSEOFramework extends Source
 		));
 
 		return $found !== null;
-	}
-
-	private function count_meta(string $key): int
-	{
-		global $wpdb;
-
-		return (int) $wpdb->get_var($wpdb->prepare(
-			"SELECT COUNT(*) FROM {$wpdb->postmeta} WHERE meta_key = %s AND meta_value <> ''",
-			$key
-		));
 	}
 
 	private function count_term_meta(string $key): int
