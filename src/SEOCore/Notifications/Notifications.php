@@ -7,6 +7,7 @@ use Mihdan\IndexNow\SEOCore\FeatureGate\FeatureGate;
 use Mihdan\IndexNow\SEOCore\MetaBox\MetaFields;
 use Mihdan\IndexNow\SEOCore\TitleMeta\Entities;
 use Mihdan\IndexNow\SEOCore\TitleMeta\Options;
+use Mihdan\IndexNow\Utils;
 
 /**
  * CrawlWP SEO Notification Center.
@@ -27,6 +28,7 @@ use Mihdan\IndexNow\SEOCore\TitleMeta\Options;
  *  9. A physical robots.txt file exists on the server, overriding WordPress's virtual one.
  * 10. The site is not using a pretty permalink structure.
  * 11. The RSS feed shows full post content instead of excerpts.
+ * 12. A new public post type is detected.
  */
 class Notifications
 {
@@ -34,6 +36,11 @@ class Notifications
 	 * WordPress option key for dismissed notices.
 	 */
 	private const DISMISSED_KEY = 'crawlwp_dismissed_notices';
+
+	/**
+	 * WordPress option key for known post types.
+	 */
+	public const KNOWN_POST_TYPES_KEY = 'crawlwp_known_post_types';
 
 	/**
 	 * Transient caching the robots.txt "blocks all crawlers" verdict.
@@ -68,6 +75,7 @@ class Notifications
 		'physical_robots_txt_exists',
 		'no_permalink_structure',
 		'rss_full_text',
+		'new_post_type',
 	];
 
 	/**
@@ -122,6 +130,60 @@ class Notifications
 	public static function flush_robots_txt_cache(): void
 	{
 		delete_transient(self::ROBOTS_BLOCK_TRANSIENT);
+	}
+
+	/**
+	 * Public accessible post types that CrawlWP tracks.
+	 *
+	 * @return string[]
+	 */
+	public static function get_accessible_post_types(): array
+	{
+		$post_types = get_post_types(['public' => true], 'names');
+		unset($post_types['attachment']);
+
+		if (function_exists('is_post_type_viewable')) {
+			$post_types = array_filter($post_types, 'is_post_type_viewable');
+		}
+
+		/**
+		 * Filter accessible post types for CrawlWP SEO notifications.
+		 *
+		 * @param string[] $post_types Array of post type names.
+		 */
+		$post_types = (array) apply_filters('crawlwp_accessible_post_types', $post_types);
+
+		return array_values(array_unique(array_map('strval', $post_types)));
+	}
+
+	/**
+	 * Get newly detected post types that haven't been acknowledged/known yet.
+	 *
+	 * @return string[] List of new post type names.
+	 */
+	public static function get_new_post_types(): array
+	{
+		$known = get_option(self::KNOWN_POST_TYPES_KEY, null);
+		$current = self::get_accessible_post_types();
+
+		if ($known === null) {
+			update_option(self::KNOWN_POST_TYPES_KEY, $current, false);
+			return [];
+		}
+
+		if (!is_array($known)) {
+			$known = (array) $known;
+		}
+
+		return array_values(array_diff($current, $known));
+	}
+
+	/**
+	 * Update the list of known post types to match the currently accessible ones.
+	 */
+	public static function update_known_post_types(): void
+	{
+		update_option(self::KNOWN_POST_TYPES_KEY, self::get_accessible_post_types(), false);
 	}
 
 	// -------------------------------------------------------------------------
@@ -706,9 +768,18 @@ class Notifications
 			wp_send_json_error('unknown notice_id');
 		}
 
-		$dismissed = $this->get_dismissed();
-		$dismissed[$notice_id] = true;
-		update_option(self::DISMISSED_KEY, $dismissed, false);
+		if ($notice_id === 'new_post_type') {
+			self::update_known_post_types();
+			$dismissed = $this->get_dismissed();
+			if (isset($dismissed['new_post_type'])) {
+				unset($dismissed['new_post_type']);
+				update_option(self::DISMISSED_KEY, $dismissed, false);
+			}
+		} else {
+			$dismissed = $this->get_dismissed();
+			$dismissed[$notice_id] = true;
+			update_option(self::DISMISSED_KEY, $dismissed, false);
+		}
 
 		wp_send_json_success();
 	}
@@ -954,6 +1025,50 @@ class Notifications
 					'</a>'
 				),
 			];
+		}
+
+		/* 12. New post type detected. */
+		if ($wanted('new_post_type')) {
+			$new_post_types = self::get_new_post_types();
+
+			if (!empty($new_post_types)) {
+				$first_post_type = reset($new_post_types);
+				$count = count($new_post_types);
+				$list = '<code>' . implode('</code>, <code>', array_map('esc_html', $new_post_types)) . '</code>';
+
+				$settings_url = defined('CRAWLWP_SETTINGS_URL') ? CRAWLWP_SETTINGS_URL : admin_url('admin.php?page=' . (defined('CRAWLWP_SLUG') ? CRAWLWP_SLUG : 'crawlwp'));
+				$titles_meta_url = add_query_arg(['wposa-menu' => Utils::get_plugin_prefix() . '_title_meta'], $settings_url) . '#crawlwp_tm_pt_' . $first_post_type;
+				$sitemap_url = add_query_arg(['wposa-menu' => Utils::get_plugin_prefix() . '_advanced_settings'], $settings_url) . '#crawlwp_sitemap_settings';
+
+				if ($count > 1) {
+					/* translators: 1: comma-separated list of post type names, 2: link opening tag, 3: link closing tag, 4: link opening tag, 5: link closing tag */
+					$message = __('CrawlWP has detected new post types: %1$s. You may want to check the settings of the %2$sTitles & Meta page%3$s and %4$sthe Sitemap%5$s.', 'mihdan-index-now');
+				} else {
+					/* translators: 1: post type name, 2: link opening tag, 3: link closing tag, 4: link opening tag, 5: link closing tag */
+					$message = __('CrawlWP has detected a new post type: %1$s. You may want to check the settings of the %2$sTitles & Meta page%3$s and %4$sthe Sitemap%5$s.', 'mihdan-index-now');
+				}
+
+				/**
+				 * Filter the new post type notification message template.
+				 *
+				 * @param string $message
+				 * @param int    $count
+				 */
+				$message = (string) apply_filters('crawlwp_admin_notice_new_post_type', $message, $count);
+
+				$notices[] = [
+					'id'       => 'new_post_type',
+					'severity' => 'info',
+					'message'  => sprintf(
+						$message,
+						$list,
+						'<a href="' . esc_url($titles_meta_url) . '">',
+						'</a>',
+						'<a href="' . esc_url($sitemap_url) . '">',
+						'</a>'
+					),
+				];
+			}
 		}
 
 		/**

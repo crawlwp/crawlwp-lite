@@ -37,7 +37,9 @@
 		// Tab switching — hide all groups and show the active one.
 		$('.group').hide();
 		var activetab = '';
-		if (typeof localStorage !== 'undefined') {
+		if (window.location.hash && /^#[a-zA-Z0-9_\-]+$/.test(window.location.hash) && $(window.location.hash).length) {
+			activetab = window.location.hash;
+		} else if (typeof localStorage !== 'undefined') {
 			activetab = localStorage.getItem('activetab') || '';
 		}
 		if (activetab && $(activetab).length) {
@@ -78,6 +80,25 @@
 			$('.group').hide();
 			$(clickedGroup).fadeIn();
 			evt.preventDefault();
+		});
+
+		$(window).on('hashchange', function () {
+			if (window.location.hash && /^#[a-zA-Z0-9_\-]+$/.test(window.location.hash)) {
+				var hash = window.location.hash;
+				if ($(hash).length && $(hash + '-tab').length) {
+					$('.wposa-nav-tab-wrapper a').removeClass('wposa-nav-tab-active');
+					$(hash + '-tab').addClass('wposa-nav-tab-active');
+					var $activeGroup = $(hash + '-tab').closest('.wposa-nav-group');
+					if ($activeGroup.hasClass('wposa-nav-group--collapsed')) {
+						setNavGroupCollapsed($activeGroup, false, true);
+					}
+					$('.group').hide();
+					$(hash).fadeIn();
+					if (typeof localStorage !== 'undefined') {
+						localStorage.setItem('activetab', hash);
+					}
+				}
+			}
 		});
 
 		// Collapsible navigation groups.

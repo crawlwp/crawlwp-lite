@@ -63,6 +63,7 @@ class NotificationsBadgeTest extends TestCase
 			'physical_robots_txt_exists'  => true,
 			'no_permalink_structure'      => true,
 			'rss_full_text'               => true,
+			'new_post_type'               => true,
 		];
 
 		foreach ($exceptions as $ex) {

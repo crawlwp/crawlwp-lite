@@ -13,6 +13,7 @@ use Mihdan\IndexNow\Providers\Naver\NaverIndexNow;
 use Mihdan\IndexNow\Providers\Yandex\YandexIndexNow;
 use Mihdan\IndexNow\Providers\Yandex\YandexWebmaster;
 use Mihdan\IndexNow\SEOCore\FeatureGate\FeatureGate;
+use Mihdan\IndexNow\SEOCore\Notifications\Notifications;
 use Mihdan\IndexNow\SEOCore\SEOCoreInit;
 use Mihdan\IndexNow\Views\Settings;
 use Mihdan\IndexNow\Views\UpsellAdminPages;
@@ -280,6 +281,7 @@ class Main
 	private function activate_site(): void
 	{
 		FeatureGate::maybe_persist_default();
+		add_option(Notifications::KNOWN_POST_TYPES_KEY, Notifications::get_accessible_post_types(), '', false);
 
 		flush_rewrite_rules();
 	}

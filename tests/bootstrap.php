@@ -41,6 +41,9 @@ if (!defined('CRAWLWP_PRO_SYSTEM_FILE_PATH')) {
 if (!defined('CRAWLWP_PRO_LIBSODIUM_ASSETS_URL')) {
 	define('CRAWLWP_PRO_LIBSODIUM_ASSETS_URL', 'https://example.test/wp-content/plugins/mihdan-index-now-pro/Libsodium/assets');
 }
+if (!defined('CRAWLWP_SETTINGS_URL')) {
+	define('CRAWLWP_SETTINGS_URL', 'https://example.test/wp-admin/admin.php?page=crawlwp');
+}
 
 if (!defined('MINUTE_IN_SECONDS')) {
 	define('MINUTE_IN_SECONDS', 60);
@@ -683,8 +686,10 @@ if (!class_exists('WP_Post_Type')) {
 		public string $name = '';
 		public $labels;
 		public bool $has_archive = false;
+		public bool $public = true;
+		public bool $publicly_queryable = true;
 
-		public function __construct(string $name, string $singular_name, string $plural_name = '', bool $has_archive = false)
+		public function __construct(string $name, string $singular_name, string $plural_name = '', bool $has_archive = false, bool $public = true)
 		{
 			$this->name = $name;
 			$this->labels = (object)[
@@ -692,6 +697,8 @@ if (!class_exists('WP_Post_Type')) {
 				'name'          => $plural_name ?: $singular_name,
 			];
 			$this->has_archive = $has_archive;
+			$this->public = $public;
+			$this->publicly_queryable = $public;
 		}
 	}
 }
@@ -742,9 +749,29 @@ if (!function_exists('get_filesystem_method')) {
 	}
 }
 
+if (!function_exists('is_post_type_viewable')) {
+	function is_post_type_viewable($post_type)
+	{
+		if (is_scalar($post_type)) {
+			$post_type = get_post_type_object($post_type);
+		}
+		if (!is_object($post_type)) {
+			return false;
+		}
+		return (bool) (!empty($post_type->publicly_queryable) || (!empty($post_type->_builtin) && !empty($post_type->public)) || !empty($post_type->public));
+	}
+}
+
 if (!function_exists('get_post_types')) {
 	function get_post_types($args = [], $output = 'names', $operator = 'and')
 	{
+		if (isset($GLOBALS['crawlwp_test_state']['post_types'])) {
+			$pts = $GLOBALS['crawlwp_test_state']['post_types'];
+			if ($output === 'objects') {
+				return $pts;
+			}
+			return array_combine(array_keys($pts), array_keys($pts));
+		}
 		if ($output === 'objects') {
 			return [
 				'post' => new WP_Post_Type('post', 'Post', 'Posts', true),
@@ -1022,8 +1049,13 @@ if (!function_exists('shortcode_atts')) {
 if (!function_exists('get_post_type_object')) {
 	function get_post_type_object($post_type)
 	{
+		if (isset($GLOBALS['crawlwp_test_state']['post_types'][$post_type])) {
+			return $GLOBALS['crawlwp_test_state']['post_types'][$post_type];
+		}
 		return (object) [
 			'name' => $post_type,
+			'public' => true,
+			'publicly_queryable' => true,
 			'label' => ucfirst($post_type),
 			'labels' => (object) [
 				'name' => ucfirst($post_type) . 's',
@@ -1191,6 +1223,47 @@ if (!function_exists('admin_url')) {
 	}
 }
 
+if (!function_exists('add_query_arg')) {
+	function add_query_arg(...$args)
+	{
+		if (is_array($args[0])) {
+			$params = $args[0];
+			$url = $args[1] ?? '';
+		} else {
+			$params = [$args[0] => $args[1]];
+			$url = $args[2] ?? '';
+		}
+
+		$parts = explode('#', $url, 2);
+		$base = $parts[0];
+		$fragment = isset($parts[1]) ? '#' . $parts[1] : '';
+
+		$sep = strpos($base, '?') !== false ? '&' : '?';
+		return $base . $sep . http_build_query($params) . $fragment;
+	}
+}
+
+if (!function_exists('check_ajax_referer')) {
+	function check_ajax_referer($action = -1, $query_arg = false, $die = true)
+	{
+		return true;
+	}
+}
+
+if (!function_exists('wp_send_json_success')) {
+	function wp_send_json_success($data = null, $status_code = null, $options = 0)
+	{
+		throw new \Exception('wp_send_json_success: ' . json_encode($data));
+	}
+}
+
+if (!function_exists('wp_send_json_error')) {
+	function wp_send_json_error($data = null, $status_code = null, $options = 0)
+	{
+		throw new \Exception('wp_send_json_error: ' . json_encode($data));
+	}
+}
+
 if (!function_exists('wp_script_is')) {
 	function wp_script_is($handle, $list = 'enqueued')
 	{
@@ -1267,6 +1340,16 @@ if (!function_exists('wp_unslash')) {
 	function wp_unslash($value)
 	{
 		return is_array($value) ? array_map('wp_unslash', $value) : (is_string($value) ? stripslashes($value) : $value);
+	}
+}
+
+if (!function_exists('sanitize_key')) {
+	function sanitize_key($key)
+	{
+		$raw_key = $key;
+		$key = strtolower((string) $key);
+		$key = preg_replace('/[^a-z0-9_\-]/', '', $key);
+		return $key;
 	}
 }
 
