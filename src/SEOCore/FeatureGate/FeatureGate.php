@@ -96,7 +96,44 @@ class FeatureGate
 	 */
 	public static function is_fresh_install(): bool
 	{
-		return empty(get_option('crawlwp_index_now', ''));
+		$index_now = get_option('crawlwp_index_now', []);
+		if (is_array($index_now)) {
+			unset($index_now['api_key']);
+		} else {
+			$index_now = [];
+		}
+
+		if (!empty($index_now)) {
+			return false;
+		}
+
+		$pre_gate_options = [
+			'crawlwp_general',
+			'crawlwp_bing_webmaster',
+			'crawlwp_google_webmaster',
+			'crawlwp_yandex_webmaster',
+			'crawlwp_logs',
+			'crawlwp_webmaster_tools',
+			'crawlwp_site_verification',
+			'crawlwp_email_reports',
+			'mihdan_index_now_general',
+			'mihdan_index_now_index_now',
+			'mihdan_index_now_bing_webmaster',
+			'mihdan_index_now_google_webmaster',
+			'mihdan_index_now_yandex_webmaster',
+			'mihdan_index_now_logs',
+			'mihdan_index_now_webmaster_tools',
+			'mihdan_index_now_site_verification',
+			'mihdan_index_now_email_reports',
+		];
+
+		foreach ($pre_gate_options as $option) {
+			if (!empty(get_option($option, ''))) {
+				return false;
+			}
+		}
+
+		return true;
 	}
 
 	/**

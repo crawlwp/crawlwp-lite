@@ -111,5 +111,32 @@ class SettingsSidebarWizardTest extends TestCase
 			get_transient(Wizard::REDIRECT_TRANSIENT),
 			'Directly enabling FeatureGate should NOT set redirect transient'
 		);
+
+		// Case 4: Fresh install where crawlwp_index_now only has auto-generated api_key
+		$prop->setValue(null, null);
+		unset($GLOBALS['crawlwp_test_state']['options'][FeatureGate::OPTION_KEY]);
+		$GLOBALS['crawlwp_test_state']['options']['crawlwp_index_now'] = ['api_key' => 'xyz123abc'];
+		$GLOBALS['crawlwp_test_state']['transients'] = [];
+
+		FeatureGate::maybe_persist_default();
+		$this->assertNotEmpty(
+			get_transient(Wizard::REDIRECT_TRANSIENT),
+			'Fresh install with only auto-generated api_key should set redirect transient and enable SEO features'
+		);
+		$this->assertTrue(FeatureGate::is_enabled());
+
+		// Case 5: Existing install with crawlwp_general configured
+		$prop->setValue(null, null);
+		unset($GLOBALS['crawlwp_test_state']['options'][FeatureGate::OPTION_KEY]);
+		$GLOBALS['crawlwp_test_state']['options']['crawlwp_index_now'] = ['api_key' => 'xyz123abc'];
+		$GLOBALS['crawlwp_test_state']['options']['crawlwp_general'] = ['post_types' => ['post', 'page']];
+		$GLOBALS['crawlwp_test_state']['transients'] = [];
+
+		FeatureGate::maybe_persist_default();
+		$this->assertEmpty(
+			get_transient(Wizard::REDIRECT_TRANSIENT),
+			'Existing install with crawlwp_general should NOT set redirect transient'
+		);
+		$this->assertFalse(FeatureGate::is_enabled());
 	}
 }
