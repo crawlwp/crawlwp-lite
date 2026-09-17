@@ -239,8 +239,10 @@ class Log_List_Table extends WP_List_Table
 			return $data;
 		} elseif ($colname === 'created_at') {
 			return get_date_from_gmt($item->$colname, 'd.m.Y H:i:s');
+		} elseif ($colname === 'message') {
+			return wp_kses_post( $item->message ?? '');
 		} else {
-			return isset($item->$colname) ? $item->$colname : print_r($item, 1);
+			return isset($item->$colname) ? esc_html($item->$colname) : '';
 		}
 
 	}

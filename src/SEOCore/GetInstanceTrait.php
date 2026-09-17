@@ -4,14 +4,36 @@ namespace Mihdan\IndexNow\SEOCore;
 
 trait GetInstanceTrait
 {
-	public static function get_instance()
-	{
-		static $instance = null;
+	/**
+	 * Shared singleton instances, keyed by the late-static-bound class name so
+	 * a subclass never silently receives the parent's instance.
+	 *
+	 * @var array<string, static>
+	 */
+	private static $instances = [];
 
-		if (is_null($instance)) {
-			$instance = new self();
+	/**
+	 * @return static
+	 */
+	final public static function get_instance()
+	{
+		$class = static::class;
+
+		if (!isset(self::$instances[$class])) {
+			self::$instances[$class] = new static();
 		}
 
-		return $instance;
+		return self::$instances[$class];
+	}
+
+	/**
+	 * True when get_instance() has already created the shared instance.
+	 *
+	 * Lets callers avoid double-registering hooks when a class is both
+	 * get_instance()'d and new'ed up directly.
+	 */
+	final public static function has_instance(): bool
+	{
+		return isset(self::$instances[static::class]);
 	}
 }

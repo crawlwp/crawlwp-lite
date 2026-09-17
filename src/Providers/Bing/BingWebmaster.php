@@ -93,7 +93,7 @@ class BingWebmaster extends WebmasterAbstract
 			$message = sprintf('<a href="%s" target="_blank">%s</a> - OK', $post_url, get_the_title($post_id));
 			$this->logger->info($message, $data);
 		} else {
-			$this->logger->error($body['Message'], $data);
+			$this->logger->error($body['Message'] ?? '', $data);
 		}
 
 		do_action('crawlwp/index_pinged', 'post', $post_id);

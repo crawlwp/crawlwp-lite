@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1360 800" role="img" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+	<defs><clipPath id="cwp-fg-clip"><rect x="1" y="1" width="1358" height="798" rx="10"></rect></clipPath></defs>
+	<rect x="0.5" y="0.5" width="1359" height="799" rx="10" fill="#ffffff" stroke="#dcdcde"></rect>
+	<g clip-path="url(#cwp-fg-clip)">
+	<rect x="1" y="1" width="1358" height="63" fill="#f6f7f7"></rect>
+	<line x1="0" y1="64" x2="1360" y2="64" stroke="#dcdcde"></line>
+	<rect x="28" y="22" width="20" height="20" rx="5" fill="#2688c0"></rect>
+	<path d="M34 32.5 l3.5 3.5 l6 -7" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path>
+	<text x="60" y="39" font-size="16" font-weight="600" fill="#1d2327">CrawlWP SEO</text>
+	<circle cx="1306" cy="32" r="17" fill="none" stroke="#e6e7e8" stroke-width="5"></circle>
+	<circle cx="1306" cy="32" r="17" fill="none" stroke="#00a32a" stroke-width="5" stroke-linecap="round" stroke-dasharray="88 107" transform="rotate(-90 1306 32)"></circle>
+	<text x="1306" y="37" font-size="14" font-weight="600" fill="#1d2327" text-anchor="middle">82</text>
+	<text x="1272" y="37" font-size="12" fill="#646970" text-anchor="end">SEO score</text>
+	<line x1="0" y1="108" x2="1360" y2="108" stroke="#e0e0e2"></line>
+	<text x="28" y="93" font-size="13" font-weight="600" fill="#2688c0">General</text>
+	<rect x="28" y="104" width="53" height="3" fill="#2688c0"></rect>
+	<text x="109" y="93" font-size="13" fill="#646970">Social</text>
+	<text x="169" y="93" font-size="13" fill="#646970">Advanced</text>
+	<text x="253" y="93" font-size="13" fill="#646970">Schema</text>
+	<text x="325" y="93" font-size="13" fill="#646970">Analysis</text>
+	<text x="399" y="93" font-size="13" fill="#646970">Insights</text>
+	<text x="470" y="93" font-size="13" fill="#646970">Links</text>
+	<text x="28" y="150" font-size="12" font-weight="600" fill="#1d2327">Search title</text>
+	<rect x="28" y="160" width="640" height="42" rx="5" fill="#fff" stroke="#8c8f94"></rect>
+	<text x="42" y="186" font-size="14" fill="#1d2327">A Practical Guide to WordPress SEO in 2026</text>
+	<rect x="28" y="214" width="640" height="6" rx="3" fill="#e6e7e8"></rect>
+	<rect x="28" y="214" width="565" height="6" rx="3" fill="#00a32a"></rect>
+	<text x="28" y="238" font-size="11" fill="#646970">Fits on desktop and mobile</text>
+	<text x="668" y="238" font-size="11" fill="#646970" text-anchor="end">512 of 580 px</text>
+	<text x="28" y="274" font-size="12" font-weight="600" fill="#1d2327">Meta description</text>
+	<rect x="28" y="284" width="640" height="88" rx="5" fill="#fff" stroke="#8c8f94"></rect>
+	<text x="42" y="310" font-size="14" fill="#1d2327">Learn how to structure, optimize and index a</text>
+	<text x="42" y="332" font-size="14" fill="#1d2327">WordPress site so search engines find your content</text>
+	<text x="42" y="354" font-size="14" fill="#1d2327">within hours rather than weeks.</text>
+	<rect x="28" y="384" width="640" height="6" rx="3" fill="#e6e7e8"></rect>
+	<rect x="28" y="384" width="592" height="6" rx="3" fill="#00a32a"></rect>
+	<text x="668" y="408" font-size="11" fill="#646970" text-anchor="end">148 of 160 characters</text>
+	<text x="28" y="444" font-size="12" font-weight="600" fill="#1d2327">URL slug</text>
+	<rect x="28" y="454" width="640" height="42" rx="5" fill="#fff" stroke="#8c8f94"></rect>
+	<text x="42" y="480" font-size="14" fill="#1d2327">wordpress-seo</text>
+	<text x="28" y="530" font-size="12" font-weight="600" fill="#1d2327">Focus keyword</text>
+	<rect x="28" y="540" width="640" height="42" rx="5" fill="#fff" stroke="#8c8f94"></rect>
+	<text x="42" y="566" font-size="14" fill="#1d2327">wordpress seo</text>
+	<rect x="540" y="550" width="116" height="22" rx="11" fill="#e6f4ec"></rect>
+	<text x="598" y="565" font-size="11" font-weight="600" fill="#166534" text-anchor="middle">In title &#xb7; URL &#xb7; H2</text>
+	<text x="28" y="622" font-size="12" font-weight="600" fill="#1d2327">Insert variable</text>
+	<rect x="28" y="634" width="120" height="26" rx="13" fill="#f0f0f1" stroke="#dcdcde"></rect>
+	<text x="88" y="651" font-size="11.5" fill="#50575e" text-anchor="middle">{{ post.title }}</text>
+	<rect x="156" y="634" width="112" height="26" rx="13" fill="#f0f0f1" stroke="#dcdcde"></rect>
+	<text x="212" y="651" font-size="11.5" fill="#50575e" text-anchor="middle">{{ site.title }}</text>
+	<rect x="276" y="634" width="104" height="26" rx="13" fill="#f0f0f1" stroke="#dcdcde"></rect>
+	<text x="328" y="651" font-size="11.5" fill="#50575e" text-anchor="middle">{{ category }}</text>
+	<rect x="388" y="634" width="96" height="26" rx="13" fill="#f0f0f1" stroke="#dcdcde"></rect>
+	<text x="436" y="651" font-size="11.5" fill="#50575e" text-anchor="middle">{{ sep }}</text>
+	<rect x="28" y="694" width="640" height="76" rx="8" fill="#fff" stroke="#dcdcde"></rect>
+	<circle cx="60" cy="732" r="12" fill="#e6f4ec"></circle>
+	<path d="M54.5 732 l4 4 l7 -8" fill="none" stroke="#166534" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+	<text x="84" y="727" font-size="13" font-weight="600" fill="#1d2327">Article schema attached</text>
+	<text x="84" y="746" font-size="12" fill="#646970">JSON-LD validates &#xb7; headline, author, section, breadcrumb</text>
+	<text x="656" y="737" font-size="12" fill="#2688c0" text-anchor="end">View output</text>
+	<line x1="700" y1="130" x2="700" y2="770" stroke="#e6e7e8"></line>
+	<text x="732" y="152" font-size="12" font-weight="600" fill="#1d2327">Google preview</text>
+	<rect x="1156" y="136" width="152" height="26" rx="13" fill="#f0f0f1" stroke="#dcdcde"></rect>
+	<rect x="1158" y="138" width="74" height="22" rx="11" fill="#ffffff" stroke="#c3c4c7"></rect>
+	<text x="1195" y="153" font-size="11" font-weight="600" fill="#1d2327" text-anchor="middle">Desktop</text>
+	<text x="1270" y="153" font-size="11" fill="#646970" text-anchor="middle">Mobile</text>
+	<rect x="732" y="180" width="576" height="212" rx="8" fill="#fbfbfc" stroke="#dcdcde"></rect>
+	<circle cx="765" cy="222" r="13" fill="#2688c0"></circle>
+	<path d="M759.5 222 l4 4 l7 -8" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+	<text x="788" y="218" font-size="12" font-family="Arial, Helvetica, sans-serif" fill="#202124">yoursite.com</text>
+	<text x="788" y="233" font-size="12" font-family="Arial, Helvetica, sans-serif" fill="#4d5156">https://yoursite.com &#x203a; guides &#x203a; wordpress-seo</text>
+	<text x="752" y="272" font-size="20" font-family="Arial, Helvetica, sans-serif" fill="#1a0dab">A Practical Guide to WordPress SEO in 2026</text>
+	<text x="752" y="298" font-size="14" font-family="Arial, Helvetica, sans-serif" fill="#4d5156">Learn how to structure, optimize and index a WordPress site so</text>
+	<text x="752" y="318" font-size="14" font-family="Arial, Helvetica, sans-serif" fill="#4d5156">search engines find your content within hours rather than weeks.</text>
+	<rect x="752" y="340" width="164" height="24" rx="12" fill="#e6f4ec"></rect>
+	<text x="834" y="356" font-size="11" font-weight="600" fill="#166534" text-anchor="middle">Indexed &#xb7; 3h after publish</text>
+	<rect x="926" y="340" width="122" height="24" rx="12" fill="#eef6fb"></rect>
+	<text x="987" y="356" font-size="11" font-weight="600" fill="#1c6a94" text-anchor="middle">Canonical: self</text>
+	<text x="732" y="432" font-size="12" font-weight="600" fill="#1d2327">Facebook preview</text>
+	<rect x="732" y="448" width="576" height="180" rx="8" fill="#ffffff" stroke="#dcdcde"></rect>
+	<rect x="733" y="449" width="574" height="96" rx="0" fill="#eef2f7"></rect>
+	<path d="M960 480 l26 26 l-52 0 z" fill="#c9d4e2"></path>
+	<circle cx="1030" cy="486" r="12" fill="#c9d4e2"></circle>
+	<text x="752" y="574" font-size="11" font-family="Arial, Helvetica, sans-serif" fill="#606770">YOURSITE.COM</text>
+	<text x="752" y="596" font-size="14" font-weight="600" font-family="Arial, Helvetica, sans-serif" fill="#1d2129">A Practical Guide to WordPress SEO in 2026</text>
+	<text x="752" y="616" font-size="12" font-family="Arial, Helvetica, sans-serif" fill="#606770">Structure, optimize and index a WordPress site properly.</text>
+	<text x="732" y="676" font-size="12" font-weight="600" fill="#1d2327">Robots directives</text>
+	<rect x="732" y="690" width="92" height="28" rx="14" fill="#eef6fb" stroke="#2688c0"></rect>
+	<text x="778" y="708" font-size="11.5" font-weight="600" fill="#1c6a94" text-anchor="middle">index</text>
+	<rect x="832" y="690" width="92" height="28" rx="14" fill="#eef6fb" stroke="#2688c0"></rect>
+	<text x="878" y="708" font-size="11.5" font-weight="600" fill="#1c6a94" text-anchor="middle">follow</text>
+	<rect x="932" y="690" width="108" height="28" rx="14" fill="#f6f7f7" stroke="#dcdcde"></rect>
+	<text x="986" y="708" font-size="11.5" fill="#646970" text-anchor="middle">noarchive</text>
+	<rect x="1048" y="690" width="120" height="28" rx="14" fill="#f6f7f7" stroke="#dcdcde"></rect>
+	<text x="1108" y="708" font-size="11.5" fill="#646970" text-anchor="middle">nosnippet</text>
+	<text x="732" y="752" font-size="12" fill="#646970">Canonical URL: https://yoursite.com/guides/wordpress-seo</text>
+	</g>
+</svg>

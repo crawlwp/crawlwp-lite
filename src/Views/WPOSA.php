@@ -34,7 +34,9 @@ class WPOSA
 			'class' => true,
 		],
 		'ol'       => [],
-		'li'       => [],
+		'li'       => [
+			'class' => true,
+		],
 		'br'       => [
 			'class' => true,
 		],
@@ -52,10 +54,24 @@ class WPOSA
 			'selected' => true,
 		],
 		'div'      => [
-			'id'     => true,
-			'style'  => true,
-			'class'  => true,
-			'data-w' => true,
+			'id'         => true,
+			'style'      => true,
+			'class'      => true,
+			'data-w'     => true,
+			'data-group' => true,
+			'data-*'     => true,
+		],
+		'button'   => [
+			'id'            => true,
+			'class'         => true,
+			'type'          => true,
+			'style'         => true,
+			'title'         => true,
+			'aria-expanded' => true,
+			'aria-controls' => true,
+			'aria-label'    => true,
+			'data-group'    => true,
+			'data-*'        => true,
 		],
 		'a'        => [
 			'id'      => true,
@@ -63,19 +79,12 @@ class WPOSA
 			'href'    => true,
 			'style'   => true,
 			'title'   => true,
-			'onclick' => true,
 			'target'  => true,
 		],
 		'img'      => [
 			'src'    => true,
 			'width'  => true,
 			'height' => true,
-		],
-		'ul'       => [
-			'class' => true,
-		],
-		'li'       => [
-			'class' => true,
 		],
 		'p'        => [
 			'class' => true,
@@ -91,8 +100,11 @@ class WPOSA
 			'aria-label' => true,
 		],
 		'span'     => [
-			'class' => true,
-			'style' => true,
+			'id'          => true,
+			'class'       => true,
+			'style'       => true,
+			'aria-hidden' => true,
+			'data-*'      => true,
 		],
 		'table'    => [
 			'class' => true,
@@ -116,43 +128,64 @@ class WPOSA
 			'class' => true,
 		],
 		'textarea' => [
-			'name'  => true,
-			'class' => true,
-			'id'    => true,
-			'rows'  => true,
-			'cols'  => true,
+			'name'            => true,
+			'class'           => true,
+			'id'              => true,
+			'rows'            => true,
+			'cols'            => true,
+			'style'           => true,
+			'placeholder'     => true,
+			'readonly'        => true,
+			'disabled'        => true,
+			'data-cwp-tm'     => true,
+			'data-cwp-entity' => true,
+			'data-*'          => true,
 		],
 		'input'    => [
-			'id'          => true,
-			'class'       => true,
-			'type'        => true,
-			'name'        => true,
-			'value'       => true,
-			'placeholder' => true,
-			'checked'     => true,
-			'readonly'    => true,
-			'onclick'     => true,
-			'disabled'    => true,
+			'id'                 => true,
+			'class'              => true,
+			'type'               => true,
+			'name'               => true,
+			'value'              => true,
+			'placeholder'        => true,
+			'checked'            => true,
+			'readonly'           => true,
+			'onclick'            => true,
+			'disabled'           => true,
+			'style'              => true,
+			'data-default-color' => true,
+			'data-cwp-tm'        => true,
+			'data-cwp-entity'    => true,
+			'data-*'             => true,
 		],
 		'script'   => [
 			'src'   => true,
 			'async' => true,
 		],
 		'svg'      => array(
-			'class'   => true,
-			'xmlns'   => true,
-			'width'   => true,
-			'height'  => true,
-			'viewBox' => true,
-			'fill'    => true,
+			'class'       => true,
+			'xmlns'       => true,
+			'width'       => true,
+			'height'      => true,
+			'viewBox'     => true,
+			'viewbox'     => true,
+			'fill'        => true,
+			'stroke'      => true,
+			'aria-hidden' => true,
+			'focusable'   => true,
 		),
 		'g'        => array(
 			'clip-path' => true,
 		),
 		'path'     => array(
-			'd'            => true,
-			'stroke'       => true,
-			'stroke-width' => true,
+			'd'               => true,
+			'fill'            => true,
+			'stroke'          => true,
+			'stroke-width'    => true,
+			'stroke-linecap'  => true,
+			'stroke-linejoin' => true,
+			'fill-rule'       => true,
+			'clip-rule'       => true,
 		),
 		'defs'     => true,
 		'clipPath' => array(
@@ -242,6 +275,21 @@ class WPOSA
 	private $enable_blank_mode = false;
 
 	/**
+	 * Per-request option cache. Keyed by the prefixed section/option name.
+	 *
+	 * @var array
+	 */
+	private $option_cache = [];
+
+	/**
+	 * Flat sanitize-callback index built lazily on first sanitize call.
+	 * Keyed by field id, value is the callable (or false).
+	 *
+	 * @var array|null
+	 */
+	private $sanitize_index = null;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param string $plugin_name Plugin name.
@@ -282,9 +330,6 @@ class WPOSA
 
 		// Menu.
 		add_action('admin_menu', array($this, 'admin_menu'));
-
-		// Ajax.
-		add_action('wp_ajax_' . Utils::get_plugin_prefix() . '_reset_form', [$this, 'reset_form']);
 	}
 
 	/**
@@ -296,6 +341,12 @@ class WPOSA
 	{
 		global $wp_version;
 
+		// Only load CrawlWP assets on CrawlWP admin pages.
+		$screen = get_current_screen();
+		if ( ! $screen || strpos($screen->id, 'crawlwp') === false) {
+			return;
+		}
+
 		// jQuery is needed.
 		wp_enqueue_script('jquery');
 
@@ -306,6 +357,32 @@ class WPOSA
 			array('jquery-ui-draggable', 'jquery-ui-slider', 'jquery-touch-punch'),
 			$wp_version,
 			true
+		);
+
+		// Admin settings JS (extracted from the former inline script() method).
+		wp_enqueue_script(
+			'crawlwp-admin',
+			CRAWLWP_PLUGIN_URL . 'src/Views/assets/admin.js',
+			array('jquery', 'iris'),
+			CRAWLWP_VERSION,
+			true
+		);
+		wp_localize_script(
+			'crawlwp-admin',
+			'wposaAdmin',
+			array(
+				'prefix'      => CRAWLWP_PREFIX,
+				'redirectUrl' => esc_url(admin_url('admin.php?page=' . Utils::get_plugin_slug())),
+				'yandexState' => wp_create_nonce('yandex_oauth_nonce'),
+			)
+		);
+
+		// Admin stylesheet.
+		wp_enqueue_style(
+			'crawlwp-admin',
+			CRAWLWP_PLUGIN_URL . 'src/Views/assets/admin.css',
+			array(),
+			CRAWLWP_VERSION
 		);
 	}
 
@@ -345,7 +422,7 @@ class WPOSA
 			return false;
 		}
 
-		$menu['id'] = $this->get_prefix() . '_' . $menu['id'];
+		$menu['id'] = $this->plugin_prefix . '_' . $menu['id'];
 
 		// Assign the section to sections array.
 		$this->header_menu_array[] = $menu;
@@ -368,9 +445,9 @@ class WPOSA
 			return false;
 		}
 
-		$section['id'] = $this->get_prefix() . '_' . $section['id'];
+		$section['id'] = $this->plugin_prefix . '_' . $section['id'];
 		if (isset($section['header_menu_id'])) {
-			$section['header_menu_id'] = $this->get_prefix() . '_' . $section['header_menu_id'];
+			$section['header_menu_id'] = $this->plugin_prefix . '_' . $section['header_menu_id'];
 		}
 		// Assign the section to sections array.
 		$this->sections_array[] = $section;
@@ -417,7 +494,9 @@ class WPOSA
 		$arg = wp_parse_args($field_array, $defaults);
 
 		// Each field is an array named against its section.
-		$this->fields_array[$this->get_prefix() . '_' . $section][] = $arg;
+		$this->fields_array[$this->plugin_prefix . '_' . $section][] = $arg;
+		// Invalidate the sanitize index so a newly added field is included.
+		$this->sanitize_index = null;
 
 		return $this;
 	}
@@ -460,21 +539,23 @@ class WPOSA
 
 	private function convert_array_to_attributes(array $args): string
 	{
+		if (empty($args)) {
+			return '';
+		}
+
 		$result = [];
 
-		if (count($args)) {
-			foreach ($args as $attr_key => $attr_value) {
-				if ($attr_value === true || $attr_value === false) {
-					if ($attr_value === true) {
-						$result[] = esc_attr($attr_key);
-					}
-				} else {
-					$result[] = sprintf(
-						'%s="%s"',
-						esc_attr($attr_key),
-						esc_attr($attr_value)
-					);
+		foreach ($args as $attr_key => $attr_value) {
+			if ($attr_value === true || $attr_value === false) {
+				if ($attr_value === true) {
+					$result[] = esc_attr($attr_key);
 				}
+			} else {
+				$result[] = sprintf(
+					'%s="%s"',
+					esc_attr($attr_key),
+					esc_attr($attr_value)
+				);
 			}
 		}
 
@@ -505,18 +586,27 @@ class WPOSA
 
 			check_admin_referer($option_page . '-options');
 
+			// Only registered section ids may be saved through this handler.
+			$section_ids = array_flip(array_column($this->sections_array, 'id'));
+
 			foreach ($_POST as $k => $v) {
 
 				if (strstr($k, 'submit_') !== false) {
 					$name = str_replace('submit_', '', $k);
 
+					if ( ! isset($section_ids[$name])) {
+						continue;
+					}
+
 					$db_options = get_option($name, []);
 
 					$db_options = ! is_array($db_options) ? [] : $db_options;
 
-					$submitted_data = apply_filters('wposa_submitted_data', $_POST[$name], $name, $_POST);
+					$posted_data = isset($_POST[$name]) && is_array($_POST[$name]) ? $_POST[$name] : [];
 
-					$value = array_replace($db_options, wp_unslash(Utils::clean_data($submitted_data)));
+					$submitted_data = apply_filters('wposa_submitted_data', $posted_data, $name, $_POST);
+
+					$value = array_replace($db_options, $this->sanitize_section_data($name, wp_unslash($submitted_data)));
 
 					update_option($name, $value);
 
@@ -547,9 +637,16 @@ class WPOSA
 		 */
 		foreach ($this->sections_array as $section) {
 
-			if (get_option($section['id']) === false) {
-				// Add a new field as section ID.
+			// Only call add_option when the option is genuinely missing; the
+			// cached get_option() already returns false for non-existent keys
+			// so we bypass it here to avoid polluting the option_cache with
+			// a false entry before the option is created.
+			if ( ! array_key_exists($section['id'], $this->option_cache)) {
+				$this->option_cache[$section['id']] = get_option($section['id']);
+			}
+			if ($this->option_cache[$section['id']] === false) {
 				add_option($section['id'], '', '', false);
+				$this->option_cache[$section['id']] = [];
 			}
 
 			// Deals with sections description.
@@ -651,6 +748,7 @@ class WPOSA
 					'options'           => $options,
 					'std'               => $default,
 					'placeholder'       => $placeholder,
+					'rows'              => $field['rows'] ?? null,
 					'sanitize_callback' => $sanitize_callback,
 					'attributes'        => [
 						'readonly' => $readonly,
@@ -724,20 +822,124 @@ class WPOSA
 	 */
 	public function sanitize_fields($fields)
 	{
-
 		if (is_array($fields)) {
 			foreach ($fields as $field_slug => $field_value) {
 				$sanitize_callback = $this->get_sanitize_callback($field_slug);
-
 				// If callback is set, call it.
 				if ($sanitize_callback) {
 					$fields[$field_slug] = call_user_func($sanitize_callback, $field_value);
-					continue;
 				}
 			}
 		}
 
 		return $fields;
+	}
+
+	/**
+	 * Sanitize the posted data of a section according to each registered field type.
+	 *
+	 * Values for field ids that are not registered in the section keep the
+	 * generic Utils::clean_data() behaviour.
+	 *
+	 * @param string $section_id Section (option) id.
+	 * @param mixed  $data       Submitted (unslashed) data.
+	 *
+	 * @return array
+	 */
+	public function sanitize_section_data(string $section_id, $data): array
+	{
+		if ( ! is_array($data)) {
+			return [];
+		}
+
+		$fields = [];
+		foreach ($this->fields_array[$section_id] ?? [] as $field) {
+			if ( ! empty($field['id'])) {
+				$fields[$field['id']] = $field;
+			}
+		}
+
+		$sanitized = [];
+
+		foreach ($data as $field_id => $value) {
+			if ( ! isset($fields[$field_id])) {
+				$sanitized[$field_id] = Utils::clean_data($value);
+				continue;
+			}
+
+			$sanitized[$field_id] = $this->sanitize_field_value($fields[$field_id], $value);
+		}
+
+		return $sanitized;
+	}
+
+	/**
+	 * Sanitize a single field value based on its type.
+	 *
+	 * @param array $field Field definition.
+	 * @param mixed $value Submitted value.
+	 *
+	 * @return mixed
+	 */
+	private function sanitize_field_value(array $field, $value)
+	{
+		$type    = $field['type'] ?? 'text';
+		$options = isset($field['options']) && is_array($field['options']) ? $field['options'] : [];
+		$default = $field['default'] ?? '';
+
+		if ( ! empty($field['sanitize_callback']) && is_callable($field['sanitize_callback'])) {
+			return call_user_func($field['sanitize_callback'], $value);
+		}
+
+		switch ($type) {
+			case 'checkbox':
+			case 'switch':
+				return $value === 'on' ? 'on' : 'off';
+
+			case 'select':
+			case 'radio':
+				if (is_scalar($value) && array_key_exists((string)$value, $options)) {
+					return sanitize_text_field((string)$value);
+				}
+
+				return $default;
+
+			case 'multicheck':
+				if ( ! is_array($value)) {
+					return [];
+				}
+
+				$value = array_filter(array_intersect_key($value, $options), 'is_scalar');
+
+				return array_intersect($value, array_keys($options));
+
+			case 'url':
+			case 'image':
+			case 'file':
+				return is_scalar($value) ? esc_url_raw((string)$value) : '';
+
+			case 'number':
+				if (is_array($value)) {
+					return Utils::clean_data($value);
+				}
+
+				return is_numeric($value) && (string)(int)$value !== (string)$value ? (float)$value : (int)$value;
+
+			case 'textarea':
+				if (is_array($value)) {
+					return Utils::clean_data($value);
+				}
+
+				return ! empty($field['allow_html'])
+					? wp_kses_post((string)$value)
+					: sanitize_textarea_field((string)$value);
+
+			case 'html':
+				return is_array($value) ? Utils::clean_data($value) : wp_kses_post((string)$value);
+
+			default:
+				return is_array($value) ? Utils::clean_data($value) : sanitize_text_field((string)$value);
+		}
 	}
 
 
@@ -755,19 +957,21 @@ class WPOSA
 			return false;
 		}
 
-		// Iterate over registered fields and see if we can find proper callback.
-		foreach ($this->fields_array as $section => $field_array) {
-			foreach ($field_array as $field) {
-				if ($field['name'] != $slug) {
-					continue;
+		// Build a flat slug→callback index on the first call instead of
+		// running a double-loop on every field during sanitization.
+		if ($this->sanitize_index === null) {
+			$this->sanitize_index = [];
+			foreach ($this->fields_array as $field_array) {
+				foreach ($field_array as $field) {
+					$cb = isset($field['sanitize_callback']) && is_callable($field['sanitize_callback'])
+						? $field['sanitize_callback']
+						: false;
+					$this->sanitize_index[$field['id']] = $cb;
 				}
-
-				// Return the callback name.
-				return isset($field['sanitize_callback']) && is_callable($field['sanitize_callback']) ? $field['sanitize_callback'] : false;
 			}
 		}
 
-		return false;
+		return $this->sanitize_index[$slug] ?? false;
 	}
 
 
@@ -951,12 +1155,12 @@ class WPOSA
 	function callback_select($args)
 	{
 
-		$value = esc_attr($this->get_option($args['id'], $args['section'], $args['std']));
+		$value = $this->get_option($args['id'], $args['section'], $args['std']);
 		$size  = isset($args['size']) && ! is_null($args['size']) ? $args['size'] : 'regular';
 
 		$html = sprintf('<select class="%1$s" name="%2$s[%3$s]" id="%2$s[%3$s]">', $size, $args['section'], $args['id']);
 		foreach ($args['options'] as $key => $label) {
-			$html .= sprintf('<option value="%s"%s>%s</option>', $key, selected($value, $key, false), $label);
+			$html .= sprintf('<option value="%s"%s>%s</option>', esc_attr($key), selected($value, $key, false), esc_html($label));
 		}
 		$html .= '</select>';
 		$html .= $this->get_field_description($args);
@@ -974,8 +1178,20 @@ class WPOSA
 
 		$value = esc_textarea($this->get_option($args['id'], $args['section'], $args['std']));
 		$size  = isset($args['size']) && ! is_null($args['size']) ? $args['size'] : 'regular';
+		$rows  = isset($args['rows']) && ! is_null($args['rows']) ? absint($args['rows']) : 5;
 
-		$html = sprintf('<textarea rows="5" cols="55" class="%1$s-text" id="%2$s[%3$s]" name="%2$s[%3$s]">%4$s</textarea>', $size, $args['section'], $args['id'], $value);
+		$attributes = $this->convert_array_to_attributes($args['attributes'] ?? []);
+
+		$html = sprintf(
+			'<textarea rows="%1$s" cols="55" class="%2$s-text" id="%3$s[%4$s]" name="%3$s[%4$s]" placeholder="%5$s" %6$s>%7$s</textarea>',
+			esc_attr($rows),
+			esc_attr($size),
+			esc_attr($args['section']),
+			esc_attr($args['id']),
+			esc_attr($args['placeholder'] ?? ''),
+			$attributes,
+			$value
+		);
 		$html .= $this->get_field_description($args);
 
 		echo wp_kses($html, self::ALLOWED_HTML);
@@ -1026,10 +1242,15 @@ class WPOSA
 		$id    = $args['section'] . '[' . $args['id'] . ']';
 		$label = $args['options']['button_label'] ?? __('Choose Image');
 
-		$html = sprintf('<input type="text" class="%1$s-text wpsa-url" id="%2$s[%3$s]" name="%2$s[%3$s]" value="%4$s"/>', $size, $args['section'], $args['id'], $value);
+		$attributes = $this->convert_array_to_attributes($args['attributes'] ?? []);
+
+		$html = sprintf('<input type="text" class="%1$s-text wpsa-url" id="%2$s[%3$s]" name="%2$s[%3$s]" value="%4$s" %5$s/>', $size, $args['section'], $args['id'], $value, $attributes);
 		$html .= '<input type="button" class="button wpsa-browse" value="' . $label . '" />';
 		$html .= $this->get_field_description($args);
-		$html .= '<p class="wpsa-image-preview"><img src=""/></p>';
+
+		if ($value !== '') {
+			$html .= sprintf('<p class="wpsa-image-preview"><img src="%s"/></p>', esc_url($value));
+		}
 
 		echo wp_kses($html, self::ALLOWED_HTML);
 	}
@@ -1132,8 +1353,16 @@ class WPOSA
 	 */
 	public function get_option(string $option, string $section, $default = '')
 	{
-		$section = str_replace($this->get_prefix() . '_', '', $section);
-		$options = get_option($this->get_prefix() . '_' . $section);
+		$section     = str_replace($this->plugin_prefix . '_', '', $section);
+		$option_name = $this->plugin_prefix . '_' . $section;
+
+		// Cache the entire option row for the lifetime of this request so that
+		// rendering 30 fields in one section only triggers a single DB read.
+		if ( ! array_key_exists($option_name, $this->option_cache)) {
+			$this->option_cache[$option_name] = get_option($option_name);
+		}
+
+		$options = $this->option_cache[$option_name];
 
 		if (isset($options[$option])) {
 			return apply_filters('wposa/get_option', $options[$option], $option, $section, $default);
@@ -1144,17 +1373,20 @@ class WPOSA
 
 	public function set_option(string $option, $value, string $section): bool
 	{
-		$name = $this->get_prefix() . '_' . $section;
+		$name = $this->plugin_prefix . '_' . $section;
 
-		// Get option.
-		$options = get_option($name);
+		// Get option (use cache when available).
+		$options = array_key_exists($name, $this->option_cache)
+			? $this->option_cache[$name]
+			: get_option($name);
 
-		if ( ! $options) {
-			return false;
+		if (empty($options) || ! is_array($options)) {
+			$options = [];
 		}
 
-		// Update option.
+		// Update option and invalidate the cache entry.
 		$options[$option] = $value;
+		unset($this->option_cache[$name]);
 
 		return update_option($name, $options);
 	}
@@ -1220,8 +1452,6 @@ class WPOSA
 
 	public function plugin_page()
 	{
-		$this->css();
-
 		$review_url  = 'https://wordpress.org/support/plugin/mihdan-index-now/reviews/?filter=5#new-post';
 		$upgrade_url = 'https://crawlwp.com/pricing/?utm_source=wp_dashboard&utm_medium=upgrade&utm_campaign=crawlwp-header-top';
 
@@ -1323,21 +1553,76 @@ class WPOSA
 			esc_html__('Secondary Navigation', 'wposa')
 		);
 
+		$groups = array();
+
 		foreach ($this->sections_array as $tab) {
-			if (isset($tab['disabled']) && $tab['disabled'] === true) {
-				if (isset($tab['badge'])) {
-					$html .= sprintf('<span class="wposa-nav-tab wposa-nav-tab--disabled" id="%1$s-tab">%2$s <span class="wposa-badge">%3$s</span></span>', $tab['id'], $tab['title'], $tab['badge']);
-				} else {
-					$html .= sprintf('<span class="wposa-nav-tab wposa-nav-tab--disabled" id="%1$s-tab">%2$s</span>', $tab['id'], $tab['title']);
-				}
-			} else {
-				$html .= sprintf('<a href="#%1$s" class="wposa-nav-tab" id="%1$s-tab">%2$s</a>', $tab['id'], $tab['title']);
+
+			$group_id = ! empty($tab['nav_group']) ? $tab['nav_group'] : '';
+
+			// Ungrouped sections keep rendering exactly as before.
+			if ($group_id === '') {
+				$html .= $this->get_navigation_item($tab);
+				continue;
 			}
+
+			if ( ! isset($groups[$group_id])) {
+				$groups[$group_id] = array(
+					'label' => $tab['nav_group_label'] ?? $group_id,
+					'items' => '',
+				);
+			}
+
+			if (empty($groups[$group_id]['label']) && ! empty($tab['nav_group_label'])) {
+				$groups[$group_id]['label'] = $tab['nav_group_label'];
+			}
+
+			$groups[$group_id]['items'] .= $this->get_navigation_item($tab);
+		}
+
+		foreach ($groups as $group_id => $group) {
+			$html .= sprintf('<div class="wposa-nav-group" data-group="%s">', esc_attr($group_id));
+			$html .= sprintf(
+				'<button type="button" class="wposa-nav-group__toggle" aria-expanded="true">%1$s<span class="wposa-nav-group__chevron" aria-hidden="true">%2$s</span></button>',
+				esc_html($group['label']),
+				$this->get_navigation_group_chevron()
+			);
+			$html .= '<div class="wposa-nav-group__items">' . $group['items'] . '</div>';
+			$html .= '</div>';
 		}
 
 		$html .= '</nav>';
 
 		echo wp_kses($html, self::ALLOWED_HTML);
+	}
+
+	/**
+	 * Build the markup of a single navigation item.
+	 *
+	 * @param array $tab Section array.
+	 *
+	 * @return string
+	 */
+	private function get_navigation_item($tab): string
+	{
+		if (isset($tab['disabled']) && $tab['disabled'] === true) {
+			if (isset($tab['badge'])) {
+				return sprintf('<span class="wposa-nav-tab wposa-nav-tab--disabled" id="%1$s-tab">%2$s <span class="wposa-badge">%3$s</span></span>', $tab['id'], $tab['title'], $tab['badge']);
+			}
+
+			return sprintf('<span class="wposa-nav-tab wposa-nav-tab--disabled" id="%1$s-tab">%2$s</span>', $tab['id'], $tab['title']);
+		}
+
+		return sprintf('<a href="#%1$s" class="wposa-nav-tab" id="%1$s-tab">%2$s</a>', $tab['id'], $tab['title']);
+	}
+
+	/**
+	 * Chevron icon used by the navigation group toggle.
+	 *
+	 * @return string
+	 */
+	private function get_navigation_group_chevron(): string
+	{
+		return '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 	}
 
 	public function blank_mode_do_settings_sections($page)
@@ -1411,16 +1696,6 @@ class WPOSA
 									<input type="hidden" name="crawlwp_options_save" value="true">
 									<?php submit_button($form['label_submit'], $form['submit_type'], 'submit_' . $form['id'], $form['wrap'], $form['attributes']); ?>
 								</div>
-								<div class="wposa-footer__column wposa-footer__column--right">
-									<?php if ($form['reset_button']) : ?>
-										<input type="button"
-											   class="button-danger button-link"
-											   data-section="<?php echo esc_attr($form['id']); ?>"
-											   id="<?php echo esc_attr($form['id']); ?>_reset_form"
-											   value="<?php echo esc_attr(__('Reset Form', 'mihdan-index-now')); ?>"
-										/>
-									<?php endif; ?>
-								</div>
 							</div>
 						</form>
 					</div>
@@ -1441,887 +1716,19 @@ class WPOSA
 	{
 		$is_url = strstr($tab_id, 'http');
 		$href   = $is_url ? $tab_id : '#';
-		$title  = $is_url ? esc_attr__('Click to view help guide', 'mihdan-index-now') : esc_attr__('Click to show Help tab', 'mihdan-index-now');
+		$title  = $is_url ? __('Click to view help guide', 'mihdan-index-now') : __('Click to show Help tab', 'mihdan-index-now');
 
 		$class  = 'wpsa-help-tab-toggle' . ($is_url ? ' is-url' : '');
 		$target = $is_url ? '_blank' : '_self';
 		ob_start();
 		?>
-		<a href="<?php echo $href ?>" target="<?php echo $target ?>" title="<?php echo $title ?>" class="<?php echo $class ?>" data-tab="<?php echo esc_attr($tab_id); ?>"><?php echo esc_html($tab_icon); ?></a>
+		<a href="<?php echo esc_url($href); ?>" target="<?php echo esc_attr($target); ?>" title="<?php echo esc_attr($title); ?>" class="<?php echo esc_attr($class); ?>" data-tab="<?php echo esc_attr($tab_id); ?>"><?php echo esc_html($tab_icon); ?></a>
 		<?php
 		return ob_get_clean();
 	}
 
-	/**
-	 * Tabbable JavaScript codes & Initiate Color Picker
-	 *
-	 * This code uses localstorage for displaying active tabs
-	 */
 	public function script()
 	{
-		?>
-		<script>
-			(function ($) {
-
-				$(document).ready(function () {
-
-					const
-						$show_settings_toggler = $('.show-settings'),
-						$help = $('.wpsa-help-tab-toggle').not('.is-url'),
-						wp = window.wp;
-
-					$help.on(
-						'click',
-						function () {
-							var $this = $(this);
-							var tab = '#tab-link-<?php echo esc_js(CRAWLWP_PREFIX); ?>_' + $this.data('tab');
-
-							if ($show_settings_toggler.attr('aria-expanded') === 'false') {
-								$show_settings_toggler.trigger('click');
-							}
-
-							$(tab).find('a').trigger('click');
-						}
-					);
-
-					//Initiate Color Picker.
-					$('.color-picker').iris();
-
-					// Switches option sections
-					$('.group').hide();
-					var activetab = '';
-					if ('undefined' != typeof localStorage) {
-						activetab = localStorage.getItem('activetab');
-					}
-					if ('' != activetab && $(activetab).length) {
-						$(activetab).fadeIn();
-					} else {
-						$('.group:first').fadeIn();
-					}
-					$('.group .collapsed').each(function () {
-						$(this)
-							.find('input:checked')
-							.parent()
-							.parent()
-							.parent()
-							.nextAll()
-							.each(function () {
-								if ($(this).hasClass('last')) {
-									$(this).removeClass('hidden');
-									return false;
-								}
-								$(this)
-									.filter('.hidden')
-									.removeClass('hidden');
-							});
-					});
-
-					if ('' != activetab && $(activetab + '-tab').length) {
-						$(activetab + '-tab').addClass('wposa-nav-tab-active');
-					} else {
-						$('.wposa-nav-tab-wrapper a:first').addClass('wposa-nav-tab-active');
-					}
-					$('.wposa-nav-tab-wrapper a').click(function (evt) {
-						$('.wposa-nav-tab-wrapper a').removeClass('wposa-nav-tab-active');
-						$(this)
-							.addClass('wposa-nav-tab-active')
-							.blur();
-						var clicked_group = $(this).attr('href');
-						if ('undefined' != typeof localStorage) {
-							localStorage.setItem('activetab', $(this).attr('href'));
-						}
-						$('.group').hide();
-						$(clicked_group).fadeIn();
-						evt.preventDefault();
-					});
-
-					$('.wpsa-browse').on('click', function (event) {
-						event.preventDefault();
-
-						var self = $(this);
-
-						// Create the media frame.
-						var file_frame = (wp.media.frames.file_frame = wp.media({
-							title: self.data('uploader_title'),
-							button: {
-								text: self.data('uploader_button_text')
-							},
-							multiple: false
-						}));
-
-						file_frame.on('select', function () {
-							attachment = file_frame
-								.state()
-								.get('selection')
-								.first()
-								.toJSON();
-
-							self
-								.prev('.wpsa-url')
-								.val(attachment.url)
-								.change();
-						});
-
-						// Finally, open the modal
-						file_frame.open();
-					});
-
-					$('input.wpsa-url')
-						.on('change keyup paste input', function () {
-							var self = $(this);
-							self
-								.next()
-								.parent()
-								.children('.wpsa-image-preview')
-								.children('img')
-								.attr('src', self.val());
-						})
-						.change();
-
-					var REDIRECT_URL = '<?php echo esc_url(admin_url('admin.php?page=' . Utils::get_plugin_slug())); ?>';
-					var YSTATE = '<?php echo wp_create_nonce('yandex_oauth_nonce'); ?>';
-					var CODE_ENDPOINT = 'https://oauth.yandex.com/authorize?state=' + YSTATE + '&response_type=code&force_confirm=yes&redirect_uri=' + REDIRECT_URL + '&client_id=';
-
-					$('#button_get_token').on(
-						'click',
-						function () {
-							var CLIENT_ID = document.getElementById('crawlwp_yandex_webmaster[client_id]').value;
-
-							window.location.href = CODE_ENDPOINT + CLIENT_ID;
-						}
-					);
-
-					$('input:button[id$="_reset_form"]').on(
-						'click',
-						function () {
-							var $button = $(this),
-								$nonce = $(this).parents('form').find('#_wpnonce');
-
-							if (confirm('<?php echo esc_attr(__('Are you sure?', 'mihdan-index-now')); ?>')) {
-								wp.ajax.post(
-									'<?php echo esc_html(Utils::get_plugin_prefix()); ?>_reset_form',
-									{
-										section: $button.data('section'),
-										nonce: $nonce.val(),
-									}
-								).always(function (response) {
-									if (response === 'ok') {
-										document.location.reload();
-									} else {
-										console.log(response);
-									}
-								});
-							}
-						}
-					);
-				});
-
-			})(jQuery);
-
-		</script>
-		<?php
-	}
-
-	public function css()
-	{
-		?>
-		<style>
-			#wpbody-content .wposa .metabox-holder {
-				padding-left: 0;
-			}
-
-			.toplevel_page_crawlwp #screen-meta-links {
-				position: relative;
-				z-index: 10;
-			}
-
-			.wposa .button-danger {
-				color: #d63638;
-				border-color: #d63638;
-			}
-
-			.wposa-logo {
-				display: block;
-			}
-
-			#wpbody-content .metabox-holder {
-				padding-top: 0px;
-			}
-
-			.wpsa-image-preview img {
-				height: auto;
-				max-width: 70px;
-			}
-
-			.wposa-field--separator {
-				background: #ccc;
-				border: 0;
-				color: #ccc;
-				height: 1px;
-				position: absolute;
-				left: 0;
-				width: 99%;
-			}
-
-			.group .form-table input.color-picker {
-				max-width: 100px;
-			}
-
-			.wpsa-help-tab-toggle {
-				display: inline-block;
-				width: 14px;
-				height: 14px;
-				line-height: 14px;
-				text-align: center;
-				border-radius: 50%;
-				border: 2px solid #2271b1;
-				cursor: help;
-				font-size: 12px;
-				vertical-align: text-bottom;
-				user-select: none;
-				text-decoration: none;
-			}
-
-			.wpsa-help-tab-toggle.is-url {
-				cursor: pointer;
-			}
-
-			.wposa__grid {
-				display: grid;
-				grid-gap: 20px;
-				grid-template-columns: auto 300px;
-				min-height: 0;
-				min-width: 0;
-			}
-
-			input.wposa-field--switch {
-				position: relative;
-				-webkit-appearance: none;
-				appearance: none;
-				outline: none;
-				width: 40px;
-				height: 20px;
-				background-color: #ffffff;
-				border: 1px solid #D9DADC;
-				border-radius: 50px;
-				box-shadow: inset -20px 0 0 0 #ffffff;
-			}
-
-			input.wposa-field--switch:before {
-				display: none !important;
-			}
-
-			input.wposa-field--switch:after {
-				content: "";
-				position: absolute;
-				top: 0;
-				left: 1px;
-				width: 18px;
-				height: 18px;
-				background-color: transparent;
-				border-radius: 50%;
-				box-shadow: 2px 0 6px rgba(0, 0, 0, 0.2);
-				transition-property: left;
-				transition-duration: 3s;
-			}
-
-			input.wposa-field--switch:checked {
-				border-color: var(--wp-admin-theme-color, #135e96);
-				box-shadow: inset 20px 0 0 0 var(--wp-admin-theme-color, #135e96);
-				background: transparent;
-			}
-
-			input.wposa-field--switch:checked:after {
-				left: auto;
-				right: 1px;
-				box-shadow: -2px 0px 3px rgba(0, 0, 0, 0.05);
-			}
-
-			input.wposa-field--switch:hover:after {
-				/*box-shadow: 0 0 3px rgba(0,0,0,0.3);*/
-			}
-
-			.wposa-nav-tab--disabled {
-				cursor: not-allowed;
-			}
-
-			.wposa-badge {
-				font-size: 0.8em;
-				background-color: #d63638;
-				color: #fff;
-				border-radius: 2px;
-				padding: 0 5px;
-				display: inline-block;
-				font-weight: normal;
-			}
-
-			.wposa-section-description {
-				max-width: 800px;
-			}
-
-			.wposa-form-table__row_type_hidden {
-				display: none;
-			}
-
-			.wposa-form-table__row_type_number .regular-text {
-				width: 50px;
-			}
-
-			.wrap-column--form form {
-				max-width: 600px;
-			}
-
-			.wpsa-card img {
-				display: block;
-				border: 0;
-			}
-
-			.wposa__table {
-				border: 1px solid #c3c4c7;
-				border-collapse: collapse;
-			}
-
-			.wposa__table th {
-				text-align: left;
-				vertical-align: top;
-				line-height: 1.2em;
-			}
-
-			.wposa__table th,
-			.wposa__table td {
-				padding: 7px;
-			}
-
-			.form-table .wposa-form-table__row th {
-				display: block;
-			}
-
-			.wposa-card--crawlwp_wpshop {
-				padding: 0;
-				border: 0;
-			}
-
-			.wposa__table tr:nth-child(even) {
-				background-color: #f0f0f1;
-			}
-
-			.wposa__table tr:nth-child(odd) {
-				background-color: #fff;
-			}
-
-			.wposa-card--crawlwp_rtfm {
-				position: sticky;
-				top: 50px;
-			}
-
-			.wposa-form-table__row_crawlwp_plugins_plugins th {
-				display: none;
-			}
-
-			.wposa-form-table__row_crawlwp_plugins_plugins td {
-				padding: 0;
-			}
-
-			.wposa-plugins {
-				display: grid;
-				grid-gap: 20px;
-				grid-template-columns: repeat(2, 1fr);
-			}
-
-			.wposa-plugins a {
-				text-decoration: none;
-			}
-
-			.wposa-plugins__item {
-				border: 1px solid #c3c4c7;
-				background: #fff;
-			}
-
-			.wposa-plugin {
-				display: flex;
-				flex-direction: column;
-				justify-content: space-between;
-			}
-
-			.wposa-plugin__content {
-				display: grid;
-				grid-gap: 20px;
-				grid-template-columns: 100px auto;
-				padding: 20px;
-			}
-
-			.wposa-plugin__icon {
-			}
-
-			.wposa-plugin__data {
-			}
-
-			.wposa-plugin__name {
-				font-weight: bold;
-				margin-bottom: 5px;
-				font-size: 1.2em;
-			}
-
-			.wposa-plugin__description {
-				font-size: 0.9em;
-			}
-
-			.wposa-plugin__footer {
-				background: #f6f7f7;
-				padding: 20px 20px;
-				display: grid;
-				grid-gap: 20px;
-				grid-template-columns: 1fr 1fr;
-			}
-
-			.wposa-plugin__install {
-				align-self: end;
-				text-align: right;
-			}
-
-			.wposa-plugin__meta {
-				margin: 0;
-				padding: 0;
-				font-size: 0.9em;
-			}
-
-			.wposa-plugin__meta > li {
-				padding: 0;
-				margin-bottom: 2px;
-			}
-
-			@media (max-width: 1480px) {
-				.wposa-plugins {
-					grid-template-columns: 1fr 1fr;
-				}
-			}
-
-			@media (max-width: 782px) {
-				.wposa__grid {
-					grid-template-columns: 1fr;
-				}
-
-				.wposa__column {
-					padding-right: 10px;
-				}
-			}
-
-			@media (max-width: 992px) {
-				.wposa-plugins {
-					grid-template-columns: 1fr;
-				}
-			}
-
-			@media (max-width: 544px) {
-				.toplevel_page_crawlwp #wpcontent {
-					/*padding-left: 0;*/
-				}
-
-				.wposa {
-					top: -60px;
-				}
-
-				.form-table th {
-					padding: 10px 0;
-				}
-
-				.wposa-plugins {
-					grid-template-columns: 1fr;
-				}
-			}
-
-			.wposa__helptab {
-				max-width: 600px;
-			}
-
-			.wposa code {
-				white-space: nowrap;
-			}
-
-			.wposa-overflow {
-				overflow-x: auto;
-				max-width: 300px;
-			}
-
-			.wposa-footer {
-				display: grid;
-				grid-gap: 20px;
-				grid-template-columns: 1fr 1fr;
-				padding-top: 50px;
-			}
-
-			.wposa-footer__column {
-			}
-
-			.wposa-footer__column--left {
-			}
-
-			.wposa-footer__column--right {
-				text-align: right;
-			}
-
-			/*	new header */
-			[class*=crawlwp].wp-admin #screen-meta-links {
-				position: absolute;
-				right: 0;
-				z-index: 9999;
-			}
-
-			.wposa-new-header {
-				display: flex;
-				justify-content: space-between;
-				flex-wrap: wrap;
-				gap: 24px;
-				border-bottom: 1px solid #e0e0e0;
-				padding: 16px 24px 12px;
-				background: #fff;
-				margin-left: -20px;
-			}
-
-			.wposa-new-header .wposa-branding {
-				display: flex;
-				align-items: center;
-				gap: 8px;
-			}
-
-			.wposa-new-header .wposa-logo {
-				width: 40px;
-				height: 40px;
-			}
-
-			.wposa-new-header .wposa-branding h1 {
-				font-size: 20px;
-				margin: 0;
-			}
-
-			.wposa-new-header .wposa-tabs {
-				align-self: flex-end;
-				margin-bottom: -12px;
-				display: flex;
-				gap: 24px;
-			}
-
-			.wposa-new-header .wposa-tab {
-				cursor: pointer;
-				display: inline-block;
-				padding: 12px 0 24px;
-				border-bottom: 3px solid transparent;
-				line-height: 1;
-				color: inherit;
-				text-decoration: none;
-			}
-
-			.wposa-new-header .wposa-tab.wposa-tab-active {
-				border-color: #007cba;
-			}
-
-			.wposa-new-header .wposa-header-right {
-				position: relative;
-				display: flex;
-				justify-content: flex-end;
-				min-width: 240px;
-			}
-
-			.wposa-new-header .wposa-header-action {
-				display: flex;
-				align-items: center;
-				box-sizing: border-box;
-				padding-left: 8px;
-				padding-right: 8px;
-				text-decoration: none;
-				transition: .25s;
-				font-weight: 500;
-				line-height: 30px;
-				color: var(--wp-admin-theme-color, #2271b1);
-				border-radius: 4px;
-			}
-
-			.wposa-new-header .wposa-header-action:first-child {
-				margin-left: 0;
-			}
-
-			.wposa-new-header .wposa-header-action svg {
-				margin-right: 4px;
-				transition: .25s;
-			}
-
-			.wposa-new-header .button-primary {
-				font-size: 14px;
-				font-weight: 500;
-				transition: .1s;
-				min-height: 40px;
-				line-height: 40px;
-				padding: 0 15px;
-			}
-
-			/*	new body design */
-			.wposa-nav-tab-wrapper {
-				border-bottom: 1px solid #e0e0e0;
-				padding-inline: 24px;
-				display: flex;
-				align-items: center;
-				gap: 24px;
-			}
-
-			.wposa-nav-tab {
-				display: inline-block;
-				padding-block: 18px;
-				font-weight: 500;
-				transition: box-shadow .1s linear;
-				text-decoration: none;
-				color: inherit;
-				white-space: nowrap;
-			}
-
-
-			.wposa__content {
-				background: #fff;
-				border: 1px solid #c3c4c7;
-				border-radius: 6px;
-				box-shadow: 0 1px 1px rgba(0, 0, 0, .04);
-				margin-top: 20px;
-				overflow: scroll;
-				min-width: 0;
-			}
-
-			.wposa-nav-tab.wposa-nav-tab-active {
-				box-shadow: inset 0 0 0 1.5px rgba(0, 0, 0, 0), inset 0 -3.5px 0 0 currentColor;
-				color: #007cba;
-			}
-
-			.metabox-holder .group {
-				padding: 24px;
-			}
-
-			#screen-meta-links {
-				position: relative;
-				top: 70px;
-				z-index: 99999;
-			}
-
-			/* CSS to relocate settings page top nav to sidebar	*/
-			.wposa__column.wposa__content {
-				display: flex;
-			}
-
-			.wposa-nav-tab-wrapper {
-				display: flex;
-				flex-direction: column;
-				width: 20%;
-				overflow: hidden;
-				gap: 8px;
-				padding-inline: 0;
-				align-items: normal;
-				background: rgb(250 250 250 / 63%);
-				border: 0;
-				border-right: 1px solid #ccd0d4;
-			}
-
-			.wposa-nav-tab-wrapper a {
-				display: block;
-				overflow: hidden;
-				padding: 16px 24px;
-			}
-
-			.wposa-nav-tab.wposa-nav-tab-active {
-				box-shadow: none;
-				border-left: 2px solid #007cba;
-			}
-
-			#wpbody-content .wposa__content .metabox-holder {
-				padding: 24px;
-				padding-top: 6px;
-				width: 75%;
-			}
-
-			.wposa-nav-tab-wrapper .wposa-nav-tab:first-child {
-				padding-top: 24px;
-			}
-
-			.wposa-nav-tab-wrapper .wposa-nav-tab:last-child {
-				padding-bottom: 24px;
-			}
-
-			.crawlwp-license-page {
-				padding: 2rem;
-			}
-
-			.crawlwp-license-page .crawlwp-banner {
-				display: block;
-				margin: 0 0 20px;
-				width: 100%;
-				border-left: 2px solid var(--wp-admin-theme-color, #2271b1);
-				font: 300 30px/60px '';
-				text-align: center;
-				color: #ffffff;
-				background: var(--wp-admin-theme-color, #2271b1);
-				border-radius: 4px;
-			}
-
-			/* upsell sidebar */
-			.cwp-premium-sidebar-upsell-ul {
-				margin-top: 1rem;
-				margin-bottom: 1.5rem;
-				list-style-type: none;
-				color: #374151;
-			}
-
-			.cwp-premium-sidebar-upsell-li {
-				display: flex;
-				margin-bottom: 0.75rem;
-				align-items: center;
-			}
-
-			.cwp-premium-sidebar-upsell-li svg {
-				width: 1.25rem;
-				height: 1.25rem;
-				color: #2271b1;
-			}
-
-			.cwp-premium-sidebar-upsell-li span {
-				margin-left: 0.5rem;
-			}
-
-			.card.wposa-card.wposa-card--crawlwp_upsell_card {
-				border-radius: 0.375rem;
-				border-color: var(--wp-admin-theme-color, #2271b1);
-				padding: 1.5rem;
-			}
-
-			.wposa-card.wposa-card--crawlwp_upsell_card h2 {
-				margin: 0;
-			}
-
-			body:not(.cwpWP7higher) .cwp-premium-sidebar-upsell-cta .button-primary {
-				padding-top: 8px;
-				padding-bottom: 8px;
-				line-height: inherit;
-				margin-right: 6px;
-			}
-
-			.cwp-premium-sidebar-upsell-cta .button-primary {
-				margin-right: 6px;
-			}
-
-			/* upsell page */
-			.crawlwp-full-feature-upsell-page-wrap {
-				background: #fff;
-				border: 1px solid #d6e2ed;
-				text-align: center;
-				margin-top: 25px;
-				margin-left: auto;
-				margin-right: auto;
-				max-width: 900px;
-			}
-
-			.crawlwp-full-feature-upsell-page-wrap a.bbtn {
-				border-style: solid;
-				border-width: 1px 1px 2px 1px;
-				border-radius: 3px;
-				cursor: pointer;
-				display: inline-block;
-				font-weight: 400;
-				text-decoration: none;
-				background: var(--wp-admin-theme-color, #2271b1);
-				border-color: var(--wp-admin-theme-color, #2271b1);
-				color: #fff;
-				font-size: 16px;
-				padding: 14px 27px;
-			}
-
-			.btn-higher-up {
-				position: absolute;
-				top: 0;
-				left: 50%;
-				transform: translate(-50%, -50%);
-			}
-
-			.crawlwp-upsell-top {
-				padding: 20px;
-			}
-
-			.crawlwp-upsell-featured-image {
-				padding: 10px 0;
-			}
-
-			.crawlwp-full-feature-upsell-page-wrap h2 {
-				font-size: 20px;
-				color: #000;
-				margin: 36px 0 14px;
-			}
-
-			.crawlwp-full-feature-upsell-page-wrap h4 {
-				font-size: 18px;
-				color: #4c6577;
-				font-weight: 400;
-				margin: 0;
-				line-height: 2;
-			}
-
-			.crawlwp-full-feature-upsell-page-wrap h3 {
-				font-size: 18px;
-				color: #000;
-				margin: 0 0 14px;
-			}
-
-			.crawlwp-upsell-bottom {
-				background: rgb(250 250 250 / 63%);
-				border-top: 1px solid #d6e2ed;
-				padding: 36px 50px 60px;
-				position: relative;
-			}
-
-			.crawlwp-upsell-featured-image img {
-				width: 100%;
-				height: auto;
-			}
-
-			.crawlwp-full-feature-upsell-page-wrap p {
-				font-size: 14px;
-				color: #4c6577;
-				padding: 6px 0;
-			}
-		</style>
-		<?php
-	}
-
-	/**
-	 * Reset settings for given section.
-	 *
-	 * @return void
-	 * @link https://wpmag.ru/2015/nonces-wordpress-security/
-	 */
-	public function reset_form(): void
-	{
-		if ( ! current_user_can('manage_options')) {
-			wp_send_json_error(
-				__('You have no rights to do this', 'mihdan-index-now')
-			);
-		}
-
-		$nonce   = sanitize_text_field(wp_unslash($_POST['nonce'] ?? ''));
-		$section = sanitize_text_field(wp_unslash($_POST['section'] ?? ''));
-
-		if ( ! $section) {
-			wp_send_json_error(
-				__('Invalid section name', 'mihdan-index-now')
-			);
-		}
-
-		if ( ! $nonce) {
-			wp_send_json_error(
-				__('Invalid nonce', 'mihdan-index-now')
-			);
-		}
-
-		if ( ! wp_verify_nonce($nonce, $section . '-options')) {
-			wp_send_json_error(
-				__('Invalid nonce', 'mihdan-index-now')
-			);
-		}
-
-		delete_option($section);
-
-		wp_send_json_success('ok');
+		// All JS is now in assets/admin.js — nothing to output inline.
 	}
 }

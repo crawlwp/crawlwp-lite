@@ -1,0 +1,295 @@
+.cwp-fg-wrap {
+	margin: 0 0 0;
+}
+
+.wposa-form-table__row_crawlwp_seo_features_enabled th {
+	padding: 0;
+}
+
+/* ── Hero ── */
+.cwp-fg-hero {
+	position: relative;
+	overflow: hidden;
+	background: radial-gradient(circle at 88% -30%, #2c3b47 0%, #1d2327 55%);
+	border-radius: 8px 8px 0 0;
+	padding: 34px 36px 30px;
+}
+
+.cwp-fg-hero__eyebrow {
+	display: inline-block;
+	margin-bottom: 12px;
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: .1em;
+	text-transform: uppercase;
+	color: #7fb5dd;
+}
+
+.cwp-fg-hero__title {
+	margin: 0 0 10px;
+	font-size: 23px;
+	font-weight: 700;
+	color: #fff;
+	line-height: 1.25;
+	letter-spacing: -.01em;
+}
+
+.cwp-fg-hero__intro {
+	margin: 0 0 18px;
+	max-width: 760px;
+	font-size: 13.5px;
+	line-height: 1.7;
+	color: #b6bcc3;
+}
+
+.cwp-fg-hero__badges {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+
+.cwp-fg-badge {
+	display: inline-block;
+	padding: 4px 11px;
+	background: rgba(255,255,255,.06);
+	border: 1px solid rgba(255,255,255,.14);
+	border-radius: 20px;
+	font-size: 11px;
+	font-weight: 500;
+	color: #d7dbdf;
+	letter-spacing: .02em;
+}
+
+.cwp-fg-hero__illustration {
+	border: 1px solid #dcdcde;
+	border-top: none;
+	border-radius: 0 0 8px 8px;
+	overflow: hidden;
+	margin-bottom: 28px;
+	background: #fff;
+}
+
+.cwp-fg-hero__illustration svg {
+	display: block;
+	width: 100%;
+	height: auto;
+}
+
+/* ── Section heading ── */
+.cwp-fg-section-head {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 12px;
+	margin-bottom: 12px;
+}
+
+.cwp-fg-section-head__title {
+	margin: 0;
+	font-size: 13px;
+	font-weight: 600;
+	letter-spacing: .06em;
+	text-transform: uppercase;
+	color: #1d2327;
+}
+
+.cwp-fg-section-head__meta {
+	font-size: 12px;
+	color: #646970;
+}
+
+/* ── Feature grid ── */
+.cwp-fg-grid {
+	display: grid;
+	grid-template-columns: repeat(4, 1fr);
+	gap: 12px;
+	margin-bottom: 20px;
+}
+
+.cwp-fg-card {
+	display: flex;
+	align-items: flex-start;
+	gap: 11px;
+	background: #fff;
+	border: 1px solid #e2e4e7;
+	border-radius: 6px;
+	padding: 16px 18px;
+	transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease;
+}
+
+.cwp-fg-card:hover {
+	border-color: #c3c4c7;
+	box-shadow: 0 2px 6px rgba(0,0,0,.05);
+	transform: translateY(-1px);
+}
+
+.cwp-fg-card__icon {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex: 0 0 30px;
+	width: 30px;
+	height: 30px;
+	border-radius: 6px;
+	background: #f0f6fc;
+	color: var(--wp-admin-theme-color);
+	line-height: 1;
+}
+
+.cwp-fg-card__icon svg {
+	display: block;
+}
+
+.cwp-fg-card__body {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.cwp-fg-card__title {
+	margin: 1px 0 4px;
+	font-size: 13px;
+	font-weight: 600;
+	color: #1d2327;
+	line-height: 1.4;
+}
+
+.cwp-fg-card__desc {
+	margin: 0;
+	font-size: 12.5px;
+	color: #646970;
+	line-height: 1.55;
+}
+
+/* ── Migration note ── */
+.cwp-fg-note {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	background: #fbfbfc;
+	border: 1px solid #e2e4e7;
+	border-radius: 6px;
+	padding: 15px 18px;
+	font-size: 12.5px;
+	color: #50575e;
+	line-height: 1.6;
+	margin-bottom: 24px;
+}
+
+.cwp-fg-note__icon {
+	flex: 0 0 16px;
+	margin-top: 2px;
+	color: #8c8f94;
+}
+
+.cwp-fg-note strong {
+	display: block;
+	margin-bottom: 2px;
+	color: #1d2327;
+	font-weight: 600;
+}
+
+/* ──────────────────────────────────────────────────────────
+   Call-to-action panel.
+   The CTA block is the visual header of a single card; the
+   WPOSA settings row that renders the enable checkbox is
+   restyled as that same card's body so the two read as one
+   highlighted panel.
+   ────────────────────────────────────────────────────────── */
+.cwp-fg-cta {
+	display: flex;
+	align-items: flex-start;
+	gap: 12px;
+	background: #f0f6fc;
+	border: 1px solid #9ec9e8;
+	border-bottom: none;
+	border-radius: 8px 8px 0 0;
+	padding: 20px 22px 16px;
+	box-shadow: 0 1px 0 rgba(34,113,177,.06);
+}
+
+.cwp-fg-cta__icon {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex: 0 0 32px;
+	width: 32px;
+	height: 32px;
+	border-radius: 50%;
+	background: var(--wp-admin-theme-color);
+	color: #fff;
+	line-height: 1;
+}
+
+.cwp-fg-cta__body {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.cwp-fg-cta__title {
+	margin: 3px 0 4px;
+	font-size: 15px;
+	font-weight: 600;
+	color: #0a4b78;
+	line-height: 1.3;
+}
+
+.cwp-fg-cta__text {
+	margin: 0;
+	font-size: 12.5px;
+	color: #40607a;
+	line-height: 1.6;
+}
+
+/* ── Enable checkbox row, styled as the CTA card body ── */
+#crawlwp_seo_features .form-table {
+	margin-top: 0;
+}
+
+.wposa-form-table__row_crawlwp_seo_features_enabled {
+	display: block;
+	background: #f0f6fc;
+	border: 1px solid #9ec9e8;
+	border-top: none;
+	border-radius: 0 0 8px 8px;
+	padding: 4px 22px 20px 66px;
+}
+
+.wposa-form-table__row_crawlwp_seo_features_enabled th {
+	display: none;
+}
+
+.wposa-form-table__row_crawlwp_seo_features_enabled td {
+	display: block;
+	width: auto;
+	padding: 0;
+}
+
+.wposa-form-table__row_crawlwp_seo_features_enabled label {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 13.5px;
+	font-weight: 600;
+	color: #0a4b78;
+}
+
+.wposa-form-table__row_crawlwp_seo_features_enabled input[type="checkbox"] {
+	width: 18px;
+	height: 18px;
+	margin: 0;
+	border-color: var(--wp-admin-theme-color);
+}
+
+.wposa-form-table__row_crawlwp_seo_features_enabled fieldset {
+	margin: 0;
+}
+
+@media screen and (max-width: 960px) {
+	.cwp-fg-grid {
+		grid-template-columns: repeat(2, 1fr);
+	}
+
+	.wposa-form-table__row_crawlwp_seo_features_enabled {
+		padding-left: 22px;
+	}
+}

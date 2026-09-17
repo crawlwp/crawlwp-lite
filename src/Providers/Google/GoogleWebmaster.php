@@ -66,6 +66,9 @@ class GoogleWebmaster extends WebmasterAbstract
 
 		if (time() < (int)get_option('crawlwp_google_indexing_rate_limit_expiration', 0)) return;
 
+		$status_code = 0;
+		$message     = '';
+
 		try {
 			$client = new Client();
 			$client->setApplicationName(Utils::get_plugin_name());
@@ -92,8 +95,8 @@ class GoogleWebmaster extends WebmasterAbstract
 
 			foreach ($results as $result) {
 				if ($result instanceof Google_Service_Exception) {
-					$status_code = $result->getCode();
-					$message     = $result->getErrors()[0]['message'];
+					$status_code = (int)$result->getCode();
+					$message     = $result->getErrors()[0]['message'] ?? $result->getMessage();
 				} else {
 					$status_code = 200;
 					$message     = sprintf('<a href="%s" target="_blank">%s</a> - OK', $post_url, get_the_title($post_id));

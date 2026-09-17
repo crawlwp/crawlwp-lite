@@ -16,7 +16,7 @@ class NaverIndexNow extends IndexNowAbstract {
 	}
 
 	public function get_name(): string {
-		return __( 'Seznam IndexNow', 'mihdan-index-now' );
+		return __( 'Naver IndexNow', 'mihdan-index-now' );
 	}
 
 	protected function get_api_url(): string {

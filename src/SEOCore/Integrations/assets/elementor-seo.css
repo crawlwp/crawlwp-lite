@@ -1,0 +1,133 @@
+/**
+ * CrawlWP SEO - Elementor Integration Styles
+ */
+
+/* Hide Elementor native AI buttons, prompts, and promotions within CrawlWP panels */
+.elementor-control-section_crawlwp_seo_general .e-ai-button,
+.elementor-control-section_crawlwp_seo_general .e-ai-promotion,
+.elementor-control-section_crawlwp_seo_social .e-ai-button,
+.elementor-control-section_crawlwp_seo_social .e-ai-promotion,
+.elementor-control-section_crawlwp_seo_schema .e-ai-button,
+.elementor-control-section_crawlwp_seo_schema .e-ai-promotion,
+.elementor-control-section_crawlwp_seo_advanced .e-ai-button,
+.elementor-control-section_crawlwp_seo_advanced .e-ai-promotion,
+[class*="elementor-control-_crawlwp_"] .e-ai-button,
+[class*="elementor-control-_crawlwp_"] .e-ai-promotion,
+.crawlwp-elementor-ai-wrapper,
+.cwp-elementor-ai-bar,
+.cwp-elementor-ai-btn {
+  display: none !important;
+}
+
+/* Control Field Header Alignment */
+[class*="elementor-control-_crawlwp_"] .elementor-control-field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+[class*="elementor-control-_crawlwp_"] .elementor-control-title {
+  margin-bottom: 0;
+}
+
+[class*="elementor-control-_crawlwp_"].elementor-label-block .elementor-control-input-wrapper {
+  width: 100%;
+  max-width: 100%;
+  margin-top: 8px;
+}
+
+/* Variable Inserter Button & Dropdown Menu */
+.cwp-var {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  margin-inline-start: auto;
+}
+
+.cwp-var-btn {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1px solid var(--e-a-border-color, #404349);
+  background: var(--e-a-btn-bg, rgba(255, 255, 255, 0.06));
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--e-a-color-txt, #a4afb7);
+  padding: 3px 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  line-height: 1.3;
+  transition: all 0.15s ease;
+}
+
+.cwp-var-btn:hover {
+  border-color: var(--e-a-color-primary, #39b54a);
+  color: var(--e-a-color-txt-hover, #ffffff);
+  background: var(--e-a-btn-bg-hover, rgba(255, 255, 255, 0.12));
+}
+
+.cwp-var-btn svg {
+  flex-shrink: 0;
+}
+
+.cwp-var-menu {
+  display: none;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 10000;
+  width: 260px;
+  max-width: calc(100vw - 40px);
+  max-height: 240px;
+  overflow-y: auto;
+  background: var(--e-a-bg-default, #26292c);
+  border: 1px solid var(--e-a-border-color-bold, #404349);
+  border-radius: 6px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  padding: 5px;
+}
+
+.cwp-var-menu.is-open {
+  display: block;
+}
+
+.cwp-var-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
+  width: 100%;
+  box-sizing: border-box;
+  text-align: left;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 6px 8px;
+  border-radius: 4px;
+  transition: background 0.1s ease;
+}
+
+.cwp-var-item:hover {
+  background: var(--e-a-bg-hover, rgba(255, 255, 255, 0.08));
+}
+
+.cwp-var-item code {
+  font-size: 11px;
+  color: var(--e-a-color-primary, #58a6ff);
+  font-family: Menlo, Consolas, Monaco, monospace;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: none;
+  padding: 0;
+}
+
+.cwp-var-item span {
+  font-size: 10px;
+  color: var(--e-a-color-txt-muted, #8d96a0);
+  line-height: 1.3;
+}

@@ -130,7 +130,7 @@ class YandexWebmaster extends WebmasterAbstract
 				$host_ids = $this->get_api_host_id($user_id, $body['access_token']);
 
 				if ($host_ids) {
-					$this->wposa->set_option('host_ids', serialize($host_ids), 'yandex_webmaster');
+					$this->wposa->set_option('host_ids', $host_ids, 'yandex_webmaster');
 				}
 			}
 
@@ -164,7 +164,7 @@ class YandexWebmaster extends WebmasterAbstract
 
 			if ($host_ids) {
 
-				$this->wposa->set_option('host_ids', serialize($host_ids), 'yandex_webmaster');
+				$this->wposa->set_option('host_ids', $host_ids, 'yandex_webmaster');
 
 				$home_url = Utils::normalized_home_url();
 
@@ -261,7 +261,7 @@ class YandexWebmaster extends WebmasterAbstract
 		$body = json_decode(wp_remote_retrieve_body($response), true);
 
 		if ($status_code !== 200) {
-			$this->logger->error($body['error_message'], [
+			$this->logger->error($body['error_message'] ?? 'Unknown error', [
 				'search_engine' => $this->get_slug(),
 				'status_code' => $status_code
 			]);
@@ -269,7 +269,7 @@ class YandexWebmaster extends WebmasterAbstract
 			return 0;
 		}
 
-		return $body['user_id'] ?? 0;
+		return (int)($body['user_id'] ?? 0);
 	}
 
 	/**
@@ -278,7 +278,7 @@ class YandexWebmaster extends WebmasterAbstract
 	 * @param int $user_id User ID.
 	 * @param string $token Access token.
 	 *
-	 * @return int
+	 * @return array
 	 */
 	public function get_api_host_id(int $user_id, string $token): array
 	{
@@ -295,15 +295,15 @@ class YandexWebmaster extends WebmasterAbstract
 		$body = json_decode(wp_remote_retrieve_body($response), true);
 
 		if ($status_code !== 200) {
-			$this->logger->error($body['error_message'], [
+			$this->logger->error($body['error_message'] ?? 'Unknown error', [
 				'search_engine' => $this->get_slug(),
 				'status_code' => $status_code
 			]);
 
-			return 0;
+			return [];
 		}
 
-		return isset($body['hosts'])
+		return is_array($body['hosts'] ?? null)
 			? wp_list_pluck($body['hosts'], 'host_id')
 			: [];
 	}
@@ -361,7 +361,7 @@ class YandexWebmaster extends WebmasterAbstract
 			$message = sprintf('<a href="%s" target="_blank">%s</a> - OK', $post_url, get_the_title($post_id));
 			$this->logger->info($message, $data);
 		} else {
-			$this->logger->error($body['error_message'], $data);
+			$this->logger->error($body['error_message'] ?? 'Unknown error', $data);
 		}
 
 		do_action('crawlwp/index_pinged', 'post', $post_id);
@@ -401,9 +401,9 @@ class YandexWebmaster extends WebmasterAbstract
 			$message = 'Data on daily limit successfully received';
 			$this->logger->info($message, $data);
 
-			return $body;
+			return is_array($body) ? $body : [];
 		} else {
-			$this->logger->error($body['error_message'], $data);
+			$this->logger->error($body['error_message'] ?? 'Unknown error', $data);
 
 			return [
 				'daily_quota' => 0,

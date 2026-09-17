@@ -2,6 +2,7 @@
 namespace Mihdan\IndexNow\Logger;
 
 use Mihdan\IndexNow\Dependencies\Psr\Log\AbstractLogger;
+use Mihdan\IndexNow\Utils;
 
 class Logger extends AbstractLogger {
 	public function get_logger_table_name() {
@@ -9,8 +10,21 @@ class Logger extends AbstractLogger {
 		return $wpdb->prefix . 'crawlwp_log';
 	}
 
+	/**
+	 * Whether logging is enabled in the plugin settings (default: enabled).
+	 *
+	 * @return bool
+	 */
+	public function is_enabled(): bool {
+		return Utils::wposa_get_option( 'enable', 'logs', 'on' ) === 'on';
+	}
+
 	public function log( $level, $message, array $context = [] ) {
 		global $wpdb;
+
+		if ( ! $this->is_enabled() ) {
+			return;
+		}
 
 		$defaults = [
 			'created_at'    => current_time( 'mysql', 1 ),

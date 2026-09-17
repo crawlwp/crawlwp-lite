@@ -1,0 +1,6 @@
+# Generated baseline. Regenerate with:
+#   composer analyse -- --generate-baseline
+#
+# Keep this file shrinking: new code must not add entries here.
+parameters:
+	ignoreErrors: []

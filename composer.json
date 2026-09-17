@@ -25,7 +25,8 @@
       "php": "8.0"
     },
     "allow-plugins": {
-      "kylekatarnls/update-helper": true
+      "kylekatarnls/update-helper": true,
+      "dealerdirect/phpcodesniffer-composer-installer": true
     }
   },
   "require": {
@@ -36,7 +37,17 @@
     "collizo4sky/persist-admin-notices-dismissal": "^1.4",
     "writecrow/country_code_converter": "^1.3",
     "nesbot/carbon": "^2.72",
-    "sniccowp/php-scoper-wordpress-excludes": "^6.5"
+    "sniccowp/php-scoper-wordpress-excludes": "^7.0"
+  },
+  "require-dev": {
+    "phpunit/phpunit": "^9.6",
+    "phpstan/phpstan": "^1.11",
+    "szepeviktor/phpstan-wordpress": "^1.3",
+    "php-stubs/wordpress-stubs": "^6.5",
+    "php-stubs/woocommerce-stubs": "^8.9",
+    "squizlabs/php_codesniffer": "^3.10",
+    "wp-coding-standards/wpcs": "^3.1",
+    "dealerdirect/phpcodesniffer-composer-installer": "^1.0"
   },
   "scripts": {
     "pre-autoload-dump": "Google\\Task\\Composer::cleanup",
@@ -52,6 +63,16 @@
       "@composer dump-autoload",
       "cp -R vendor/* vendor-prefixed/",
       "rm -rf vendor"
+    ],
+    "test": [
+      "php tests/TokenMapperTest.php",
+      "phpunit --do-not-cache-result"
+    ],
+    "analyse": [
+      "phpstan analyse --memory-limit=1G"
+    ],
+    "lint": [
+      "phpcs"
     ],
     "remove-vendor": [
       "rm -fr ./vendor/google",

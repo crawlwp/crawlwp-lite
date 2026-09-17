@@ -1,0 +1,28 @@
+.cwp-importer { max-width: 720px; }
+.cwp-importer-overwrite { display: block; margin: 12px 0 16px; }
+.cwp-importer-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	padding: 12px 0;
+	border-bottom: 1px solid #dcdcde;
+}
+.cwp-importer-info strong { display: block; }
+.cwp-importer-meta { color: #646970; font-size: 12px; }
+.cwp-importer.is-running .button { pointer-events: none; opacity: 0.7; }
+.cwp-importer-log {
+	margin-top: 16px;
+	padding: 10px 12px;
+	background: #f6f7f7;
+	border: 1px solid #dcdcde;
+	font-family: Menlo, Consolas, monospace;
+	font-size: 12px;
+	max-height: 220px;
+	overflow: auto;
+}
+
+#crawlwp_importer table tr th,
+#submit_crawlwp_importer {
+	display: none;
+}

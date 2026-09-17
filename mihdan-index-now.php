@@ -1,7 +1,7 @@
 <?php
 /**
- * Plugin Name: CrawlWP SEO - Instant Indexing & SEO Insights
- * Description: SEO plugin for indexing WordPress content and monitoring search engine performance.
+ * Plugin Name: CrawlWP SEO - WordPress SEO, Instant Indexing & Search Performance
+ * Description: Complete WordPress SEO: meta titles, schema, redirects and sitemaps, plus instant indexing.
  * Version: 3.0.17
  * Author: CrawlWP SEO Team
  * Author URI: https://crawlwp.com/
@@ -31,7 +31,7 @@ define('CRAWLWP_PLUGIN_URL', plugin_dir_url(__FILE__));
 
 define('CRAWLWP_SETTINGS_URL', admin_url('admin.php?page=' . CRAWLWP_SLUG));
 define('CRAWLWP_API_SETTINGS_URL', add_query_arg(['wposa-menu' => Utils::get_plugin_prefix() . '_api_settings'], CRAWLWP_SETTINGS_URL));
-define('CRAWLWP_ADVANCED_SETTINGS_URL', add_query_arg(['wposa-menu' => Utils::get_plugin_prefix() . '_core_settings'], CRAWLWP_SETTINGS_URL));
+define('CRAWLWP_ADVANCED_SETTINGS_URL', add_query_arg(['wposa-menu' => Utils::get_plugin_prefix() . '_advanced_settings'], CRAWLWP_SETTINGS_URL));
 
 define('CRAWLWP_PRO_SEO_INDEX_SLUG', 'crawlwp-seo-index');
 define('CRAWLWP_PRO_SEO_STAT_SLUG', 'crawlwp-seo-stats');

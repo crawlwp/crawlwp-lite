@@ -60,7 +60,25 @@ abstract class IndexNowAbstract implements SearchEngineInterface
 		$this->wposa      = $wposa;
 		$this->post_types = apply_filters('crawlwp/post_types', (array)$this->wposa->get_option('post_types', 'general', []));
 		$this->taxonomies = apply_filters('crawlwp/taxonomies', (array)$this->wposa->get_option('taxonomies', 'general', []));
-		$this->api_key    = $this->wposa->get_option('api_key', 'index_now', Utils::generate_key());
+		$this->api_key    = $this->get_or_create_api_key();
+	}
+
+	/**
+	 * Return the persisted API key, generating and saving it once when missing,
+	 * so the key shown in settings, sent to the API and served in {key}.txt agree.
+	 *
+	 * @return string
+	 */
+	private function get_or_create_api_key(): string
+	{
+		$api_key = (string)$this->wposa->get_option('api_key', 'index_now', '');
+
+		if ($api_key === '') {
+			$api_key = Utils::generate_key();
+			$this->wposa->set_option('api_key', $api_key, 'index_now');
+		}
+
+		return $api_key;
 	}
 
 	public function setup_hooks()
@@ -72,6 +90,8 @@ abstract class IndexNowAbstract implements SearchEngineInterface
 		add_action('parse_request', [$this, 'set_virtual_key_file']);
 		add_action('crawlwp/post_added', [$this, 'ping_on_post_update'], 10, 2);
 		add_action('crawlwp/post_updated', [$this, 'ping_on_post_update'], 10, 2);
+		add_action('crawlwp/post_deleted', [$this, 'ping_on_post_delete'], 10, 2);
+		add_action('crawlwp/comment_updated', [$this, 'ping_on_comment_update'], 10, 2);
 
 		if ($this->is_ping_on_term()) {
 			add_action('crawlwp/term_updated', [$this, 'ping_on_insert_term'], 10, 2);
@@ -120,6 +140,49 @@ abstract class IndexNowAbstract implements SearchEngineInterface
 		$this->maybe_do_ping_post($post_id);
 	}
 
+	/**
+	 * Ping the URL of a post that has been unpublished, trashed or deleted.
+	 * IndexNow treats deletions as a regular URL submission.
+	 *
+	 * @param int    $post_id   Post ID.
+	 * @param string $permalink Permalink captured before the post was removed.
+	 */
+	public function ping_on_post_delete(int $post_id, string $permalink)
+	{
+		if ($permalink === '' || $this->get_current_search_engine() !== $this->get_slug()) {
+			return;
+		}
+
+		$this->push([$permalink]);
+
+		do_action('crawlwp/index_pinged', 'post', $post_id);
+	}
+
+	/**
+	 * Ping the parent post permalink when a comment gets approved.
+	 *
+	 * @param int         $post_id Parent post ID.
+	 * @param \WP_Comment $comment Comment object.
+	 */
+	public function ping_on_comment_update(int $post_id, $comment = null)
+	{
+		if ($comment instanceof \WP_Comment && (string)$comment->comment_approved !== '1') {
+			return;
+		}
+
+		$post = get_post($post_id);
+
+		if ( ! $post instanceof WP_Post || $post->post_status !== 'publish') {
+			return;
+		}
+
+		if ( ! in_array($post->post_type, $this->get_post_types(), true)) {
+			return;
+		}
+
+		$this->maybe_do_ping_post($post_id);
+	}
+
 	public function ping_on_insert_term(int $term_id, string $taxonomy)
 	{
 		$this->maybe_do_ping_term($term_id, $taxonomy);
@@ -145,13 +208,6 @@ abstract class IndexNowAbstract implements SearchEngineInterface
 
 			do_action('crawlwp/index_pinged', 'taxonomy', $term_id);
 		}
-	}
-
-	public function set_api_url(string $url): bool
-	{
-		$this->api_url = $url;
-
-		return true;
 	}
 
 	private function get_post_types(): array

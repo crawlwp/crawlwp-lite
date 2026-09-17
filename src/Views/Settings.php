@@ -8,6 +8,8 @@
 namespace Mihdan\IndexNow\Views;
 
 use Mihdan\IndexNow\Logger\Logger;
+use Mihdan\IndexNow\SEOCore\FeatureGate\FeatureGate;
+use Mihdan\IndexNow\SEOCore\Wizard\Wizard;
 use Mihdan\IndexNow\Utils;
 
 /**
@@ -127,14 +129,18 @@ class Settings
 	{
 		if (wp_doing_ajax()) return;
 
+		$priority = FeatureGate::is_enabled() ? 6 : 1;
+
+		add_action('crawlwp_pre_setup_fields', function ($wposa) {
+			$wposa->add_header_menu([
+				'id'    => 'index_settings',
+				'title' => __('Indexing', 'mihdan-index-now'),
+			]);
+		}, $priority);
+
 		do_action('crawlwp_pre_setup_fields', $this->wposa, $this);
 
 		$this->wposa->sub_page_title = esc_html__('Settings', 'mihdan-index-now');
-
-		$this->wposa->add_header_menu([
-			'id'    => 'index_settings',
-			'title' => __('Indexing', 'mihdan-index-now'),
-		]);
 
 		$this->wposa->add_header_menu([
 			'id'    => 'api_settings',
@@ -170,6 +176,9 @@ class Settings
 							esc_html__('Index History', 'mihdan-index-now'),
 							esc_html__('Keyword Tracking', 'mihdan-index-now'),
 							esc_html__('SEO Stats & Index Email Report', 'mihdan-index-now'),
+							esc_html__('Video, HTML and Custom URL Sitemaps', 'mihdan-index-now'),
+							esc_html__('Internal Linking', 'mihdan-index-now'),
+							esc_html__('WPML, Polylang, TranslatePress Sitemap Integrations', 'mihdan-index-now'),
 						];
 
 						$svg = '<svg class="h-5 w-5 text-green-500" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 18 18" fill="none"><g clip-path="url(#clip0_6404_1763)"><path d="M12.9955 5.64817L7.93251 12.4574L4.99665 10.2744" stroke="#2271b1" stroke-width="1.5"></path></g><defs><clipPath id="clip0_6404_1763"><rect width="18" height="18" rx="9" fill="white"></rect></clipPath></defs></svg>';
@@ -198,11 +207,26 @@ class Settings
 			);
 		}
 
+		if (class_exists(FeatureGate::class) && FeatureGate::is_enabled() && class_exists(Wizard::class)) {
+			$this->wposa->add_sidebar_card(
+				[
+					'id'    => 'setup_wizard',
+					'title' => __('Setup Wizard', 'mihdan-index-now'),
+					'desc'  => sprintf(
+						'<p>%s</p><div style="margin-top: 12px;"><a href="%s" class="button button-secondary cwp-relaunch-wizard-btn">%s</a></div>',
+						esc_html__('Need to configure your SEO settings again, re-import data from another plugin, or adjust Indexing settings?', 'mihdan-index-now'),
+						esc_url(Wizard::wizard_url()),
+						esc_html__('Relaunch Setup Wizard', 'mihdan-index-now')
+					),
+				]
+			);
+		}
+
 		$this->wposa->add_sidebar_card(
 			[
 				'id'    => 'rtfm',
 				'title' => __('Do you need help?', 'mihdan-index-now'),
-				'desc'  => __('<p>Here are some available options to help solve your problems.</p><ul><li><a href="https://crawlwp.com" target="_blank">Plugin home page</a></li><li><a href="https://wordpress.org/support/plugin/mihdan-index-now/" target="_blank">Support forums</a></li><li><a href="https://github.com/crawlwp/mihdan-index-now/" target="_blank">Issue tracker</a></li></ul>', 'mihdan-index-now'),
+				'desc'  => __('<p>Here are some available options to help solve your problems.</p><ul><li><a href="https://crawlwp.com" target="_blank">Plugin home page</a></li><li><a href="https://wordpress.org/support/plugin/mihdan-index-now/" target="_blank">Support forums</a></li><li><a href="https://github.com/crawlwp/crawlwp-lite/" target="_blank">Issue tracker</a></li></ul>', 'mihdan-index-now'),
 			]
 		);
 
@@ -343,9 +367,8 @@ class Settings
 					'type'        => 'text',
 					'name'        => __('API Key', 'mihdan-index-now'),
 					'placeholder' => __('Set the API key', 'mihdan-index-now'),
-					'default'     => Utils::generate_key(),
+					'default'     => $this->get_index_now_api_key(),
 					'help_tab'    => 'https://crawlwp.com/article/setting-up-search-engine-indexing-for-wordpress/?utm_source=wp_dashboard&utm_medium=indexing_settings_page&utm_campaign=indexnow#wordpress-indexing-via-indexnow',
-					'desc'        => sprintf('<a style="border-bottom: 1px dotted #2271b1; text-decoration: none; margin-left: 10px;" href="#" onclick="document.getElementById(\'crawlwp_index_now[api_key]\').value=\'%s\'">%s</a>', esc_attr(Utils::generate_key()), __('Show example', 'mihdan-index-now')),
 				)
 			);
 
@@ -531,8 +554,7 @@ class Settings
 					'desc' => function () {
 
 						$transient = Utils::get_plugin_slug() . '-plugins';
-						delete_transient($transient);
-						$cached = get_transient($transient);
+						$cached    = get_transient($transient);
 
 						if (false !== $cached) {
 							return $cached;
@@ -715,7 +737,7 @@ class Settings
 				'yandex_webmaster',
 				array(
 					'id'       => 'client_secret',
-					'type'     => 'text',
+					'type'     => 'password',
 					'help_tab' => 'https://crawlwp.com/article/integrating-wordpress-with-yandex/?utm_source=wp_dashboard&utm_medium=api_settings_page&utm_campaign=yandex_api',
 					'name'     => __('Client secret', 'mihdan-index-now')
 				)
@@ -766,50 +788,10 @@ class Settings
 				);
 			}
 
-			$this->wposa->add_field(
-				'yandex_webmaster',
-				array(
-					'id'   => 'access_token',
-					'type' => 'hidden',
-					'name' => '',
-				)
-			);
-
-			$this->wposa->add_field(
-				'yandex_webmaster',
-				array(
-					'id'   => 'expires_in',
-					'type' => 'hidden',
-					'name' => '',
-				)
-			);
-
-			$this->wposa->add_field(
-				'yandex_webmaster',
-				array(
-					'id'   => 'refresh_token',
-					'type' => 'hidden',
-					'name' => '',
-				)
-			);
-
-			$this->wposa->add_field(
-				'yandex_webmaster',
-				array(
-					'id'   => 'user_id',
-					'type' => 'hidden',
-					'name' => '',
-				)
-			);
-
-			$this->wposa->add_field(
-				'yandex_webmaster',
-				array(
-					'id'   => 'host_ids',
-					'type' => 'hidden',
-					'name' => ''
-				)
-			);
+			// Note: access_token, refresh_token, expires_in, user_id and host_ids are
+			// intentionally NOT rendered as form fields. They are stored by the
+			// Yandex OAuth flow and preserved on save because the save handler merges
+			// posted values over the stored option (keys not posted are kept).
 		}
 
 
@@ -854,10 +836,29 @@ class Settings
 		}
 	}
 
+	/**
+	 * Return the persisted IndexNow API key, generating and saving it once when missing.
+	 *
+	 * @return string
+	 */
+	private function get_index_now_api_key(): string
+	{
+		$api_key = (string)$this->wposa->get_option('api_key', 'index_now', '');
+
+		if ($api_key === '') {
+			$api_key = Utils::generate_key();
+			$this->wposa->set_option('api_key', $api_key, 'index_now');
+		}
+
+		return $api_key;
+	}
+
 	public function get_yandex_webmaster_host_ids()
 	{
 		$result = [];
 
+		// Stored as a plain array; maybe_unserialize keeps backward compatibility
+		// with previously serialized values.
 		$ids = maybe_unserialize($this->wposa->get_option('host_ids', 'yandex_webmaster'));
 
 		if (is_array($ids)) {

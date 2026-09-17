@@ -1,0 +1,35 @@
+/* CrawlWP SEO — Breadcrumbs default stylesheet
+ *
+ * BEM class names:
+ *   .cwp-bc                  — outer <nav> wrapper
+ *   .cwp-bc__item            — a linked ancestor crumb
+ *   .cwp-bc__item--first     — the homepage link
+ *   .cwp-bc__item--current   — the non-linked current page crumb
+ *   .cwp-bc__sep             — the separator between crumbs
+ */
+
+.cwp-bc {
+	font-size: 0.875em;
+	line-height: 1.5;
+}
+
+.cwp-bc__item {
+	color: inherit;
+	text-decoration: none;
+}
+
+.cwp-bc__item:hover,
+.cwp-bc__item:focus {
+	text-decoration: underline;
+}
+
+.cwp-bc__item--current {
+	color: #646970;
+}
+
+.cwp-bc__sep {
+	margin: 0 0.4em;
+	color: #646970;
+	pointer-events: none;
+	user-select: none;
+}

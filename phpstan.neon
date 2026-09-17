@@ -1,0 +1,19 @@
+includes:
+	- phpstan-baseline.neon
+	- vendor/szepeviktor/phpstan-wordpress/extension.neon
+
+parameters:
+	level: 5
+	paths:
+		- src
+	bootstrapFiles:
+		- tests/phpstan-bootstrap.php
+	scanDirectories:
+		- vendor-prefixed
+	excludePaths:
+		analyse:
+			- src/Dependencies
+	treatPhpDocTypesAsCertain: false
+	ignoreErrors:
+		# WordPress core/plugin constants are defined in the bootstrap file.
+		- '#Constant CRAWLWP_[A-Z_]+ not found#'

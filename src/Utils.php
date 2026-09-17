@@ -104,16 +104,6 @@ class Utils
 	}
 
 	/**
-	 * Get user agent of browser/bot.
-	 *
-	 * @return mixed|string
-	 */
-	public static function get_user_agent(): string
-	{
-		return wp_unslash($_SERVER['HTTP_USER_AGENT'] ?? '');
-	}
-
-	/**
 	 * Get plugin DB version.
 	 *
 	 * @return string
@@ -361,11 +351,11 @@ class Utils
 	{
 		?>
 		<script type="text/javascript">
-			window.location.href = "<?php echo $myURL;?>"
+			window.location.href = "<?php echo esc_js(esc_url_raw($myURL)); ?>"
 		</script>
-		<meta http-equiv="refresh" content="0; url=<?php echo $myURL; ?>">
+		<meta http-equiv="refresh" content="0; url=<?php echo esc_url($myURL); ?>">
 		Please wait while you are redirected...or
-		<a href="<?php echo $myURL; ?>">Click Here</a> if you do not want to wait.
+		<a href="<?php echo esc_url($myURL); ?>">Click Here</a> if you do not want to wait.
 		<?php
 	}
 
@@ -396,5 +386,10 @@ class Utils
 		} catch (\Exception $e) {
 			return false;
 		}
+	}
+
+	public static function asset_suffix()
+	{
+		return (defined('W3GUY_LOCAL') && W3GUY_LOCAL) || (defined('SCRIPT_DEBUG') && SCRIPT_DEBUG) ? '' : '.min';
 	}
 }

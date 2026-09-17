@@ -46,6 +46,8 @@ class Hooks {
 	 */
 	public function setup_hooks() {
 		add_action( 'transition_post_status', [ $this, 'post_updated' ], 10, 3 );
+		add_action( 'transition_post_status', [ $this, 'post_unpublished' ], 10, 3 );
+		add_action( 'before_delete_post', [ $this, 'post_deleted' ], 10, 2 );
 		add_action( 'transition_comment_status', [ $this, 'comment_updated' ], 10, 3 );
 		add_action( 'wp_insert_comment', [ $this, 'comment_inserted' ], 10, 2 );
 		add_action( 'saved_term', [ $this, 'term_updated' ], 10, 3 );
@@ -150,6 +152,104 @@ class Hooks {
 			Utils::get_plugin_prefix() . '_last_update',
 			current_time( 'timestamp' )
 		);
+	}
+
+	/**
+	 * Fires when a published post leaves the `publish` status
+	 * (trash, draft, private, pending, future).
+	 *
+	 * @param string  $new_status New post status.
+	 * @param string  $old_status Old post status.
+	 * @param WP_Post $post       Post data.
+	 *
+	 * @return void
+	 */
+	public function post_unpublished( string $new_status, string $old_status, WP_Post $post ): void {
+
+		if ( $old_status !== 'publish' || $new_status === 'publish' ) {
+			return;
+		}
+
+		$this->maybe_fire_post_deleted( $post );
+	}
+
+	/**
+	 * Fires before a post is deleted. Only published posts are handled here;
+	 * trashed/unpublished posts were already reported by `post_unpublished()`.
+	 *
+	 * @param int          $post_id Post ID.
+	 * @param WP_Post|null $post    Post data.
+	 *
+	 * @return void
+	 */
+	public function post_deleted( int $post_id, $post = null ): void {
+
+		$post = $post instanceof WP_Post ? $post : get_post( $post_id );
+
+		if ( ! $post instanceof WP_Post || $post->post_status !== 'publish' ) {
+			return;
+		}
+
+		$this->maybe_fire_post_deleted( $post );
+	}
+
+	/**
+	 * Capture the public permalink of a post and fire `crawlwp/post_deleted`.
+	 *
+	 * @param WP_Post $post Post data.
+	 *
+	 * @return void
+	 */
+	private function maybe_fire_post_deleted( WP_Post $post ): void {
+
+		if ( wp_is_post_revision( $post ) || wp_is_post_autosave( $post ) ) {
+			return;
+		}
+
+		if ( ! in_array( $post->post_type, (array) $this->wposa->get_option( 'post_types', 'general', [] ), true ) ) {
+			return;
+		}
+
+		// Disable for Bulk Edit screen.
+		if ( isset( $_REQUEST['bulk_edit'] ) && $this->wposa->get_option( 'disable_for_bulk_edit', 'general', 'on' ) === 'on' ) {
+			return;
+		}
+
+		$permalink = $this->get_published_permalink( $post );
+
+		if ( empty( $permalink ) ) {
+			return;
+		}
+
+		do_action( 'crawlwp/post_deleted', $post->ID, $permalink );
+	}
+
+	/**
+	 * Build the permalink a post had while it was published.
+	 *
+	 * The post may already be trashed (slug suffixed with `__trashed`) or
+	 * have a non-public status, so a published clone is used to resolve the URL.
+	 *
+	 * @param WP_Post $post Post data.
+	 *
+	 * @return string
+	 */
+	private function get_published_permalink( WP_Post $post ): string {
+
+		$clone              = clone $post;
+		$clone->post_status = 'publish';
+
+		$desired_slug = (string) get_post_meta( $post->ID, '_wp_desired_post_slug', true );
+
+		if ( $desired_slug !== '' ) {
+			$clone->post_name = $desired_slug;
+		} elseif ( str_ends_with( $clone->post_name, '__trashed' ) ) {
+			$clone->post_name = substr( $clone->post_name, 0, - strlen( '__trashed' ) );
+		}
+
+		$permalink = get_permalink( $clone );
+
+		return is_string( $permalink ) ? Utils::normalize_url( $permalink ) : '';
 	}
 
 	/**

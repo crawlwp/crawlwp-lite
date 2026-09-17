@@ -2,7 +2,7 @@
 Contributors: collizo4sky, properfraction
 Donate link: https://crawlwp.com/
 Tags: seo, wordpress seo, yandex, bing, google search
-Requires at least: 6.0
+Requires at least: 6.9
 Tested up to: 7.0
 Stable tag: 3.0.17
 Requires PHP: 8.0

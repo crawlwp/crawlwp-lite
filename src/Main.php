@@ -12,6 +12,8 @@ use Mihdan\IndexNow\Providers\Seznam\SeznamIndexNow;
 use Mihdan\IndexNow\Providers\Naver\NaverIndexNow;
 use Mihdan\IndexNow\Providers\Yandex\YandexIndexNow;
 use Mihdan\IndexNow\Providers\Yandex\YandexWebmaster;
+use Mihdan\IndexNow\SEOCore\FeatureGate\FeatureGate;
+use Mihdan\IndexNow\SEOCore\Notifications\Notifications;
 use Mihdan\IndexNow\SEOCore\SEOCoreInit;
 use Mihdan\IndexNow\Views\Settings;
 use Mihdan\IndexNow\Views\UpsellAdminPages;
@@ -140,10 +142,6 @@ class Main
 			add_action('wp_ajax_dismiss_admin_notice', ['\Mihdan\IndexNow\Dependencies\PAnD', 'dismiss_admin_notice']);
 		}
 
-		/** @todo */
-		//add_filter( 'post_row_actions', [ $this, 'post_row_actions' ], 10, 2 );
-		//add_filter( 'page_row_actions', [ $this, 'post_row_actions' ], 10, 2 );
-
 		// Add last update column.
 		if ($this->wposa->get_option('show_last_update_column', 'general', 'on') === 'on') {
 			foreach ((array)$this->wposa->get_option('post_types', 'general', []) as $post_type) {
@@ -238,25 +236,6 @@ class Main
 		echo esc_html(date('d.m.Y H:i', $last_update));
 	}
 
-	public function post_row_actions(array $actions, WP_Post $post): array
-	{
-		if (!in_array($post->post_type, (array)$this->wposa->get_option('post_types', 'general', []), true)) {
-			return $actions;
-		}
-
-		if (!is_post_publicly_viewable($post)) {
-			return $actions;
-		}
-
-		$actions['index_now'] = sprintf(
-			'<a title="%s" href="%s">IndexNow</a>',
-			esc_attr(__('Notify the search engine', 'mihdan-index-now')),
-			1
-		);
-
-		return $actions;
-	}
-
 	/**
 	 * Set screen option.
 	 *
@@ -283,19 +262,37 @@ class Main
 			foreach ($sites as $site_id) {
 				switch_to_blog($site_id);
 				$this->create_tables();
+				$this->activate_site();
 				restore_current_blog();
 			}
 		} else {
 			$this->create_tables();
+			$this->activate_site();
 		}
+	}
+
+	/**
+	 * Per-site activation tasks.
+	 *
+	 * Persists the SEO feature-gate default once (so FeatureGate::is_enabled()
+	 * stays a side-effect-free read on every later request) and rebuilds the
+	 * rewrite rules the virtual llms.txt endpoint relies on.
+	 */
+	private function activate_site(): void
+	{
+		FeatureGate::maybe_persist_default();
+		add_option(Notifications::KNOWN_POST_TYPES_KEY, Notifications::get_accessible_post_types(), '', false);
+
+		flush_rewrite_rules();
 	}
 
 	private function drop_tables()
 	{
 		global $wpdb;
 
-		$sql = "DROP TABLE IF EXISTS {$wpdb->prefix}index_now_log";
-		$wpdb->query($sql);
+		$wpdb->query("DROP TABLE IF EXISTS {$wpdb->prefix}crawlwp_log");
+		// Legacy table name.
+		$wpdb->query("DROP TABLE IF EXISTS {$wpdb->prefix}index_now_log");
 	}
 
 	private function create_tables(bool $upgrade = false)
@@ -327,11 +324,16 @@ class Main
 	{
 		DBUpdates::get_instance()->maybe_update();
 
+		// Upgrades from a version that predates the feature gate never had the
+		// option written; record the decision now instead of on every request.
+		FeatureGate::maybe_persist_default();
+
 		$db_version = Utils::get_db_version();
 		$plugin_version = Utils::get_plugin_version();
 
 		if (version_compare($db_version, $plugin_version, '<')) {
 			$this->create_tables(true);
+			flush_rewrite_rules();
 		}
 	}
 
