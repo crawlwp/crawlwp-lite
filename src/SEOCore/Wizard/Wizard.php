@@ -323,7 +323,7 @@ class Wizard
 
 			update_option('crawlwp_general', $general_opts);
 
-			wp_send_json_success(['message' => __('IndexNow submission settings saved.', 'mihdan-index-now')]);
+			wp_send_json_success(['message' => __('Indexing submission settings saved.', 'mihdan-index-now')]);
 		}
 
 		wp_send_json_error(['message' => __('Invalid step.', 'mihdan-index-now')]);

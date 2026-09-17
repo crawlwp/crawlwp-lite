@@ -327,7 +327,7 @@ class RssSettings
 			}
 			.cwp-rss-vars:hover,
 			.cwp-rss-vars:focus {
-				color: #2271b1;
+				color: var(--wp-admin-theme-color);
 				background: #f0f0f1;
 				border-color: #c3c4c7;
 			}
@@ -368,7 +368,7 @@ class RssSettings
 				background: #f0f0f1;
 			}
 			.cwp-rss-panel__item code {
-				color: #2271b1;
+				color: var(--wp-admin-theme-color);
 				font-size: 12px;
 			}
 			.cwp-rss-panel__item span {

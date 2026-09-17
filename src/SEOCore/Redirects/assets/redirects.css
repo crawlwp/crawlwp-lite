@@ -30,9 +30,9 @@
 	display: inline-flex;
 	align-items: center;
 	gap: 4px;
-	background: #2271b1;
+	background: var(--wp-admin-theme-color);
 	color: #fff;
-	border: 1px solid #2271b1;
+	border: 1px solid var(--wp-admin-theme-color);
 	border-radius: 3px;
 	padding: 6px 14px;
 	font-size: 13px;
@@ -51,8 +51,8 @@
 
 .cwp-redirect-btn--outline {
 	background: #fff;
-	color: #2271b1;
-	border-color: #2271b1;
+	color: var(--wp-admin-theme-color);
+	border-color: var(--wp-admin-theme-color);
 	line-height: 2;
 }
 
@@ -188,7 +188,7 @@
 	max-width: 100%;
 	font-family: monospace;
 	font-size: 12px;
-	color: #2271b1;
+	color: var(--wp-admin-theme-color);
 }
 
 .cwp-redirect-muted {
@@ -213,7 +213,7 @@
 	font-weight: 700;
 	letter-spacing: .03em;
 	background: #e8f4fb;
-	color: #2271b1;
+	color: var(--wp-admin-theme-color);
 }
 
 .cwp-redirect-badge--301 {

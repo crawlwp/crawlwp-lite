@@ -20,7 +20,7 @@ if (file_exists($plugin_git_folder)) {
 
 deleteDir($plugin_git_folder . '.zip');
 
-exec("git clone https://github.com/crawlwp/mihdan-index-now.git $plugin_git_name");
+exec("git clone -b seo-meta https://github.com/crawlwp/crawlwp-lite.git $plugin_git_name");
 $chdir = chdir($plugin_git_folder);
 if ( ! $chdir) exit;
 
@@ -86,6 +86,7 @@ foreach (
         'scoper.inc.php',
         'composer.json',
         'README.md',
+        'AGENTS.md',
         'plugin-build.php',
         'composer.lock',
         'phpstan.neon',

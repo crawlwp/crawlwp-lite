@@ -405,7 +405,7 @@ class Sitemap
 					}
 
 					#sitemap__table td.loc a {
-						color: #2271b1;
+						color: var(--wp-admin-theme-color);
 						text-decoration: none;
 					}
 

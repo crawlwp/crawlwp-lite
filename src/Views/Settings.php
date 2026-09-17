@@ -226,7 +226,7 @@ class Settings
 			[
 				'id'    => 'rtfm',
 				'title' => __('Do you need help?', 'mihdan-index-now'),
-				'desc'  => __('<p>Here are some available options to help solve your problems.</p><ul><li><a href="https://crawlwp.com" target="_blank">Plugin home page</a></li><li><a href="https://wordpress.org/support/plugin/mihdan-index-now/" target="_blank">Support forums</a></li><li><a href="https://github.com/crawlwp/mihdan-index-now/" target="_blank">Issue tracker</a></li></ul>', 'mihdan-index-now'),
+				'desc'  => __('<p>Here are some available options to help solve your problems.</p><ul><li><a href="https://crawlwp.com" target="_blank">Plugin home page</a></li><li><a href="https://wordpress.org/support/plugin/mihdan-index-now/" target="_blank">Support forums</a></li><li><a href="https://github.com/crawlwp/crawlwp-lite/" target="_blank">Issue tracker</a></li></ul>', 'mihdan-index-now'),
 			]
 		);
 

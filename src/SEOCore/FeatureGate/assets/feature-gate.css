@@ -132,7 +132,7 @@
 	height: 30px;
 	border-radius: 6px;
 	background: #f0f6fc;
-	color: #2271b1;
+	color: var(--wp-admin-theme-color);
 	line-height: 1;
 }
 
@@ -215,7 +215,7 @@
 	width: 32px;
 	height: 32px;
 	border-radius: 50%;
-	background: #2271b1;
+	background: var(--wp-admin-theme-color);
 	color: #fff;
 	line-height: 1;
 }
@@ -277,7 +277,7 @@
 	width: 18px;
 	height: 18px;
 	margin: 0;
-	border-color: #2271b1;
+	border-color: var(--wp-admin-theme-color);
 }
 
 .wposa-form-table__row_crawlwp_seo_features_enabled fieldset {

@@ -67,9 +67,9 @@
 }
 
 .cwp-bulk-btn--primary {
-	background: #2271b1;
+	background: var(--wp-admin-theme-color);
 	color: #fff;
-	border: 1px solid #2271b1;
+	border: 1px solid var(--wp-admin-theme-color);
 }
 
 .cwp-bulk-btn--primary:hover:not(:disabled),
@@ -171,7 +171,7 @@
 	font-weight: 600;
 	letter-spacing: .02em;
 	background: #e8f4fb;
-	color: #2271b1;
+	color: var(--wp-admin-theme-color);
 }
 
 .cwp-bulk-row-actions {
@@ -181,7 +181,7 @@
 }
 
 .cwp-bulk-row-actions a {
-	color: #2271b1;
+	color: var(--wp-admin-theme-color);
 	text-decoration: none;
 }
 
@@ -244,7 +244,7 @@
 
 .cwp-bulk-vars:hover,
 .cwp-bulk-vars:focus {
-	color: #2271b1;
+	color: var(--wp-admin-theme-color);
 	background: #f0f0f1;
 	border-color: #c3c4c7;
 }
@@ -287,7 +287,7 @@
 }
 
 .cwp-bulk-vars-panel__item code {
-	color: #2271b1;
+	color: var(--wp-admin-theme-color);
 	font-size: 12px;
 }
 

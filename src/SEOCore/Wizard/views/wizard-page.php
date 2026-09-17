@@ -720,12 +720,12 @@ $primary_active = !empty($active_sources) ? reset($active_sources) : (!empty($av
 					<a href="<?php echo esc_url(admin_url('admin.php?page=crawlwp')); ?>" class="cwp-next-card">
 						<span class="dashicons dashicons-admin-generic cwp-next-card__icon" aria-hidden="true"></span>
 						<strong><?php esc_html_e('CrawlWP Dashboard', 'mihdan-index-now'); ?></strong>
-						<span><?php esc_html_e('Review indexing statistics, IndexNow logs, and API submission status.', 'mihdan-index-now'); ?></span>
+						<span><?php esc_html_e('Review indexing statistics, logs, and API submission status.', 'mihdan-index-now'); ?></span>
 					</a>
 					<a href="<?php echo esc_url(admin_url('admin.php?page=crawlwp&wposa-menu=crawlwp_log')); ?>" class="cwp-next-card">
 						<span class="dashicons dashicons-list-view cwp-next-card__icon" aria-hidden="true"></span>
-						<strong><?php esc_html_e('IndexNow Logs', 'mihdan-index-now'); ?></strong>
-						<span><?php esc_html_e('Track outbound IndexNow submissions and search engine verification requests.', 'mihdan-index-now'); ?></span>
+						<strong><?php esc_html_e('Indexing Logs', 'mihdan-index-now'); ?></strong>
+						<span><?php esc_html_e('Track outbound index submissions and search engine verification requests.', 'mihdan-index-now'); ?></span>
 					</a>
 					<a href="<?php echo esc_url(admin_url('admin.php?page=crawlwp&wposa-menu=crawlwp_title_meta')); ?>" class="cwp-next-card">
 						<span class="dashicons dashicons-edit cwp-next-card__icon" aria-hidden="true"></span>
