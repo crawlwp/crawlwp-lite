@@ -1,15 +1,28 @@
 ﻿== Changelog ==
 
 = 3.1.0 =
-* Added importer for Yoast, Rank Math, AIOSEO, SEOPress, The SEO Framework and Slim SEO (titles, descriptions, robots, canonicals, social images, redirects).
-* Added per-term SEO fields for categories, tags and custom taxonomies.
-* Added custom JSON-LD schema.
-* Added Local SEO (NAP + LocalBusiness schema) under Site Information.
-* Added 404 monitor with one-click redirect creation.
-* Added Video sitemap, HTML sitemap shortcode, llms.txt, image alt auto-fill and keyword auto-linking.
-* Added site-wide SEO audit, header/footer/GA4/GTM code, Elementor SEO panel, primary category and cornerstone flags.
-* Added WooCommerce noindex for cart, checkout and account pages.
-* Focus keyword field now accepts comma-separated extra keywords.
+* Added on-page SEO: meta title and description templates for the homepage, post types, taxonomies and archives, with live preview and pixel-width meters.
+* Added the SEO metabox with General, Analysis, Social, Schema, Links, Advanced and Insights tabs.
+* Added JSON-LD schema graph: organisation or person representation, logo, sitelinks search box, sameAs profiles, article markup and BreadcrumbList.
+* Added LocalBusiness schema with NAP details and opening hours.
+* Added breadcrumbs with the [crawlwp_breadcrumbs] shortcode.
+* Added Open Graph and X card output with share previews and a fallback image.
+* Added a redirect manager with 301, 302 and 410 rules, regex matching and hit counts.
+* Added automatic 301 redirects on permalink change.
+* Added a 404 monitor.
+* Added a robots.txt editor pre-filled with the site's current output.
+* Premium: Added a Google News sitemap feed.
+* Premium: Added a video sitemap.
+* Premium: Added an HTML sitemap.
+* Premium: Added multilingual sitemaps with WPML, Polylang and TranslatePress integrations.
+* Added llms.txt support.
+* Added RSS feed attribution with {{ postlink }} and {{ bloglink }}.
+* Premium: Added internal link automation with keyword rules.
+* Added Image SEO: auto-fill missing alt text.
+* Added a bulk editor for SEO titles and meta descriptions.
+* Added import from Yoast SEO, Rank Math, All in One SEO, SEOPress, The SEO Framework and Slim SEO, including redirects.
+* Added header and footer code fields for GA4, Google Tag Manager and arbitrary scripts.
+* Added site verification for Baidu and Pinterest alongside Google, Bing and Yandex.
 
 = 3.0.17 =
 * Added nonce security to log deletion.
