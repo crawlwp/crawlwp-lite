@@ -471,7 +471,17 @@ class Breadcrumbs
 			}
 		} else {
 			/* Non-hierarchical: add the primary term and its ancestors. */
-			$terms = get_the_terms($post, $this->args['taxonomy']);
+			$taxonomy = $this->resolve_taxonomy($post);
+
+			/**
+			 * Filter the taxonomy used for the breadcrumb term on a single post.
+			 *
+			 * @param string   $taxonomy Resolved taxonomy name.
+			 * @param \WP_Post $post     The post being displayed.
+			 */
+			$taxonomy = (string) apply_filters('crawlwp_breadcrumbs_post_taxonomy', $taxonomy, $post);
+
+			$terms = $taxonomy !== '' ? get_the_terms($post, $taxonomy) : false;
 			if (is_array($terms) && ! empty($terms)) {
 				$term    = reset($terms);
 				$primary = (int) MetaFields::get($post->ID, MetaFields::PRIMARY_CATEGORY, 0);
@@ -508,6 +518,57 @@ class Breadcrumbs
 		if ($link && $pto) {
 			$this->add_link($link, $pto->labels->name);
 		}
+	}
+
+	/**
+	 * Work out which taxonomy supplies the breadcrumb term for a given post.
+	 *
+	 * The configured taxonomy wins whenever the post actually has terms in it, so
+	 * existing sites keep the trail they have today. Only when that comes back
+	 * empty do we fall back to a taxonomy the post type actually registers, which
+	 * is what gives custom post types a section crumb without any configuration.
+	 *
+	 * @param \WP_Post $post The post being displayed.
+	 *
+	 * @return string Taxonomy name, or an empty string when there is nothing to add.
+	 */
+	private function resolve_taxonomy(\WP_Post $post): string
+	{
+		$configured = (string) $this->args['taxonomy'];
+
+		if ($configured !== '' && taxonomy_exists($configured)) {
+			$terms = get_the_terms($post, $configured);
+
+			if (is_array($terms) && ! empty($terms)) {
+				return $configured;
+			}
+		}
+
+		$taxonomies = get_object_taxonomies($post->post_type, 'objects');
+		$candidates = [];
+
+		foreach ($taxonomies as $taxonomy) {
+			if (empty($taxonomy->public) || empty($taxonomy->show_ui)) {
+				continue;
+			}
+
+			/* Hierarchical taxonomies describe structure, so they are preferred. */
+			$candidates[$taxonomy->hierarchical ? 0 : 1][] = $taxonomy->name;
+		}
+
+		ksort($candidates);
+
+		foreach ($candidates as $group) {
+			foreach ($group as $name) {
+				$terms = get_the_terms($post, $name);
+
+				if (is_array($terms) && ! empty($terms)) {
+					return $name;
+				}
+			}
+		}
+
+		return '';
 	}
 
 	private function add_term_ancestors(\WP_Term $term): void
