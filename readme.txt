@@ -13,13 +13,15 @@ Complete WordPress SEO: meta titles, schema, redirects and sitemaps, plus instan
 
 == Description ==
 
-## CRAWLWP SEO: WordPress SEO, INDEXING & SEARCH DATA
+## CRAWLWP SEO: WORDPRESS SEO, INDEXING & SEARCH DATA
 
 *Optimize every page, submit it to search engines (Google, Bing, Yandex, Yep etc) the moment you publish, and see which ones actually indexed it — all inside WordPress.*
 
 CrawlWP is a complete WordPress SEO plugin. It handles the on-page work you expect — meta titles and descriptions, schema markup, breadcrumbs, Open Graph, robots rules, redirects and sitemaps — and then does the part most SEO plugins leave to chance: submitting your content to search engines and telling you whether it reached the index.
 
 [Website](https://crawlwp.com/?utm_source=wprepo&utm_medium=link&utm_campaign=liteversion) | [Documentation](https://crawlwp.com/docs/?utm_source=wprepo&utm_medium=link&utm_campaign=liteversion) | [Support](https://crawlwp.com/support/?utm_source=wprepo&utm_medium=link&utm_campaign=liteversion)
+
+https://www.youtube.com/watch?v=dKjQTtQyRyA&rel=0
 
 ### Why CrawlWP WordPress SEO Plugin is different ###
 
