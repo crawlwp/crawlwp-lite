@@ -1,7 +1,5 @@
 <?php
 
-declare(strict_types=1);
-
 namespace Mihdan\IndexNow\SEOCore\Wizard;
 
 use Mihdan\IndexNow\SEOCore\FeatureGate\FeatureGate;
