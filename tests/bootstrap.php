@@ -44,6 +44,12 @@ if (!defined('CRAWLWP_PRO_LIBSODIUM_ASSETS_URL')) {
 if (!defined('CRAWLWP_SETTINGS_URL')) {
 	define('CRAWLWP_SETTINGS_URL', 'https://example.test/wp-admin/admin.php?page=crawlwp');
 }
+if (!defined('CRAWLWP_API_SETTINGS_URL')) {
+	define('CRAWLWP_API_SETTINGS_URL', 'https://example.test/wp-admin/admin.php?page=crawlwp&wposa-menu=crawlwp_api_settings');
+}
+if (!defined('CRAWLWP_ADVANCED_SETTINGS_URL')) {
+	define('CRAWLWP_ADVANCED_SETTINGS_URL', 'https://example.test/wp-admin/admin.php?page=crawlwp&wposa-menu=crawlwp_advanced_settings');
+}
 
 if (!defined('MINUTE_IN_SECONDS')) {
 	define('MINUTE_IN_SECONDS', 60);
@@ -139,6 +145,15 @@ if (!function_exists('add_menu_page')) {
 if (!function_exists('do_action')) {
 	function do_action($hook, ...$args)
 	{
+		if (!empty($GLOBALS['crawlwp_test_state']['actions'][$hook])) {
+			$callbacks = $GLOBALS['crawlwp_test_state']['actions'][$hook];
+			uasort($callbacks, function ($a, $b) {
+				return $a['priority'] <=> $b['priority'];
+			});
+			foreach ($callbacks as $action) {
+				call_user_func_array($action['callback'], array_slice($args, 0, $action['args']));
+			}
+		}
 	}
 }
 

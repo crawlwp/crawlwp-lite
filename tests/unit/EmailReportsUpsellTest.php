@@ -15,6 +15,7 @@ class EmailReportsUpsellTest extends TestCase
 		parent::setUp();
 		unset($_GET['wposa-menu']);
 		unset($GLOBALS['crawlwp_test_state']['filters']['crawlwp_is_pro_active']);
+		$GLOBALS['crawlwp_test_state']['actions'] = [];
 	}
 
 	protected function tearDown(): void
@@ -29,9 +30,12 @@ class EmailReportsUpsellTest extends TestCase
 	 */
 	private function get_sections(WPOSA $wposa): array
 	{
-		return (function () {
-			return $this->sections_array;
-		})->bindTo($wposa, WPOSA::class)();
+		$refProperty = new \ReflectionProperty(WPOSA::class, 'sections_array');
+		$refProperty->setAccessible(true);
+		/** @var array<int, array<string, mixed>> $sections */
+		$sections = $refProperty->getValue($wposa);
+
+		return $sections;
 	}
 
 	/**
@@ -39,9 +43,12 @@ class EmailReportsUpsellTest extends TestCase
 	 */
 	private function get_fields(WPOSA $wposa): array
 	{
-		return (function () {
-			return $this->fields_array;
-		})->bindTo($wposa, WPOSA::class)();
+		$refProperty = new \ReflectionProperty(WPOSA::class, 'fields_array');
+		$refProperty->setAccessible(true);
+		/** @var array<string, list<array<string, mixed>>> $fields */
+		$fields = $refProperty->getValue($wposa);
+
+		return $fields;
 	}
 
 	public function test_upsell_registered_when_pro_is_not_active(): void
@@ -136,6 +143,8 @@ class EmailReportsUpsellTest extends TestCase
 
 	public function test_hook_priority_is_16(): void
 	{
+		new EmailReportsUpsell();
+
 		$actions = $GLOBALS['crawlwp_test_state']['actions']['crawlwp_setup_fields'] ?? [];
 		$found_priority = null;
 
@@ -147,5 +156,40 @@ class EmailReportsUpsellTest extends TestCase
 		}
 
 		$this->assertSame(16, $found_priority, 'Hook priority should be 16 to sit between Sitemap and CodeSettings');
+	}
+
+	public function test_upsell_registered_via_crawlwp_setup_fields_action(): void
+	{
+		$_GET['wposa-menu'] = 'crawlwp_advanced_settings';
+
+		add_filter('crawlwp_is_pro_active', '__return_false');
+
+		$wposa = new WPOSA('CrawlWP', '3.0', 'crawlwp', 'crawlwp');
+		new EmailReportsUpsell();
+
+		do_action('crawlwp_setup_fields', $wposa, null);
+
+		$sections = $this->get_sections($wposa);
+		$found = false;
+		foreach ($sections as $section) {
+			if (($section['id'] ?? '') === 'crawlwp_email_reports') {
+				$found = true;
+				break;
+			}
+		}
+
+		$this->assertTrue($found, 'Email reports upsell should be registered when crawlwp_setup_fields action fires');
+	}
+
+	public function test_email_reports_upsell_is_not_in_gated_modules_always(): void
+	{
+		require_once CRAWLWP_TESTS_PLUGIN_DIR . '/src/SEOCore/GetInstanceTrait.php';
+		require_once CRAWLWP_TESTS_PLUGIN_DIR . '/src/SEOCore/SEOCoreInit.php';
+
+		$ref = new \ReflectionClass(\Mihdan\IndexNow\SEOCore\SEOCoreInit::class);
+		$modules = $ref->getConstant('MODULES_ALWAYS');
+
+		$this->assertIsArray($modules);
+		$this->assertNotContains(EmailReportsUpsell::class, $modules, 'EmailReportsUpsell must not be gated behind MODULES_ALWAYS');
 	}
 }

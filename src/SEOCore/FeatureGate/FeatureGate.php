@@ -33,7 +33,7 @@ class FeatureGate
 	public function __construct()
 	{
 		if (!self::is_enabled()) {
-			add_action('crawlwp_pre_setup_fields', [$this, 'register_menu'], -1);
+			add_action('crawlwp_pre_setup_fields', [$this, 'register_menu'], -20);
 			add_action('admin_enqueue_scripts', [$this, 'enqueue_assets']);
 
 			return;

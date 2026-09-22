@@ -1160,6 +1160,45 @@
       "oAP" : "\/src\/SEOCore\/TitleMeta\/Variables.php",
       "oF" : 0
     },
+    "\/src\/SEOCore\/Wizard\/assets\/wizard.css" : {
+      "aP" : 1,
+      "bl" : 0,
+      "ci" : 0,
+      "co" : 0,
+      "ft" : 16,
+      "ma" : 0,
+      "oA" : 0,
+      "oAP" : "\/src\/SEOCore\/Wizard\/assets\/wizard.min.css",
+      "oF" : 0,
+      "pg" : 0
+    },
+    "\/src\/SEOCore\/Wizard\/assets\/wizard.js" : {
+      "bF" : 0,
+      "ft" : 64,
+      "ma" : 0,
+      "mi" : 1,
+      "oA" : 0,
+      "oAP" : "\/src\/SEOCore\/Wizard\/assets\/wizard.min.js",
+      "oF" : 0,
+      "sC" : 3,
+      "tS" : 0
+    },
+    "\/src\/SEOCore\/Wizard\/views\/wizard-page.php" : {
+      "cB" : 0,
+      "ft" : 8192,
+      "hM" : 0,
+      "oA" : 0,
+      "oAP" : "\/src\/SEOCore\/Wizard\/views\/wizard-page.php",
+      "oF" : 0
+    },
+    "\/src\/SEOCore\/Wizard\/Wizard.php" : {
+      "cB" : 0,
+      "ft" : 8192,
+      "hM" : 0,
+      "oA" : 0,
+      "oAP" : "\/src\/SEOCore\/Wizard\/Wizard.php",
+      "oF" : 0
+    },
     "\/src\/Utils.php" : {
       "cB" : 0,
       "ft" : 8192,
@@ -1287,6 +1326,14 @@
       "oAP" : "\/tests\/unit\/GraphTest.php",
       "oF" : 0
     },
+    "\/tests\/unit\/ImporterWriterTest.php" : {
+      "cB" : 0,
+      "ft" : 8192,
+      "hM" : 0,
+      "oA" : 0,
+      "oAP" : "\/tests\/unit\/ImporterWriterTest.php",
+      "oF" : 0
+    },
     "\/tests\/unit\/MultiKeywordTest.php" : {
       "cB" : 0,
       "ft" : 8192,
@@ -1295,12 +1342,28 @@
       "oAP" : "\/tests\/unit\/MultiKeywordTest.php",
       "oF" : 0
     },
+    "\/tests\/unit\/NewPostTypeNotificationTest.php" : {
+      "cB" : 0,
+      "ft" : 8192,
+      "hM" : 0,
+      "oA" : 0,
+      "oAP" : "\/tests\/unit\/NewPostTypeNotificationTest.php",
+      "oF" : 0
+    },
     "\/tests\/unit\/NotificationsBadgeTest.php" : {
       "cB" : 0,
       "ft" : 8192,
       "hM" : 0,
       "oA" : 0,
       "oAP" : "\/tests\/unit\/NotificationsBadgeTest.php",
+      "oF" : 0
+    },
+    "\/tests\/unit\/RedirectsProcessorHookTest.php" : {
+      "cB" : 0,
+      "ft" : 8192,
+      "hM" : 0,
+      "oA" : 0,
+      "oAP" : "\/tests\/unit\/RedirectsProcessorHookTest.php",
       "oF" : 0
     },
     "\/tests\/unit\/SeoSignalsTest.php" : {
@@ -1319,6 +1382,14 @@
       "oAP" : "\/tests\/unit\/SettingsSidebarUpsellTest.php",
       "oF" : 0
     },
+    "\/tests\/unit\/SettingsSidebarWizardTest.php" : {
+      "cB" : 0,
+      "ft" : 8192,
+      "hM" : 0,
+      "oA" : 0,
+      "oAP" : "\/tests\/unit\/SettingsSidebarWizardTest.php",
+      "oF" : 0
+    },
     "\/tests\/unit\/SitemapStylesheetTest.php" : {
       "cB" : 0,
       "ft" : 8192,
@@ -1333,6 +1404,14 @@
       "hM" : 0,
       "oA" : 0,
       "oAP" : "\/tests\/unit\/TokenMapperTest.php",
+      "oF" : 0
+    },
+    "\/tests\/unit\/WooCommerceVariablesTest.php" : {
+      "cB" : 0,
+      "ft" : 8192,
+      "hM" : 0,
+      "oA" : 0,
+      "oAP" : "\/tests\/unit\/WooCommerceVariablesTest.php",
       "oF" : 0
     },
     "\/uninstall.php" : {
@@ -13207,6 +13286,14 @@
       "hM" : 0,
       "oA" : 0,
       "oAP" : "\/vendor\/nikic\/php-parser\/lib\/PhpParser\/Node\/Arg.php",
+      "oF" : 0
+    },
+    "\/vendor\/nikic\/php-parser\/lib\/PhpParser\/Node\/ArgPlaceholder.php" : {
+      "cB" : 0,
+      "ft" : 8192,
+      "hM" : 0,
+      "oA" : 0,
+      "oAP" : "\/vendor\/nikic\/php-parser\/lib\/PhpParser\/Node\/ArgPlaceholder.php",
       "oF" : 0
     },
     "\/vendor\/nikic\/php-parser\/lib\/PhpParser\/Node\/ArrayItem.php" : {

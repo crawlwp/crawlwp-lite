@@ -56,7 +56,6 @@ class SEOCoreInit
 		ImageSEO::class,
 		LlmsTxt::class,
 		InternalLinksUpsell::class,
-		EmailReportsUpsell::class,
 		CodeSettings::class,
 		Elementor::class,
 		CoreSettings\CoreSettings::class,
@@ -101,6 +100,7 @@ class SEOCoreInit
 		new AdvancedSettings();
 		new SiteVerificationSettings();
 		new SiteVerificationFrontendOutput();
+		new EmailReportsUpsell();
 
 		// The on-page SEO output features are gated behind the master toggle.
 		// Admins who are upgrading from another SEO plugin can review settings
