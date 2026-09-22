@@ -1,5 +1,9 @@
 ﻿== Changelog ==
 
+= 3.1.1 =
+* Re-arranged settings menus.
+* Added setting to enable complete uninstallation.
+
 = 3.1.0 =
 * Added on-page SEO: meta title and description templates for the homepage, post types, taxonomies and archives, with live preview and pixel-width meters.
 * Added the SEO metabox with General, Analysis, Social, Schema, Links, Advanced and Insights tabs.

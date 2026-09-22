@@ -1,10 +1,10 @@
 === CrawlWP SEO - Complete WordPress SEO Plugin with AI, Indexing & Search Performance ===
 Contributors: collizo4sky, properfraction
 Donate link: https://crawlwp.com/
-Tags: seo, wordpress seo, schema, redirection, sitemap
+Tags: seo, indexnow, redirection, schema, xml sitemap
 Requires at least: 6.9
 Tested up to: 7.1
-Stable tag: 3.1.0
+Stable tag: 3.1.1
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -13,100 +13,158 @@ Complete WordPress SEO: meta titles, schema, redirects and sitemaps, plus instan
 
 == Description ==
 
-## CRAWLWP SEO: WORDPRESS SEO, INDEXING & SEARCH DATA
+### CrawlWP – The WordPress SEO Plugin That Also Gets You Indexed
 
-*Optimize every page, submit it to search engines (Google, Bing, Yandex, Yep etc) the moment you publish, and see which ones actually indexed it — all inside WordPress.*
+**Optimize every page, submit it to search engines (Google, Bing, Yandex, Yep etc) the moment you publish, and see which ones actually indexed it — all inside WordPress.**
 
-CrawlWP is a complete WordPress SEO plugin. It handles the on-page work you expect — meta titles and descriptions, schema markup, breadcrumbs, Open Graph, robots rules, redirects and sitemaps — and then does the part most SEO plugins leave to chance: submitting your content to search engines and telling you whether it reached the index.
+CrawlWP is a complete WordPress SEO plugin. It handles the on-page work you expect — meta titles and descriptions, schema, breadcrumbs, social cards, robots rules, redirects and sitemaps. Then it does the part most SEO plugins leave to chance: it submits your content to **search engines** for indexing and let you know when they actually get indexed.
 
-[Website](https://crawlwp.com/?utm_source=wprepo&utm_medium=link&utm_campaign=liteversion) | [Documentation](https://crawlwp.com/docs/?utm_source=wprepo&utm_medium=link&utm_campaign=liteversion) | [Support](https://crawlwp.com/support/?utm_source=wprepo&utm_medium=link&utm_campaign=liteversion)
+Over 40,000 website owners use CrawlWP for their WordPress SEO.
+
+* **Complete on-page SEO**: Titles, meta descriptions, schema, breadcrumbs, Open Graph and X cards for every post, page and custom post type.
+* **Technical SEO built in**: Redirects, a 404 monitor, a robots.txt editor, sitemaps and llms.txt — no extra plugins.
+* **Instant indexing on search engines**: Google, Bing, Yandex, Naver, Yep and Seznam.cz.
+* **Ready for AI search**: AI-written titles and descriptions, a structured data graph, and llms.txt for AI crawlers.
+* **Switch in minutes**: One-click import from Yoast SEO, Rank Math, All in One SEO, SEOPress, The SEO Framework and Slim SEO — redirects included.
+* **Your data stays yours**: Your site talks to the search engines directly. Nothing passes through our servers.
+
+**[CrawlWP Premium from $59/year](https://crawlwp.com/pricing/?utm_source=wprepo&utm_medium=link&utm_campaign=liteversion)** · adds Google, Bing and Yandex search data, index status and more · 14-day money-back guarantee
+
+[Website](https://crawlwp.com/?utm_source=wprepo&utm_medium=link&utm_campaign=liteversion) | [Features](https://crawlwp.com/features/?utm_source=wprepo&utm_medium=link&utm_campaign=liteversion) | [Documentation](https://crawlwp.com/docs/?utm_source=wprepo&utm_medium=link&utm_campaign=liteversion) | [Pricing](https://crawlwp.com/pricing/?utm_source=wprepo&utm_medium=link&utm_campaign=liteversion) | [Support](https://crawlwp.com/support/?utm_source=wprepo&utm_medium=link&utm_campaign=liteversion)
 
 https://www.youtube.com/watch?v=dKjQTtQyRyA&rel=0
 
-### Why CrawlWP WordPress SEO Plugin is different ###
+### Why CrawlWP Is Different
 
-Most SEO plugins for WordPress write your meta tags and stop. Your page then waits for a crawler that may not return for a week, and you have no way of knowing whether it ever arrived.
+Most WordPress SEO plugins write your meta tags and stop. Your page then waits for a crawler that may not come back for a week, and you have no way to know if it ever arrived.
 
-CrawlWP closes that gap. It notifies search engines the moment content is created, updated or deleted, then checks the result — so "is this page indexed?" becomes a question you can answer rather than guess at.
+CrawlWP closes that gap. It tells search engines the moment you create, update or delete content, then checks the result. "Is this page indexed?" becomes a question you can answer instead of guess.
 
-### On-page SEO ###
+It also goes further than other SEO plugins for WordPress. Many offer IndexNow for Bing and Yandex, often only on a paid plan. CrawlWP submits to **Google, Bing, Yandex, Naver, Yep and Seznam.cz** in the free version. CrawlWP Premium then checks whether each page was actually indexed, and shows your website search performance on **Google, Bing and Yandex**.
 
-* **Meta titles and descriptions**: Templates for the homepage, every post type, every taxonomy and the author, date, search and 404 archives, with a live preview of the rendered output.
-* **Per-post overrides**: A single SEO metabox under the editor, with a real Google preview measured in pixels rather than characters.
-* **Bulk editor**: Edit SEO titles and meta descriptions for many posts from one table, with live character counters.
-* **Schema markup**: A JSON-LD graph you configure — organisation or person, logo, sitelinks search box, sameAs profiles, article markup and BreadcrumbList.
-* **Local SEO**: LocalBusiness structured data with full NAP details and opening hours.
-* **Breadcrumbs**: A `[crawlwp_breadcrumbs]` shortcode with your own labels, separator and primary taxonomy.
-* **Open Graph and X cards**: Share previews in the editor, a fallback image, and per-page overrides.
-* **Image SEO**: Automatically fill missing image alt text from the image title or file name.
-* **Content analysis**: Focus keyword checks covering the title, URL, description, first paragraph, headings, images and links.
+### Ready for Search and AI Search
 
-### Technical SEO ###
+People now ask AI assistants as well as search engines. Both read your site, and both work better when your site is easy to understand.
 
-* **robots.txt editor**: Edit the virtual file from wp-admin, pre-filled with what your site actually serves — WordPress defaults and other plugins included.
-* **Robots directives**: noindex, nofollow and canonical URLs per post or per post type.
-* **Redirects**: 301, 302 and 410 rules with exact, starts-with, ends-with and regex matching, hit counts and per-rule enable switches.
-* **Automatic permalink redirects**: Change a post's slug and CrawlWP writes the 301 for you.
-* **404 monitor**: Every 404 logged with hit count, last hit and referrer, one click from becoming a redirect.
-* **XML sitemaps**: Works with the WordPress core sitemap index rather than replacing it, with a one-click check that search engines can reach it.
-* **llms.txt**: A plain-text file describing your site to the AI crawlers that now read it.
-* **RSS attribution**: Add a link back to the original post on every feed item, so scraped copies point home.
-* **Header and footer code**: GA4 measurement ID, Google Tag Manager container, and arbitrary scripts in the head, after body or in the footer.
-* **Site verification**: Google, Bing, Yandex, Baidu and Pinterest, each showing the exact meta tag it outputs.
+* **AI titles and meta descriptions**: Generate SEO titles and meta descriptions with the AI connectors in WordPress.
+* **Structured data graph**: Tell search engines and AI tools who runs your site, what it is and how its pages fit together.
+* **llms.txt**: A plain-text file that describes your site to the AI crawlers that now read it. Generated for you, or written by hand.
 
-### Instant indexing ###
+### On-Page SEO for WordPress
 
-* **Instant Indexing**: Automatically submit your WordPress content to Google, Bing and Yandex for immediate indexing after publication.
-* **Indexing on Content Change**: Request indexing when posts, pages and custom post types are added or updated.
-* **IndexNow**: Submission to Microsoft Bing, Naver, Seznam.cz, Yandex and Yep through the IndexNow protocol.
-* **Google Indexing API**: Because Google does not support IndexNow, CrawlWP integrates with the Google Indexing API directly.
-* **Submission log**: Every request recorded with the engine it went to, the status that engine returned, and when.
+* **Meta titles and descriptions**: Templates for the homepage, every post type, every taxonomy and the author, date, search and 404 archives — with a live preview of the result.
+* **SEO metabox**: Override any template on the posts that matter, with a real Google preview measured in pixels, not characters.
+* **Bulk editor**: Fix the SEO title and meta description of a hundred posts from one table, with live character counters.
+* **Content analysis**: Focus keyword checks across the title, URL, meta description, first paragraph, headings, images and links.
+* **Schema markup**: A JSON-LD graph you control — organization or person, logo, sitelinks search box, social profiles, article markup and breadcrumbs.
+* **Local SEO**: LocalBusiness structured data with your full address, phone number and opening hours.
+* **Breadcrumbs**: A `[crawlwp_breadcrumbs]` shortcode with your own labels, separator and main category.
+* **Open Graph and X cards**: Control how every page looks when it is shared, with a preview in the editor and a fallback image.
+* **Image SEO**: Missing image alt text filled in from the image title or file name. Alt text you wrote yourself is never changed.
+* **Internal link suggestions**: See related posts you could link to, every link already in a post, and posts with no links pointing at them.
 
-### Import from your old SEO plugin ###
+### Technical SEO
 
-Switching from another WordPress SEO plugin takes minutes. CrawlWP detects **Yoast SEO, Rank Math, All in One SEO, SEOPress, The SEO Framework and Slim SEO** and shows how many posts, terms and redirects each one holds before you start.
+* **Redirect manager**: 301, 302 and 410 redirects with exact, starts-with, ends-with and regex matching, hit counts and an on/off switch for each rule.
+* **Automatic redirects**: Change a post's URL and CrawlWP adds the 301 for you, so old links never break.
+* **404 monitor**: Every broken URL logged with its hit count and where visitors came from — one click from becoming a redirect.
+* **robots.txt editor**: Edit the file your site really serves, including anything other plugins add. No FTP needed.
+* **Robots settings**: noindex, nofollow and canonical URLs for any post or whole post type.
+* **XML sitemaps**: Works with the WordPress sitemap instead of replacing it, with a one-click check that search engines can reach it.
+* **Site verification**: Google, Bing, Yandex, Baidu and Pinterest, each showing the exact tag it adds.
+* **Header and footer code**: Your GA4 ID, Google Tag Manager container and any other scripts, kept safe when you change themes.
+* **RSS attribution**: A link back to the original post on every feed item, so sites that copy your content credit you.
 
-Titles, descriptions, robots rules, canonical URLs, social images and redirects all come across. Existing CrawlWP values are kept unless you tick overwrite, and nothing is deleted from the old plugin, so you can roll back.
+### Instant Indexing on Six Search Engines
 
-= 🤖 What is IndexNow? =
+A sitemap tells search engines a page exists, then waits for them to visit. CrawlWP sends each page to them directly.
 
-IndexNow is a protocol that allows website owners to promptly notify search engines about content changes, such as new, updated, or deleted URLs. It is a collaborative effort among several search engines (Bing, Naver, Seznam.cz, Yandex, Yep), enabling them to share received URLs with one another.
+* **Automatic submission**: New, updated and deleted posts, pages and custom post types are sent the moment they change.
+* **Google Indexing API**: Google does not support IndexNow, so CrawlWP connects to Google's own Indexing API.
+* **IndexNow**: Submission to Microsoft Bing, Naver, Seznam.cz, Yandex and Yep.
+* **Bing and Yandex APIs**: Direct connections for faster, confirmed submission.
+* **Submission log**: Every request recorded with the search engine, the response it returned and the time.
 
-### Premium Features ###
+### Switch From Yoast, Rank Math, AIOSEO or SEOPress in Minutes
 
-* **SEO Performance Tracking**: Deep Google Search Console, Bing Webmaster Tools and Yandex Webmaster integration for detailed insights about your site's search visibility and performance. [Learn more](https://crawlwp.com/?utm_source=wprepo&utm_medium=link&utm_campaign=liteversion#features)
-* **Keyword Tracking**: Monitor the performance of the keywords your website ranks for using precise data instead of estimates. [Learn more](https://crawlwp.com/?utm_source=wprepo&utm_medium=link&utm_campaign=liteversion#features)
-* **Real-time Indexing Status**: See which of your URLs are indexed, pending or missing, per search engine, on the posts list you already use. [Learn more](https://crawlwp.com/?utm_source=wprepo&utm_medium=link&utm_campaign=liteversion#features)
-* **Index History**: A 30-day chart of indexed against not-indexed pages, so the trend is visible rather than anecdotal. [Learn more](https://crawlwp.com/?utm_source=wprepo&utm_medium=link&utm_campaign=liteversion#features)
-* **Manual and Bulk Submission**: Submit specific posts and pages for indexing, or select many and send them together. [Learn more](https://crawlwp.com/?utm_source=wprepo&utm_medium=link&utm_campaign=liteversion#features)
-* **Dashboard Widget and Post List Stats**: Clicks, impressions, CTR and average position on the WordPress dashboard, and an SEO score column on the posts list. [Learn more](https://crawlwp.com/?utm_source=wprepo&utm_medium=link&utm_campaign=liteversion#features)
-* **Google News Sitemap**: A dedicated news feed with its own publication name, carrying the last two days of articles as Google News requires. [Learn more](https://crawlwp.com/?utm_source=wprepo&utm_medium=link&utm_campaign=liteversion#features)
-* **Video Sitemap**: Help Google find, understand and show the videos embedded in your posts and pages in video search results. [Learn more](https://crawlwp.com/?utm_source=wprepo&utm_medium=link&utm_campaign=liteversion#features)
-* **HTML Sitemap**: A human-readable sitemap page listing your content, for visitors and for crawlers that follow links. [Learn more](https://crawlwp.com/?utm_source=wprepo&utm_medium=link&utm_campaign=liteversion#features)
-* **Multilingual Sitemaps**: Sitemaps that understand translated content, with integrations for WPML, Polylang and TranslatePress. [Learn more](https://crawlwp.com/?utm_source=wprepo&utm_medium=link&utm_campaign=liteversion#features)
-* **Internal Link Automation**: Map a keyword to a URL and CrawlWP links it across your content automatically — first match only, existing links skipped, three replacements per keyword. [Learn more](https://crawlwp.com/?utm_source=wprepo&utm_medium=link&utm_campaign=liteversion#features)
-* **SEO Reports via Email**: Daily, weekly or monthly email reports of your site's SEO performance and the pages indexed and deindexed on Google, Bing and Yandex. [Learn more](https://crawlwp.com/article/seo-performance-email-reports/?utm_source=wprepo&utm_medium=link&utm_campaign=liteversion#features)
+Moving from another WordPress SEO plugin takes about ten minutes. CrawlWP finds **Yoast SEO, Rank Math, All in One SEO, SEOPress, The SEO Framework and Slim SEO** and shows how many posts, terms and redirects each holds before you start.
 
-= Why Choose CrawlWP SEO? =
+Titles, meta descriptions, robots rules, canonical URLs, social images and redirects all come across. Nothing is deleted from your old plugin, so you can switch back at any time.
 
-* One plugin for on-page SEO, technical SEO, indexing and search data — not three.
-* Answer "is this page indexed?" instead of guessing.
-* Reach Bing, Yandex, Naver, Yep and Seznam.cz, not just Google.
-* Import everything from your current SEO plugin, redirects included.
-* Your data stays on your server. Your site talks to the search engines directly.
+### Who Is CrawlWP For?
 
-Improve your SEO rankings by taking control of the crawling and indexing process so search engines know what to focus on.
+* **Bloggers and content sites** who want every post found quickly, not in a week.
+* **News publishers** who need stories indexed within hours, with a Google News sitemap.
+* **WooCommerce stores** with product pages that need to be found in search.
+* **Agencies and freelancers** who send clients SEO reports without giving them a login.
+* **Local businesses** that want to show up for nearby searches.
+* **Multilingual sites** using WPML, Polylang or TranslatePress.
 
-= 💙 Love CrawlWP SEO? =
-If the plugin was useful, rate it with a [5-star rating](https://wordpress.org/support/plugin/mihdan-index-now/reviews/) and write a few nice words.
+### CrawlWP Premium
 
-= What's Next? =
+Everything in the free version, plus the search data and tools that show what your SEO actually achieves. [See pricing](https://crawlwp.com/pricing/?utm_source=wprepo&utm_medium=link&utm_campaign=liteversion)
 
-If you like this plugin, then consider checking out our other products.
+**Search performance**
 
-* <a href="https://mailoptin.io/">MailOptin</a> - Create popups and optin forms for capturing email newsletter subscribers. Integrates with MailerLite, Infusionsoft, ActiveCampaign, Campaign Monitor, Brevo, AWeber, Sendy & more.
-* <a href="https://profilepress.com/">ProfilePress</a> - The best custom registration, login, front-end profile and user management plugin in the market.
-* <a href="https://fusewp.com/">FuseWP</a> - Connect WordPress to marketing platforms and sync users to your email list.
+* **Google, Bing and Yandex data in WordPress**: Clicks, impressions, CTR and average position from Google Search Console, Bing Webmaster Tools and Yandex Webmaster, on one screen. [Learn more](https://crawlwp.com/features/google-search-console/?utm_source=wprepo&utm_medium=link&utm_campaign=liteversion)
+* **Keyword tracking**: The searches you actually rank for, with real data instead of estimates.
+* **Dashboard widget and post list stats**: Performance and indexing numbers on the WordPress dashboard, and an SEO score column on your posts list.
+* **SEO email reports**: Daily, weekly or monthly summaries of performance and indexing, sent to as many people as you like. [Learn more](https://crawlwp.com/article/seo-performance-email-reports/?utm_source=wprepo&utm_medium=link&utm_campaign=liteversion)
+
+**Indexing**
+
+* **Index status**: See which pages are indexed, pending or missing on Google, Bing and Yandex, right on your posts list. [Learn more](https://crawlwp.com/features/index-status/?utm_source=wprepo&utm_medium=link&utm_campaign=liteversion)
+* **30-day index history**: A chart of indexed and not-indexed pages, so you can see the trend.
+* **Automatic and bulk indexing**: Find older pages that were never indexed and send them, or select many pages and send them at once.
+
+**Sitemaps and automation**
+
+* **Google News sitemap**: A news sitemap with your publication name, listing the last two days of articles as Google News requires.
+* **Video sitemap**: Help Google find the videos in your posts and show them in video results.
+* **HTML sitemap**: A page listing your content, for visitors and search engines.
+* **Multilingual sitemaps**: Every language version of your site, with WPML, Polylang and TranslatePress integrations.
+* **Internal link automation**: Map a keyword to a URL and CrawlWP links it across your content automatically.
+
+### What's New in CrawlWP 3.1
+
+CrawlWP 3.1 turns CrawlWP from an indexing plugin into a complete WordPress SEO plugin.
+
+* **🧩 Complete on-page SEO**: Title and meta templates, the SEO metabox, schema, breadcrumbs and social cards.
+* **↪️ Redirects and a 404 monitor**, with automatic redirects when you change a URL.
+* **🗺️ New sitemaps** (Premium): Google News, video, HTML and multilingual.
+* **🤖 llms.txt** for AI crawlers.
+* **📥 Import from six SEO plugins**, redirects included.
+* **✏️ Bulk editor, Image SEO and a robots.txt editor.**
+
+### External Services
+
+CrawlWP connects to the external services below to provide its features. Each connection is made directly from your site. No data is sent to CrawlWP or Proper Fraction LLC.
+
+**Google Indexing API and Google Search Console** (googleapis.com)
+Used to submit your URLs to Google for indexing and, in Premium, to read your search performance and index status. Only active once you add a Google service account key under API Settings. The URLs being submitted or checked are sent, along with your credentials.
+Service provider: Google LLC — [Terms of Service](https://policies.google.com/terms), [Privacy Policy](https://policies.google.com/privacy)
+
+**Microsoft Bing Webmaster API and IndexNow**
+Used to submit your URLs to Bing and, in Premium, to read your Bing search performance. Only active once you connect Bing under API Settings. The URLs being submitted are sent, along with your API key.
+Service provider: Microsoft Corporation — [Privacy Statement](https://privacy.microsoft.com/privacystatement)
+
+**Yandex Webmaster API**
+Used to submit your URLs to Yandex and, in Premium, to read your Yandex search performance. Only active once you authorise Yandex under API Settings, which uses Yandex OAuth. The URLs being submitted are sent, along with your access token.
+Service provider: Yandex LLC — [Privacy Policy](https://yandex.com/legal/confidential/)
+
+**IndexNow** (Naver, Seznam.cz, Yep and the other participating search engines)
+Used to notify search engines when your content is added, updated or deleted. The changed URLs, your site URL and your IndexNow key are sent.
+Protocol information: [indexnow.org](https://www.indexnow.org/)
+
+### Love CrawlWP?
+
+If CrawlWP helped your site, please [leave a 5-star review](https://wordpress.org/support/plugin/mihdan-index-now/reviews/). It takes a minute and helps other site owners find the plugin.
+
+### From the Same Team
+
+* [MailOptin](https://mailoptin.io/) – Popups and optin forms to grow your email list. Works with MailerLite, ActiveCampaign, Campaign Monitor, Brevo, AWeber and more.
+* [ProfilePress](https://profilepress.com/) – Modern WordPress membership plugin with user registration, login forms, member directory and profiles features.
+* [FuseWP](https://fusewp.com/) – Sync WordPress users and members to your email marketing software and CRM.
 
 == Screenshots ==
 
@@ -127,69 +185,89 @@ If you like this plugin, then consider checking out our other products.
 
 == Frequently Asked Questions ==
 
+= Is CrawlWP free? =
+
+Yes. The free version is a complete on-page and technical SEO plugin, with instant indexing on six search engines. [CrawlWP Premium](https://crawlwp.com/pricing/?utm_source=wprepo&utm_medium=link&utm_campaign=liteversion) adds Google, Bing and Yandex search data, index status and history, the Google News, video, HTML and multilingual sitemaps, internal link automation and email reports.
+
 = Do I still need Yoast SEO or Rank Math if I use CrawlWP? =
 
-No. CrawlWP covers on-page SEO — titles, meta descriptions, schema, breadcrumbs, Open Graph, robots directives, the robots.txt editor, redirects and a 404 monitor — so it replaces your existing SEO plugin rather than sitting alongside it. Running two SEO plugins at once produces duplicate meta tags and competing sitemaps, so import your data and then deactivate the other one.
+No. CrawlWP covers on-page SEO — titles, meta descriptions, schema, breadcrumbs, Open Graph, robots settings, the robots.txt editor, redirects and a 404 monitor — so it replaces your existing SEO plugin rather than running alongside it. Two SEO plugins at once produce duplicate meta tags and competing sitemaps, so import your data and then deactivate the other one.
 
 = Can I import my data from another SEO plugin? =
 
-Yes. Yoast SEO, Rank Math, All in One SEO, SEOPress, The SEO Framework and Slim SEO are detected automatically, including plugins you deactivated but never cleaned up. Titles, descriptions, robots rules, canonicals, social images and redirects are copied across. Overwrite is opt-in and nothing is deleted from the old plugin.
+Yes. Yoast SEO, Rank Math, All in One SEO, SEOPress, The SEO Framework and Slim SEO are found automatically, including plugins you deactivated but never removed. Titles, descriptions, robots rules, canonical URLs, social images and redirects are copied across. Overwriting existing values is optional, and nothing is deleted from the old plugin.
+
+= Will I lose my rankings if I switch to CrawlWP? =
+
+No. The importer keeps your titles, descriptions, canonical URLs and redirects, and CrawlWP never changes your URLs. To search engines, your site looks the same after the switch.
+
+= Is CrawlWP ready for AI search? =
+
+Yes. CrawlWP can write SEO titles and meta descriptions with the AI connectors in WordPress, builds a structured data graph that helps AI tools understand your site, and publishes an llms.txt file for AI crawlers. No plugin can guarantee an AI assistant will mention your site, but you can make sure it understands your content correctly.
 
 = Does CrawlWP replace the WordPress sitemap? =
 
-No, and that is deliberate. WordPress generates a sitemap index of its own, so CrawlWP works with it rather than adding a competing one. The premium version adds the sitemaps core does not provide: Google News, video, HTML and multilingual.
+No, and that is deliberate. WordPress creates its own sitemap, so CrawlWP works with it instead of adding a second one. The free version includes the core XML sitemap. Premium adds the sitemaps WordPress does not provide: Google News, video, HTML and multilingual.
+
+= Does CrawlWP support multilingual sites? =
+
+Yes. CrawlWP Premium includes multilingual sitemaps with WPML, Polylang and TranslatePress integrations, so every language version of your site can be found and indexed.
 
 = Does CrawlWP handle redirects? =
 
-Yes — 301, 302 and 410 rules with exact, starts-with, ends-with and regex matching, hit counts and per-rule enable switches. CrawlWP also writes a 301 automatically whenever you change a post's permalink, and the 404 monitor turns any logged 404 into a redirect in one click.
+Yes — 301, 302 and 410 redirects with exact, starts-with, ends-with and regex matching, hit counts and an on/off switch for each rule. CrawlWP also adds a 301 automatically when you change a post's URL, and the 404 monitor turns any broken link into a redirect in one click.
+
+= What is IndexNow? =
+
+IndexNow is a protocol that lets websites tell search engines straight away when content is added, updated or deleted. It is supported by Microsoft Bing, Naver, Seznam.cz, Yandex and Yep, and a URL sent to one participating search engine is shared with the others. Google does not support IndexNow, which is why CrawlWP also connects to the Google Indexing API.
 
 = How quickly will my content be indexed? =
 
-While CrawlWP submits your content instantly, the actual indexing time depends on each search engine. In our experience pages are usually indexed within 24 hours of submission and often within a few hours. Using CrawlWP significantly speeds up the discovery and indexing process, but the engines ultimately control the timing.
+CrawlWP submits your content instantly, but each search engine decides when to index it. In our experience, pages are usually indexed within 24 hours of submission and often within a few hours. Submission speeds up discovery; the search engines still decide the timing.
 
 = Is using the Google Indexing API recommended? =
 
-Google recommends explicitly using the Indexing API for job posting and live streaming websites; however, it can be utilized for any website.
+Google recommends the Indexing API for job posting and live streaming sites, but it can be used on any website. If you prefer to be cautious, CrawlWP gives you one-click access to Google's URL Inspection tool so you can request indexing manually instead.
 
-Please note that submitting content via the IndexNow protocol or using the Bing and Yandex API in CrawlWP is entirely safe and recommended.
+Submitting content through IndexNow and the Bing and Yandex APIs is entirely safe and recommended.
 
-= I submitted a URL but didn't see the URL indexed. =
+= I submitted a URL but it is not indexed. Why? =
 
-Waiting for your pages to get indexed can be anxious, but CrawlWP helps speed up this process. Search engines can choose not to crawl and index URLs if they do not meet their selection criteria, so submission improves the odds rather than guaranteeing the outcome.
-
-= Why do I not see all the URLs submitted indexed by search engines? =
-
-Search engines can choose not to crawl and index URLs if they do not meet their selection criteria. Thin archive pages and paginated URLs are the usual culprits, and often the right response is to mark them noindex deliberately.
+Search engines can decide not to index a URL if it does not meet their quality standards. Submission improves the odds but cannot guarantee the result. Thin archive pages and paginated URLs are the usual cause, and often the right answer is to mark them noindex on purpose.
 
 = Can I submit the same URL many times a day? =
 
-Avoid submitting the same URL many times a day.
+Please avoid it. Submit a URL again only when its content has actually changed.
 
 = Can I submit new redirects? =
 
-Yes, you can submit URLs newly redirecting (for example, 301 redirect, 302 redirect, HTML with meta refresh tag, etc.) to notify search engines that the content has changed.
+Yes. You can submit URLs that now redirect — for example with a 301, a 302 or a meta refresh tag — to tell search engines the content has moved.
 
-= I received an HTTP 429 Too Many Requests response from one Search Engine. What should I do? =
+= I received an HTTP 429 Too Many Requests response. What should I do? =
 
-Such HTTP 429 Too Many Requests response status code indicates you are sending too many requests in a given time. Slow down or retry later.
+A 429 response means too many requests were sent in a short time. Slow down, or try again later.
 
-= I have a sitemap. Do I need CrawlWP Indexing? =
+= I have a sitemap. Do I need CrawlWP indexing? =
 
-Sitemaps help webmasters inform search engines about their WordPress pages, but search engines don't visit them often. With CrawlWP integration with IndexNow and the Indexing API of search engines, you can directly notify search engines of new content without waiting for them to crawl your sitemaps.
+Sitemaps tell search engines which pages exist, but search engines do not check them often. CrawlWP tells them directly through IndexNow and each search engine's API, so they do not have to wait until they next read your sitemap.
 
 = What is llms.txt? =
 
-A plain-text file at /llms.txt that describes your site to AI crawlers, in the same spirit as robots.txt. CrawlWP can generate one from your site title, tagline and sitemap URL, or you can write it yourself.
+A plain-text file at /llms.txt that describes your site to AI crawlers, much like robots.txt does for search engines. CrawlWP can create one from your site title, tagline and sitemap, or you can write your own.
 
 = Will CrawlWP slow my site down? =
 
-Indexing and data collection run in the background on a schedule rather than on page load, and search performance data is stored in your own database instead of being fetched on each request. The front-end output is the meta tags, schema and sitemap your pages need anyway.
+No. Indexing and data collection run in the background on a schedule, not when visitors load a page. Search performance data is saved in your own database instead of being fetched on every request. What CrawlWP adds to your pages is the meta tags, schema and sitemap they need anyway.
 
 = Do you have access to my Google Search data? =
 
-No. All of your information is stored on your WordPress server, and your site connects to Google Search Console directly without our involvement.
+No. All your data is stored on your own WordPress server, and your site connects to Google Search Console directly, without going through us.
 
 == Changelog ==
+
+= 3.1.1 =
+* Re-arranged settings menus.
+* Added setting to enable complete uninstallation.
 
 = 3.1.0 =
 * Added on-page SEO: meta title and description templates for the homepage, post types, taxonomies and archives, with live preview and pixel-width meters.
@@ -215,42 +293,17 @@ No. All of your information is stored on your WordPress server, and your site co
 * Added header and footer code fields for GA4, Google Tag Manager and arbitrary scripts.
 * Added site verification for Baidu and Pinterest alongside Google, Bing and Yandex.
 
-= 3.0.17 =
-* Added nonce security to log deletion.
-* Added nonce verification to Yandex oauth flow.
-* Removed logging of cron event.
-* Removed logging of bulk_actions.
-
-= 3.0.16 =
-* Autoselect website as host id after yandex oauth.
-
-= 3.0.15 =
-* Update admin url from mihdan-* to crawlwp-*
-* Fixed incorrect redirect after Yandex oauth.
-
-= 3.0.14 =
-* Premium: Added [Yandex support to SEO Stats](https://crawlwp.com/article/overview-of-seo-stats-feature/?ref=changelog).
-* Added automatic access token refresh to Yandex integration.
-* Improve security of oauth connection.
-
-= 3.0.13 =
-* Improved admin UI for WP 7.0.
-
-= 3.0.12 =
-* Added onclick field support to admin framework.
-* Premium: Added [SEO Performance Email Report](https://crawlwp.com/article/seo-performance-email-reports/?ref=changelog).
-
 See the [changelog file](https://plugins.svn.wordpress.org/mihdan-index-now/trunk/changelog.txt) for complete change log information.
 
 == Installation ==
 
 = From your WordPress dashboard =
-1. Visit 'Plugins > Add New'
-2. Search for 'CrawlWP'
-3. Activate CrawlWP from your Plugins page.
+1. Visit 'Plugins > Add New'.
+2. Search for 'CrawlWP'.
+3. Install and activate CrawlWP from your Plugins page.
 
 = Getting started =
-1. Open **CrawlWP > Settings** and work through Title & Meta to set your templates.
-2. If you are moving from another SEO plugin, run **Advanced > Import SEO Data** first, then deactivate the old plugin.
-3. Add your verification codes under **Advanced > Site Verification**.
+1. If you are moving from another SEO plugin, run **Settings > Import SEO Data** first, then deactivate the old plugin.
+2. Fill in **Settings > Site Information**, and add your verification codes under **Settings > Site Verification**.
+3. Open **Title & Meta** to set your title and description templates.
 4. Connect the Google, Bing and Yandex APIs under **API Settings** to start submitting content for indexing.

@@ -24,7 +24,7 @@ if (!defined('CRAWLWP_NAME')) {
 	define('CRAWLWP_NAME', 'CrawlWP');
 }
 if (!defined('CRAWLWP_VERSION')) {
-	define('CRAWLWP_VERSION', '3.1.0');
+	define('CRAWLWP_VERSION', '3.1.1');
 }
 if (!defined('ABSPATH')) {
 	define('ABSPATH', dirname(CRAWLWP_TESTS_PLUGIN_DIR, 2) . '/');
