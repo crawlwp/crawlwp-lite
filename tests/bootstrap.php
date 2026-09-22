@@ -1535,6 +1535,71 @@ if (! class_exists('Elementor\Core\DocumentTypes\Document')) {
 	}');
 }
 
+if (! class_exists('CrawlWP_Mock_WPDB')) {
+	class CrawlWP_Mock_WPDB {
+		public string $prefix = 'wp_';
+		public string $options = 'wp_options';
+		public string $postmeta = 'wp_postmeta';
+		public string $termmeta = 'wp_termmeta';
+		public string $usermeta = 'wp_usermeta';
+		public string $sitemeta = 'wp_sitemeta';
+		public array $queries = [];
+
+		public function query($query) {
+			$this->queries[] = $query;
+			return true;
+		}
+
+		public function prepare($query, ...$args) {
+			$flattened = [];
+			foreach ($args as $arg) {
+				if (is_array($arg)) {
+					foreach ($arg as $nested) {
+						$flattened[] = $nested;
+					}
+				} else {
+					$flattened[] = $arg;
+				}
+			}
+			return vsprintf(str_replace(['%s', '%d'], ["'%s'", '%d'], $query), $flattened);
+		}
+
+		public function esc_like($text) {
+			return addcslashes($text, '_%\\');
+		}
+	}
+}
+
+if (!isset($GLOBALS['wpdb'])) {
+	$GLOBALS['wpdb'] = new CrawlWP_Mock_WPDB();
+}
+
+if (!function_exists('wp_clear_scheduled_hook')) {
+	function wp_clear_scheduled_hook($hook, $args = []) {
+		$GLOBALS['crawlwp_test_state']['cleared_crons'][] = $hook;
+		return true;
+	}
+}
+
+if (!function_exists('wp_cache_flush')) {
+	function wp_cache_flush() {
+		$GLOBALS['crawlwp_test_state']['cache_flushed'] = true;
+		return true;
+	}
+}
+
+if (!function_exists('get_current_blog_id')) {
+	function get_current_blog_id() {
+		return 1;
+	}
+}
+
+if (!function_exists('wp_is_large_network')) {
+	function wp_is_large_network() {
+		return false;
+	}
+}
+
 $crawlwp_pro_autoload = dirname(CRAWLWP_TESTS_PLUGIN_DIR) . '/mihdan-index-now-pro/Libsodium/vendor/autoload.php';
 if (file_exists($crawlwp_pro_autoload)) {
 	require_once $crawlwp_pro_autoload;

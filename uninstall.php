@@ -15,10 +15,28 @@ if ( ! defined('WP_UNINSTALL_PLUGIN')) {
 }
 
 /**
- * Remove all plugin data for the current blog.
+ * Check whether complete data removal on uninstall is enabled.
  */
-function crawlwp_lite_mo_uninstall_function()
+function crawlwp_lite_is_uninstall_enabled()
 {
+	$advanced = get_option('crawlwp_advanced', []);
+
+	return is_array($advanced)
+		&& ! empty($advanced['remove_plugin_data'])
+		&& in_array($advanced['remove_plugin_data'], ['on', 'yes', 'true', true], true);
+}
+
+/**
+ * Remove all plugin data for the current blog.
+ *
+ * @param bool $force Whether to force uninstall without re-checking the option.
+ */
+function crawlwp_lite_mo_uninstall_function($force = false)
+{
+	if ( ! $force && ! crawlwp_lite_is_uninstall_enabled()) {
+		return;
+	}
+
 	global $wpdb;
 
 	// Scheduled events.
@@ -53,6 +71,7 @@ function crawlwp_lite_mo_uninstall_function()
 
 	$options = [
 		'crawlwp_general',
+		'crawlwp_advanced',
 		'crawlwp_index_now',
 		'crawlwp_bing_webmaster',
 		'crawlwp_google_webmaster',
@@ -116,23 +135,26 @@ if ( ! is_multisite()) {
 	crawlwp_lite_mo_uninstall_function();
 } elseif ( ! wp_is_large_network()) {
 
-	$site_ids = get_sites(['fields' => 'ids', 'number' => 0]);
+	$site_ids        = get_sites(['fields' => 'ids', 'number' => 0]);
+	$network_enabled = crawlwp_lite_is_uninstall_enabled();
 
 	foreach ($site_ids as $site_id) {
 		switch_to_blog($site_id);
-		crawlwp_lite_mo_uninstall_function();
+		crawlwp_lite_mo_uninstall_function($network_enabled);
 		restore_current_blog();
 	}
 
-	// Background process batches are stored as network options on multisite.
-	global $wpdb;
+	if ($network_enabled) {
+		// Background process batches are stored as network options on multisite.
+		global $wpdb;
 
-	$wpdb->query(
-		$wpdb->prepare(
-			"DELETE FROM {$wpdb->sitemeta} WHERE meta_key LIKE %s",
-			'%crawlwp_bg_process%'
-		)
-	);
+		$wpdb->query(
+			$wpdb->prepare(
+				"DELETE FROM {$wpdb->sitemeta} WHERE meta_key LIKE %s",
+				'%crawlwp_bg_process%'
+			)
+		);
 
-	wp_cache_flush();
+		wp_cache_flush();
+	}
 }
