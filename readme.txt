@@ -1,7 +1,7 @@
 === CrawlWP SEO - Complete WordPress SEO Plugin with AI, Indexing & Search Performance ===
 Contributors: collizo4sky, properfraction
 Donate link: https://crawlwp.com/
-Tags: seo, indexnow, redirection, schema, xml sitemap
+Tags: seo, ai seo, redirection, schema, xml sitemap
 Requires at least: 6.9
 Tested up to: 7.1
 Stable tag: 3.1.1
@@ -19,8 +19,6 @@ Complete WordPress SEO: meta titles, schema, redirects and sitemaps, plus instan
 
 CrawlWP is a complete WordPress SEO plugin. It handles the on-page work you expect — meta titles and descriptions, schema, breadcrumbs, social cards, robots rules, redirects and sitemaps. Then it does the part most SEO plugins leave to chance: it submits your content to **search engines** for indexing and let you know when they actually get indexed.
 
-Over 40,000 website owners use CrawlWP for their WordPress SEO.
-
 * **Complete on-page SEO**: Titles, meta descriptions, schema, breadcrumbs, Open Graph and X cards for every post, page and custom post type.
 * **Technical SEO built in**: Redirects, a 404 monitor, a robots.txt editor, sitemaps and llms.txt — no extra plugins.
 * **Instant indexing on search engines**: Google, Bing, Yandex, Naver, Yep and Seznam.cz.
@@ -30,9 +28,9 @@ Over 40,000 website owners use CrawlWP for their WordPress SEO.
 
 **[CrawlWP Premium from $59/year](https://crawlwp.com/pricing/?utm_source=wprepo&utm_medium=link&utm_campaign=liteversion)** · adds Google, Bing and Yandex search data, index status and more · 14-day money-back guarantee
 
-[Website](https://crawlwp.com/?utm_source=wprepo&utm_medium=link&utm_campaign=liteversion) | [Features](https://crawlwp.com/features/?utm_source=wprepo&utm_medium=link&utm_campaign=liteversion) | [Documentation](https://crawlwp.com/docs/?utm_source=wprepo&utm_medium=link&utm_campaign=liteversion) | [Pricing](https://crawlwp.com/pricing/?utm_source=wprepo&utm_medium=link&utm_campaign=liteversion) | [Support](https://crawlwp.com/support/?utm_source=wprepo&utm_medium=link&utm_campaign=liteversion)
-
 https://www.youtube.com/watch?v=dKjQTtQyRyA&rel=0
+
+[Website](https://crawlwp.com/?utm_source=wprepo&utm_medium=link&utm_campaign=liteversion) | [Features](https://crawlwp.com/features/?utm_source=wprepo&utm_medium=link&utm_campaign=liteversion) | [Documentation](https://crawlwp.com/docs/?utm_source=wprepo&utm_medium=link&utm_campaign=liteversion) | [Pricing](https://crawlwp.com/pricing/?utm_source=wprepo&utm_medium=link&utm_campaign=liteversion) | [Support](https://crawlwp.com/support/?utm_source=wprepo&utm_medium=link&utm_campaign=liteversion)
 
 ### Why CrawlWP Is Different
 
@@ -56,6 +54,7 @@ People now ask AI assistants as well as search engines. Both read your site, and
 * **SEO metabox**: Override any template on the posts that matter, with a real Google preview measured in pixels, not characters.
 * **Bulk editor**: Fix the SEO title and meta description of a hundred posts from one table, with live character counters.
 * **Content analysis**: Focus keyword checks across the title, URL, meta description, first paragraph, headings, images and links.
+* **SEO score on your posts list**: A score and a badge for each check beside every post, so you can find the weakest ones at a glance.
 * **Schema markup**: A JSON-LD graph you control — organization or person, logo, sitelinks search box, social profiles, article markup and breadcrumbs.
 * **Local SEO**: LocalBusiness structured data with your full address, phone number and opening hours.
 * **Breadcrumbs**: A `[crawlwp_breadcrumbs]` shortcode with your own labels, separator and main category.
@@ -108,7 +107,7 @@ Everything in the free version, plus the search data and tools that show what yo
 
 * **Google, Bing and Yandex data in WordPress**: Clicks, impressions, CTR and average position from Google Search Console, Bing Webmaster Tools and Yandex Webmaster, on one screen. [Learn more](https://crawlwp.com/features/google-search-console/?utm_source=wprepo&utm_medium=link&utm_campaign=liteversion)
 * **Keyword tracking**: The searches you actually rank for, with real data instead of estimates.
-* **Dashboard widget and post list stats**: Performance and indexing numbers on the WordPress dashboard, and an SEO score column on your posts list.
+* **Dashboard widget and post list stats**: Performance and indexing numbers on the WordPress dashboard and beside every post on your posts list.
 * **SEO email reports**: Daily, weekly or monthly summaries of performance and indexing, sent to as many people as you like. [Learn more](https://crawlwp.com/article/seo-performance-email-reports/?utm_source=wprepo&utm_medium=link&utm_campaign=liteversion)
 
 **Indexing**
@@ -178,7 +177,7 @@ If CrawlWP helped your site, please [leave a 5-star review](https://wordpress.or
 8. robots.txt editor, pre-filled with what your site actually serves.
 9. API Settings for the Google, Bing and Yandex indexing APIs.
 10. (Premium) SEO Index: indexed pages and a 30-day index history chart.
-11. (Premium) SEO score and index status for Google, Bing and Yandex on the posts list.
+11. SEO score on the posts list, plus (Premium) index status for Google, Bing and Yandex.
 12. (Premium) Search performance from Google, Bing and Yandex inside WordPress.
 13. (Premium) Dashboard widget: 28 days of search performance and indexing counts.
 14. (Premium) SEO email report: performance, indexing insights, top keywords and pages.
