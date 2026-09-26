@@ -106,6 +106,7 @@ Everything in the free version, plus the search data and tools that show what yo
 **Search performance**
 
 * **Google, Bing and Yandex data in WordPress**: Clicks, impressions, CTR and average position from Google Search Console, Bing Webmaster Tools and Yandex Webmaster, on one screen. [Learn more](https://crawlwp.com/features/google-search-console/?utm_source=wprepo&utm_medium=link&utm_campaign=liteversion)
+* **Per-post insights**: Clicks, impressions, CTR, average position and top keywords for each post, in the editor sidebar and the Insights tab of the SEO metabox.
 * **Keyword tracking**: The searches you actually rank for, with real data instead of estimates.
 * **Dashboard widget and post list stats**: Performance and indexing numbers on the WordPress dashboard and beside every post on your posts list.
 * **SEO email reports**: Daily, weekly or monthly summaries of performance and indexing, sent to as many people as you like. [Learn more](https://crawlwp.com/article/seo-performance-email-reports/?utm_source=wprepo&utm_medium=link&utm_campaign=liteversion)
@@ -181,12 +182,14 @@ If CrawlWP helped your site, please [leave a 5-star review](https://wordpress.or
 12. (Premium) Search performance from Google, Bing and Yandex inside WordPress.
 13. (Premium) Dashboard widget: 28 days of search performance and indexing counts.
 14. (Premium) SEO email report: performance, indexing insights, top keywords and pages.
+15. (Premium) Insights tab: search performance, top keywords and index status for a single post.
+16. (Premium) CrawlWP Stats in the editor sidebar: index status and 28 days of Google search data for the post you are editing.
 
 == Frequently Asked Questions ==
 
 = Is CrawlWP free? =
 
-Yes. The free version is a complete on-page and technical SEO plugin, with instant indexing on six search engines. [CrawlWP Premium](https://crawlwp.com/pricing/?utm_source=wprepo&utm_medium=link&utm_campaign=liteversion) adds Google, Bing and Yandex search data, index status and history, the Google News, video, HTML and multilingual sitemaps, internal link automation and email reports.
+Yes. The free version is a complete on-page and technical SEO plugin, with instant indexing on six search engines. [CrawlWP Premium](https://crawlwp.com/pricing/?utm_source=wprepo&utm_medium=link&utm_campaign=liteversion) adds Google, Bing and Yandex search data, per-post insights, index status and history, the Google News, video, HTML and multilingual sitemaps, internal link automation and email reports.
 
 = Do I still need Yoast SEO or Rank Math if I use CrawlWP? =
 
