@@ -61,9 +61,8 @@ class SitemapSettings
 		]);
 
 		$this->add_sitemap_fields($wposa);
-		$this->add_news_sitemap_fields($wposa);
 
-		if (! defined('CRAWLWP_PRO_VERSION')) {
+		if (! defined('CRAWLWP_DETACH_LIBSODIUM')) {
 			$this->add_video_html_upsell($wposa);
 			$this->add_custom_urls_upsell($wposa);
 			$this->add_multilingual_upsell($wposa);
@@ -95,52 +94,6 @@ class SitemapSettings
 		]);
 	}
 
-	/**
-	 * News Sitemap fields — publication name and post type selection.
-	 */
-	private function add_news_sitemap_fields(WPOSA $wposa): void
-	{
-		$news_sitemap_url = get_sitemap_url(NewsSitemapProvider::PROVIDER_NAME);
-		$news_desc = sprintf(
-		/* translators: %s: URL to the news sitemap. */
-			__('Enable a dedicated News Sitemap feed that Google News requires. Only recent content (published within the last 2 days) is included. Access your news sitemap at: %s', 'mihdan-index-now'),
-			'<a href="' . esc_url($news_sitemap_url) . '" target="_blank" rel="noopener noreferrer">' . esc_html($news_sitemap_url) . '</a>'
-		);
-
-		$this->add_heading(
-			$wposa,
-			self::SECTION,
-			'heading_news_sitemap',
-			__('Google News Sitemap', 'mihdan-index-now'),
-			$news_desc,
-			true
-		);
-
-		$wposa->add_field(self::SECTION, [
-			'id' => 'news_enabled',
-			'type' => 'switch',
-			'name' => __('Enable News Sitemap', 'mihdan-index-now'),
-			'desc' => esc_html__('Register a /wp-sitemap-crawlwpnews-1.xml feed for Google News indexing.', 'mihdan-index-now'),
-			'default' => 'off',
-		]);
-
-		$wposa->add_field(self::SECTION, [
-			'id' => 'news_publication_name',
-			'type' => 'text',
-			'name' => __('Publication name', 'mihdan-index-now'),
-			'placeholder' => get_bloginfo('name'),
-			'desc' => esc_html__('The name of the publication as it appears in Google News. Defaults to the WordPress site title.', 'mihdan-index-now'),
-		]);
-
-		$wposa->add_field(self::SECTION, [
-			'id' => 'news_post_types',
-			'type' => 'multicheck',
-			'name' => __('Post types to include', 'mihdan-index-now'),
-			'desc' => esc_html__('Select which post types should appear in the News Sitemap. Only published posts from the last 2 days are included.', 'mihdan-index-now'),
-			'options' => $this->get_post_type_options(),
-			'default' => ['post' => 'post'],
-		]);
-	}
 
 	private function add_video_html_upsell(WPOSA $wposa): void
 	{
@@ -260,27 +213,6 @@ class SitemapSettings
 	// Helpers
 	// -------------------------------------------------------------------------
 
-	/**
-	 * Build an associative array of public post type options for the multicheck field.
-	 *
-	 * @return array<string,string>
-	 */
-	private function get_post_type_options(): array
-	{
-		$options = [];
-		$post_types = get_post_types(['public' => true], 'objects');
-
-		foreach ($post_types as $post_type) {
-			/* Skip attachments — media files are not news content. */
-			if ($post_type->name === 'attachment') {
-				continue;
-			}
-
-			$options[$post_type->name] = $post_type->label;
-		}
-
-		return $options;
-	}
 
 	// -------------------------------------------------------------------------
 	// Option reader

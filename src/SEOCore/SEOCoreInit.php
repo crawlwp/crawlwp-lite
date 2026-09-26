@@ -19,7 +19,6 @@ use Mihdan\IndexNow\SEOCore\TitleMeta\FrontendOutput;
 use Mihdan\IndexNow\SEOCore\Sitemap;
 use Mihdan\IndexNow\SEOCore\SitemapSettings\SitemapSettings;
 use Mihdan\IndexNow\SEOCore\RobotsSettings\RobotsSettings;
-use Mihdan\IndexNow\SEOCore\SitemapSettings\NewsSitemapProvider;
 use Mihdan\IndexNow\SEOCore\Redirects\RedirectsManager;
 use Mihdan\IndexNow\SEOCore\Redirects\RedirectsSettings;
 use Mihdan\IndexNow\SEOCore\Redirects\RedirectsProcessor;
@@ -65,7 +64,6 @@ class SEOCoreInit
 		BreadcrumbSettings::class,
 		RobotsSettings::class,
 		SitemapSettings::class,
-		NewsSitemapProvider::class,
 		MetaBox::class,
 		Assets::class,
 		PostListColumn::class,
