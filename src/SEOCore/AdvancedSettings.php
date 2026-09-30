@@ -47,14 +47,33 @@ class AdvancedSettings
 			'default' => 'off',
 			'std'     => 'off',
 		]);
+
+		$wposa->add_field(self::SECTION, [
+			'id'      => 'disable_seo_features',
+			'type'    => 'switch',
+			'name'    => __('Disable SEO Features', 'mihdan-index-now'),
+			'desc'    => __('Check this box to turn off all on-page SEO features (meta tags, schema, sitemaps, redirects, etc.) while keeping instant indexing active. Useful when another SEO plugin handles on-page SEO.', 'mihdan-index-now'),
+			'default' => 'off',
+			'std'     => 'off',
+		]);
 	}
 
 	public static function is_remove_data_on_uninstall(): bool
 	{
+		return self::is_switch_on('remove_plugin_data');
+	}
+
+	public static function is_seo_features_disabled(): bool
+	{
+		return self::is_switch_on('disable_seo_features');
+	}
+
+	private static function is_switch_on($field): bool
+	{
 		$options = get_option('crawlwp_' . self::SECTION, []);
 
 		return is_array($options)
-			&& ! empty($options['remove_plugin_data'])
-			&& in_array($options['remove_plugin_data'], ['on', 'yes', 'true', true], true);
+			&& ! empty($options[$field])
+			&& in_array($options[$field], ['on', 'yes', 'true', true], true);
 	}
 }

@@ -215,7 +215,7 @@ class Main
 	{
 		$columns['crawlwp_last_update'] = sprintf(
 			'<span class="dashicons dashicons-share" title="%s"></span>',
-			__('CrawlWP: Last Update', 'mihdan-index-now')
+			__('CrawlWP: Last Index Submission Date', 'mihdan-index-now')
 		);
 
 		return $columns;

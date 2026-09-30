@@ -28,7 +28,7 @@ CrawlWP is a complete WordPress SEO plugin. It handles the on-page work you expe
 
 **[CrawlWP Premium from $59/year](https://crawlwp.com/pricing/?utm_source=wprepo&utm_medium=link&utm_campaign=liteversion)** · adds Google, Bing and Yandex search data, index status and more · 14-day money-back guarantee
 
-https://www.youtube.com/watch?v=dKjQTtQyRyA&rel=0
+https://www.youtube.com/watch?v=NI0OoJa1vaE&rel=0
 
 [Website](https://crawlwp.com/?utm_source=wprepo&utm_medium=link&utm_campaign=liteversion) | [Features](https://crawlwp.com/features/?utm_source=wprepo&utm_medium=link&utm_campaign=liteversion) | [Documentation](https://crawlwp.com/docs/?utm_source=wprepo&utm_medium=link&utm_campaign=liteversion) | [Pricing](https://crawlwp.com/pricing/?utm_source=wprepo&utm_medium=link&utm_campaign=liteversion) | [Support](https://crawlwp.com/support/?utm_source=wprepo&utm_medium=link&utm_campaign=liteversion)
 

@@ -11,6 +11,7 @@
 
 namespace Mihdan\IndexNow\SEOCore\FeatureGate;
 
+use Mihdan\IndexNow\SEOCore\AdvancedSettings;
 use Mihdan\IndexNow\SEOCore\Wizard\Wizard;
 use Mihdan\IndexNow\Utils;
 
@@ -32,6 +33,12 @@ class FeatureGate
 	 */
 	public function __construct()
 	{
+		// Turned off from Settings → Advanced: hide the gate page too, since its
+		// enable checkbox would have no effect while that switch is on.
+		if (AdvancedSettings::is_seo_features_disabled()) {
+			return;
+		}
+
 		if (!self::is_enabled()) {
 			add_action('crawlwp_pre_setup_fields', [$this, 'register_menu'], -20);
 			add_action('admin_enqueue_scripts', [$this, 'enqueue_assets']);
@@ -71,10 +78,19 @@ class FeatureGate
 	 * features on, installs upgrading from a pre-gate version stay off until the
 	 * admin opts in on the "SEO Features" tab. The derived value is persisted
 	 * once, by maybe_persist_default(), from the activation/upgrade routine.
+	 *
+	 * The "Disable SEO Features" switch under Settings → Advanced overrides the
+	 * gate and forces the features off.
 	 */
 	public static function is_enabled(): bool
 	{
 		if (self::$cache === null) {
+
+			if (AdvancedSettings::is_seo_features_disabled()) {
+				self::$cache = false;
+
+				return (bool)apply_filters('crawlwp_seo_features_is_enabled', self::$cache);
+			}
 
 			$raw = get_option(self::OPTION_KEY);
 
