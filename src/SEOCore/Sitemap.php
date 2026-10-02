@@ -11,8 +11,8 @@ use Mihdan\IndexNow\SEOCore\TitleMeta\FrontendOutput;
  */
 class Sitemap
 {
-	/** Default value stored for the robots-index meta key. */
-	const ROBOTS_INDEX_DEFAULT = 'index';
+	/** Default value stored for the robots-index meta key ("Default": inherit the post type setting). */
+	const ROBOTS_INDEX_DEFAULT = '';
 
 	/** Option flag set once every post carries the robots-index meta key. */
 	const ROBOTS_BACKFILL_OPTION = 'crawlwp_robots_index_backfilled';
@@ -166,7 +166,8 @@ class Sitemap
 		];
 
 		if (get_option(self::ROBOTS_BACKFILL_OPTION) === '1') {
-			return $indexed_clause;
+			/* WP_Query ignores a flat clause, so it must be wrapped in a list. */
+			return [$indexed_clause];
 		}
 
 		return [

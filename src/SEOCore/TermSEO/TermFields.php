@@ -25,8 +25,8 @@ class TermFields
 		return [
 			'seo_title'       => self::get($term_id, MetaFields::SEO_TITLE),
 			'seo_description' => self::get($term_id, MetaFields::SEO_DESCRIPTION),
-			'robots_index'    => self::get($term_id, MetaFields::ROBOTS_INDEX, 'index'),
-			'robots_follow'   => self::get($term_id, MetaFields::ROBOTS_FOLLOW, 'follow'),
+			'robots_index'    => self::get($term_id, MetaFields::ROBOTS_INDEX),
+			'robots_follow'   => self::get($term_id, MetaFields::ROBOTS_FOLLOW),
 			'canonical_url'   => self::get($term_id, MetaFields::CANONICAL_URL),
 			'og_title'        => self::get($term_id, MetaFields::OG_TITLE),
 			'og_description'  => self::get($term_id, MetaFields::OG_DESCRIPTION),
@@ -58,18 +58,19 @@ class TermFields
 			MetaFields::CANONICAL_URL   => ['type' => FieldProcessor::TYPE_URL],
 			MetaFields::OG_IMAGE        => ['type' => FieldProcessor::TYPE_INT],
 			MetaFields::X_IMAGE         => ['type' => FieldProcessor::TYPE_INT],
-			/* The term form always renders both robots selects, so an absent
-			   value legitimately means "back to the default". */
+			/* An absent or empty value means "Default": the term inherits the
+			   taxonomy setting from Title & Meta. The add-term form renders no
+			   robots selects, so new terms always start on the default. */
 			MetaFields::ROBOTS_INDEX    => [
 				'type'     => FieldProcessor::TYPE_SELECT,
-				'allowed'  => ['index', 'noindex'],
-				'fallback' => 'index',
+				'allowed'  => ['', 'index', 'noindex'],
+				'fallback' => '',
 				'always'   => true,
 			],
 			MetaFields::ROBOTS_FOLLOW   => [
 				'type'     => FieldProcessor::TYPE_SELECT,
-				'allowed'  => ['follow', 'nofollow'],
-				'fallback' => 'follow',
+				'allowed'  => ['', 'follow', 'nofollow'],
+				'fallback' => '',
 				'always'   => true,
 			],
 		];

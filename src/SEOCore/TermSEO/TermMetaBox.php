@@ -3,6 +3,8 @@
 namespace Mihdan\IndexNow\SEOCore\TermSEO;
 
 use Mihdan\IndexNow\SEOCore\MetaBox\MetaFields;
+use Mihdan\IndexNow\SEOCore\TitleMeta\Entities;
+use Mihdan\IndexNow\SEOCore\TitleMeta\FrontendOutput;
 
 /**
  * SEO fields on category / tag / custom taxonomy term screens.
@@ -43,7 +45,8 @@ class TermMetaBox
 
 	public function render_edit(\WP_Term $term): void
 	{
-		$data = TermFields::get_all((int) $term->term_id);
+		$data       = TermFields::get_all((int) $term->term_id);
+		$entity_key = Entities::taxonomy_key($term->taxonomy);
 		wp_nonce_field(MetaFields::NONCE_ACTION, MetaFields::NONCE_NAME);
 		?>
 		<tr class="form-field">
@@ -72,10 +75,12 @@ class TermMetaBox
 			<th scope="row"><?php esc_html_e('Robots', 'mihdan-index-now'); ?></th>
 			<td>
 				<select name="<?php echo esc_attr(MetaFields::ROBOTS_INDEX); ?>">
+					<option value="" <?php selected($data['robots_index'], ''); ?>><?php echo FrontendOutput::is_noindexed($entity_key) ? esc_html__('Default (noindex)', 'mihdan-index-now') : esc_html__('Default (index)', 'mihdan-index-now'); ?></option>
 					<option value="index" <?php selected($data['robots_index'], 'index'); ?>><?php esc_html_e('index', 'mihdan-index-now'); ?></option>
 					<option value="noindex" <?php selected($data['robots_index'], 'noindex'); ?>><?php esc_html_e('noindex', 'mihdan-index-now'); ?></option>
 				</select>
 				<select name="<?php echo esc_attr(MetaFields::ROBOTS_FOLLOW); ?>">
+					<option value="" <?php selected($data['robots_follow'], ''); ?>><?php echo FrontendOutput::is_nofollowed($entity_key) ? esc_html__('Default (nofollow)', 'mihdan-index-now') : esc_html__('Default (follow)', 'mihdan-index-now'); ?></option>
 					<option value="follow" <?php selected($data['robots_follow'], 'follow'); ?>><?php esc_html_e('follow', 'mihdan-index-now'); ?></option>
 					<option value="nofollow" <?php selected($data['robots_follow'], 'nofollow'); ?>><?php esc_html_e('nofollow', 'mihdan-index-now'); ?></option>
 				</select>

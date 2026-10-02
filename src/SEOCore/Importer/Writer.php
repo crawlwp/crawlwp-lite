@@ -308,9 +308,9 @@ class Writer
 	/**
 	 * Whether a single meta key may be written for this object.
 	 *
-	 * Saving the SEO metabox stores the default of every select field (e.g.
-	 * `index`, `follow`, `WebPage`), so a stored default counts as "not set"
-	 * rather than as a value the user chose.
+	 * Saving the SEO metabox stores the default of several select fields
+	 * (e.g. `large`, `summary_large_image`, `301`), so a stored default counts
+	 * as "not set" rather than as a value the user chose.
 	 */
 	private static function may_write(string $object_type, int $id, string $meta_key, bool $overwrite): bool
 	{

@@ -2,6 +2,9 @@
 
 namespace Mihdan\IndexNow\SEOCore\MetaBox;
 
+use Mihdan\IndexNow\SEOCore\TitleMeta\Entities;
+use Mihdan\IndexNow\SEOCore\TitleMeta\FrontendOutput;
+
 class MetaBox
 {
 	public function __construct()
@@ -14,10 +17,12 @@ class MetaBox
 	{
 		$post_types = get_post_types(['public' => true]);
 
-		$title = sprintf(
-			'<span class="cwp-mb-title-wrap">%s <span class="cwp-score"><span class="cwp-score-ring"><svg width="38" height="38" viewBox="0 0 38 38" aria-hidden="true"><circle class="cwp-track" cx="19" cy="19" r="16" fill="none" stroke-width="3.5"/><circle class="cwp-fill" cx="19" cy="19" r="16" fill="none" stroke-width="3.5" stroke-dasharray="0 100" pathLength="100"/></svg><span class="cwp-score-num">—</span></span></span></span>',
-			esc_html__('CrawlWP SEO', 'mihdan-index-now')
-		);
+		/*
+		 * Plain text only: the block editor lists this title verbatim under
+		 * Preferences > General > Advanced. The score ring is added to the
+		 * meta box header by crawlwp-metabox.js (decorateTitle).
+		 */
+		$title = esc_html__('CrawlWP SEO', 'mihdan-index-now');
 
 		$priority = 'product' === $post_type ? 'default' : 'high';
 
@@ -50,6 +55,15 @@ class MetaBox
 		$site_url  = home_url('/');
 		$permalink = get_permalink($post->ID);
 		$post_title = wp_specialchars_decode($post->post_title, ENT_QUOTES);
+
+		/* What the "Default" robots and schema options resolve to for this post type. */
+		$entity_key = Entities::post_type_key($post->post_type);
+		$inherited  = [
+			'noindex'      => FrontendOutput::is_noindexed($entity_key),
+			'nofollow'     => FrontendOutput::is_nofollowed($entity_key),
+			'page_type'    => FrontendOutput::default_schema_page_type($entity_key),
+			'article_type' => FrontendOutput::default_schema_article_type($entity_key, $post->post_type),
+		];
 
 		$og_image_url = '';
 		if (! empty($data['og_image'])) {

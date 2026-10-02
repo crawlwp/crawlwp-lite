@@ -46,6 +46,7 @@
 
       this.ctx = $('<canvas>')[0].getContext('2d');
 
+      this.decorateTitle();
       this.setupTokens();
       this.cacheElements();
       this.bindEventBus();
@@ -366,8 +367,9 @@
     updateSchemaPreview: function() {
       if (!this.$jsonPre.length) return;
 
-      var pageType    = (this.$pageType.length ? this.$pageType.val() : '') || 'WebPage';
-      var articleType = (this.$articleType.length ? this.$articleType.val() : '') || '';
+      // An empty value is "Default": use what the post type settings resolve to.
+      var pageType    = (this.$pageType.length ? (this.$pageType.val() || this.$pageType.data('default')) : '') || 'WebPage';
+      var articleType = (this.$articleType.length ? (this.$articleType.val() || this.$articleType.data('default')) : '') || '';
       var type        = (articleType && articleType !== 'none') ? articleType : pageType;
 
       if (!type || type === 'none') {
@@ -1648,6 +1650,23 @@
           $analysisDot.prop('hidden', true);
         }
       }
+    },
+
+    /* Add the score ring to the meta box header. The registered title is
+       plain text because the block editor lists it verbatim in Preferences. */
+    decorateTitle: function() {
+      var $heading = $('#crawlwp-seo-metabox').find('.hndle, .postbox-header h2').first();
+      if (!$heading.length || $heading.find('.cwp-mb-title-wrap').length) return;
+
+      var $wrap = $('<span class="cwp-mb-title-wrap"></span>').text($heading.text());
+      $wrap.append(
+        ' <span class="cwp-score"><span class="cwp-score-ring">' +
+        '<svg width="38" height="38" viewBox="0 0 38 38" aria-hidden="true">' +
+        '<circle class="cwp-track" cx="19" cy="19" r="16" fill="none" stroke-width="3.5"/>' +
+        '<circle class="cwp-fill" cx="19" cy="19" r="16" fill="none" stroke-width="3.5" stroke-dasharray="0 100" pathLength="100"/>' +
+        '</svg><span class="cwp-score-num">\u2014</span></span></span>'
+      );
+      $heading.empty().append($wrap);
     },
 
     updateScore: function(passed, total) {

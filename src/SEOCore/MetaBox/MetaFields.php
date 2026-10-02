@@ -125,18 +125,21 @@ class MetaFields
 	/**
 	 * Select fields => [allowed values, fallback stored when the submitted value is not allowed].
 	 * Must mirror the <option> values in views/metabox-template.php.
+	 *
+	 * An empty robots or schema value means "Default": the post inherits the
+	 * post type setting from Title & Meta at render time.
 	 */
 	private static function select_fields(): array
 	{
 		return [
-			self::ROBOTS_INDEX        => [['index', 'noindex'], 'index'],
-			self::ROBOTS_FOLLOW       => [['follow', 'nofollow'], 'follow'],
+			self::ROBOTS_INDEX        => [['', 'index', 'noindex'], ''],
+			self::ROBOTS_FOLLOW       => [['', 'follow', 'nofollow'], ''],
 			self::MAX_SNIPPET         => [['', 'none', '160'], ''],
 			self::MAX_IMAGE           => [['large', 'standard', 'none'], 'large'],
 			self::X_CARD_TYPE         => [['summary_large_image', 'summary'], 'summary_large_image'],
 			self::SCHEMA_TYPE         => [array_merge(self::$page_types, self::$article_types), ''],
-			self::SCHEMA_PAGE_TYPE    => [self::$page_types, 'WebPage'],
-			self::SCHEMA_ARTICLE_TYPE => [self::$article_types, 'Article'],
+			self::SCHEMA_PAGE_TYPE    => [array_merge([''], self::$page_types), ''],
+			self::SCHEMA_ARTICLE_TYPE => [array_merge([''], self::$article_types), ''],
 			self::REDIRECT_TYPE       => [['301', '302', '307', '410', '451'], '301'],
 		];
 	}
@@ -423,8 +426,8 @@ class MetaFields
 			'seo_title'           => self::get($post_id, self::SEO_TITLE),
 			'seo_description'     => self::get($post_id, self::SEO_DESCRIPTION),
 			'focus_keyword'       => self::get($post_id, self::FOCUS_KEYWORD),
-			'robots_index'        => self::get($post_id, self::ROBOTS_INDEX, 'index'),
-			'robots_follow'       => self::get($post_id, self::ROBOTS_FOLLOW, 'follow'),
+			'robots_index'        => self::get($post_id, self::ROBOTS_INDEX),
+			'robots_follow'       => self::get($post_id, self::ROBOTS_FOLLOW),
 			'robots_advanced'     => self::get($post_id, self::ROBOTS_ADVANCED, []),
 			'canonical_url'       => self::get($post_id, self::CANONICAL_URL),
 			'max_snippet'         => self::get($post_id, self::MAX_SNIPPET, ''),
@@ -440,8 +443,8 @@ class MetaFields
 			'x_card_type'         => self::get($post_id, self::X_CARD_TYPE, 'summary_large_image'),
 			'x_creator'           => self::get($post_id, self::X_CREATOR),
 			'x_sync'              => self::get($post_id, self::X_SYNC, '1'),
-			'schema_page_type'    => self::get($post_id, self::SCHEMA_PAGE_TYPE, 'WebPage'),
-			'schema_article_type' => self::get($post_id, self::SCHEMA_ARTICLE_TYPE, 'Article'),
+			'schema_page_type'    => self::get($post_id, self::SCHEMA_PAGE_TYPE),
+			'schema_article_type' => self::get($post_id, self::SCHEMA_ARTICLE_TYPE),
 			'schema_type'         => self::get($post_id, self::SCHEMA_TYPE, ''), // legacy
 			'schema_headline'     => self::get($post_id, self::SCHEMA_HEADLINE),
 			'schema_breadcrumb'   => self::get($post_id, self::SCHEMA_BREADCRUMB),

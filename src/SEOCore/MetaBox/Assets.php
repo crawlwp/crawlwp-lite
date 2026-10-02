@@ -3,6 +3,7 @@
 namespace Mihdan\IndexNow\SEOCore\MetaBox;
 
 use Mihdan\IndexNow\SEOCore\AI\Generator;
+use Mihdan\IndexNow\SEOCore\Breadcrumbs\BreadcrumbSettings;
 use Mihdan\IndexNow\SEOCore\TitleMeta\Variables;
 
 class Assets
@@ -757,10 +758,11 @@ class Assets
 			return [];
 		}
 
-		/* WordPress KSES-encodes literal "&" in term/site names when they are
-		 * saved (so "Computer & Internet" is stored as "Computer &amp; Internet").
-		 * Decode before sending to JS, otherwise the preview shows the raw entity. */
-		$crumbs = [wp_specialchars_decode(get_bloginfo('name'), ENT_QUOTES)];
+		/* WordPress KSES-encodes literal "&" in term names when they are saved
+		 * (so "Computer & Internet" is stored as "Computer &amp; Internet").
+		 * Decode before sending to JS, otherwise the preview shows the raw entity.
+		 * The first crumb matches the front end (Breadcrumbs::$args['label_home']). */
+		$crumbs = [wp_specialchars_decode((string) BreadcrumbSettings::get('label_home', __('Home', 'mihdan-index-now')), ENT_QUOTES)];
 
 		$terms = get_the_terms($post->ID, 'category');
 		if (! empty($terms) && ! is_wp_error($terms)) {

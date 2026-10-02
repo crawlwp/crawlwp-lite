@@ -336,15 +336,15 @@ class Elementor
 		$document->add_control(MetaFields::SCHEMA_PAGE_TYPE, [
 			'label'   => __('Page type', 'mihdan-index-now'),
 			'type'    => \Elementor\Controls_Manager::SELECT,
-			'options' => $page_types,
-			'default' => (string) MetaFields::get($post_id, MetaFields::SCHEMA_PAGE_TYPE, 'WebPage'),
+			'options' => ['' => __('Default', 'mihdan-index-now')] + $page_types,
+			'default' => (string) MetaFields::get($post_id, MetaFields::SCHEMA_PAGE_TYPE),
 		]);
 
 		$document->add_control(MetaFields::SCHEMA_ARTICLE_TYPE, [
 			'label'   => __('Article type', 'mihdan-index-now'),
 			'type'    => \Elementor\Controls_Manager::SELECT,
-			'options' => $article_types,
-			'default' => (string) MetaFields::get($post_id, MetaFields::SCHEMA_ARTICLE_TYPE, 'Article'),
+			'options' => ['' => __('Default', 'mihdan-index-now')] + $article_types,
+			'default' => (string) MetaFields::get($post_id, MetaFields::SCHEMA_ARTICLE_TYPE),
 		]);
 
 		$document->add_control(MetaFields::SCHEMA_HEADLINE, [
@@ -396,20 +396,22 @@ class Elementor
 			'label'   => __('Allow Indexing', 'mihdan-index-now'),
 			'type'    => \Elementor\Controls_Manager::SELECT,
 			'options' => [
+				''        => __('Default', 'mihdan-index-now'),
 				'index'   => __('Yes — index this post', 'mihdan-index-now'),
 				'noindex' => __('No — keep it out of search results', 'mihdan-index-now'),
 			],
-			'default' => (string) MetaFields::get($post_id, MetaFields::ROBOTS_INDEX, 'index'),
+			'default' => (string) MetaFields::get($post_id, MetaFields::ROBOTS_INDEX),
 		]);
 
 		$document->add_control(MetaFields::ROBOTS_FOLLOW, [
 			'label'   => __('Follow links', 'mihdan-index-now'),
 			'type'    => \Elementor\Controls_Manager::SELECT,
 			'options' => [
+				''         => __('Default', 'mihdan-index-now'),
 				'follow'   => __('Yes — follow links on this page', 'mihdan-index-now'),
 				'nofollow' => __('No — do not follow links on this page', 'mihdan-index-now'),
 			],
-			'default' => (string) MetaFields::get($post_id, MetaFields::ROBOTS_FOLLOW, 'follow'),
+			'default' => (string) MetaFields::get($post_id, MetaFields::ROBOTS_FOLLOW),
 		]);
 
 		$saved_robots_adv = MetaFields::get($post_id, MetaFields::ROBOTS_ADVANCED, []);

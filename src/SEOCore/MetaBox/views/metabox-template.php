@@ -412,7 +412,11 @@ $cwp_wc_var_items = static function () use ($cwp_is_product): void {
           <div class="cwp-label-row">
             <label class="cwp-label" for="cwpPageType"><?php esc_html_e('Page type', 'mihdan-index-now'); ?></label>
           </div>
-          <select class="cwp-select" id="cwpPageType" name="<?php echo esc_attr(MetaFields::SCHEMA_PAGE_TYPE); ?>">
+          <select class="cwp-select" id="cwpPageType" name="<?php echo esc_attr(MetaFields::SCHEMA_PAGE_TYPE); ?>" data-default="<?php echo esc_attr($inherited['page_type']); ?>">
+            <option value="" <?php selected($data['schema_page_type'], ''); ?>><?php
+              /* translators: %s: schema type inherited from the post type settings */
+              printf(esc_html__('Default (%s)', 'mihdan-index-now'), $inherited['page_type'] === 'none' ? esc_html__('None', 'mihdan-index-now') : esc_html($inherited['page_type']));
+            ?></option>
             <option value="WebPage" <?php selected($data['schema_page_type'], 'WebPage'); ?>><?php esc_html_e('Web Page', 'mihdan-index-now'); ?></option>
             <option value="ItemPage" <?php selected($data['schema_page_type'], 'ItemPage'); ?>><?php esc_html_e('Item Page', 'mihdan-index-now'); ?></option>
             <option value="AboutPage" <?php selected($data['schema_page_type'], 'AboutPage'); ?>><?php esc_html_e('About Page', 'mihdan-index-now'); ?></option>
@@ -431,7 +435,11 @@ $cwp_wc_var_items = static function () use ($cwp_is_product): void {
           <div class="cwp-label-row">
             <label class="cwp-label" for="cwpArticleType"><?php esc_html_e('Article type', 'mihdan-index-now'); ?></label>
           </div>
-          <select class="cwp-select" id="cwpArticleType" name="<?php echo esc_attr(MetaFields::SCHEMA_ARTICLE_TYPE); ?>">
+          <select class="cwp-select" id="cwpArticleType" name="<?php echo esc_attr(MetaFields::SCHEMA_ARTICLE_TYPE); ?>" data-default="<?php echo esc_attr($inherited['article_type']); ?>">
+            <option value="" <?php selected($data['schema_article_type'], ''); ?>><?php
+              /* translators: %s: schema type inherited from the post type settings */
+              printf(esc_html__('Default (%s)', 'mihdan-index-now'), $inherited['article_type'] === 'none' ? esc_html__('None', 'mihdan-index-now') : esc_html($inherited['article_type']));
+            ?></option>
             <option value="Article" <?php selected($data['schema_article_type'], 'Article'); ?>><?php esc_html_e('Article', 'mihdan-index-now'); ?></option>
             <option value="BlogPosting" <?php selected($data['schema_article_type'], 'BlogPosting'); ?>><?php esc_html_e('Blog Posting', 'mihdan-index-now'); ?></option>
             <option value="SocialMediaPosting" <?php selected($data['schema_article_type'], 'SocialMediaPosting'); ?>><?php esc_html_e('Social Media Posting', 'mihdan-index-now'); ?></option>
@@ -542,14 +550,16 @@ $cwp_wc_var_items = static function () use ($cwp_is_product): void {
         <div class="cwp-field">
           <div class="cwp-label-row"><label class="cwp-label" for="cwpIndex"><?php esc_html_e('Allow indexing', 'mihdan-index-now'); ?></label></div>
           <select class="cwp-select" id="cwpIndex" name="<?php echo esc_attr(MetaFields::ROBOTS_INDEX); ?>">
-            <option value="index" <?php selected($data['robots_index'], 'index'); ?>><?php esc_html_e('Yes — index this post (default)', 'mihdan-index-now'); ?></option>
+            <option value="" <?php selected($data['robots_index'], ''); ?>><?php echo $inherited['noindex'] ? esc_html__('Default (No)', 'mihdan-index-now') : esc_html__('Default (Yes)', 'mihdan-index-now'); ?></option>
+            <option value="index" <?php selected($data['robots_index'], 'index'); ?>><?php esc_html_e('Yes — index this post', 'mihdan-index-now'); ?></option>
             <option value="noindex" <?php selected($data['robots_index'], 'noindex'); ?>><?php esc_html_e('No — keep it out of search results', 'mihdan-index-now'); ?></option>
           </select>
         </div>
         <div class="cwp-field">
           <div class="cwp-label-row"><label class="cwp-label" for="cwpFollow"><?php esc_html_e('Follow links', 'mihdan-index-now'); ?></label></div>
           <select class="cwp-select" id="cwpFollow" name="<?php echo esc_attr(MetaFields::ROBOTS_FOLLOW); ?>">
-            <option value="follow" <?php selected($data['robots_follow'], 'follow'); ?>><?php esc_html_e('Yes — follow links on this post (default)', 'mihdan-index-now'); ?></option>
+            <option value="" <?php selected($data['robots_follow'], ''); ?>><?php echo $inherited['nofollow'] ? esc_html__('Default (No)', 'mihdan-index-now') : esc_html__('Default (Yes)', 'mihdan-index-now'); ?></option>
+            <option value="follow" <?php selected($data['robots_follow'], 'follow'); ?>><?php esc_html_e('Yes — follow links on this post', 'mihdan-index-now'); ?></option>
             <option value="nofollow" <?php selected($data['robots_follow'], 'nofollow'); ?>><?php esc_html_e('No — don\'t follow links', 'mihdan-index-now'); ?></option>
           </select>
         </div>

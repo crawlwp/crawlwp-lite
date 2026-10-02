@@ -734,6 +734,55 @@ class FrontendOutput
 	}
 
 	/**
+	 * Whether links on an entity screen are nofollowed by default.
+	 */
+	public static function is_nofollowed(string $entity_key, string $prefix = ''): bool
+	{
+		return self::directive_enabled($entity_key, $prefix, 'nofollow');
+	}
+
+	/**
+	 * The schema page type a post inherits when it has no per-post value.
+	 */
+	public static function default_schema_page_type(string $entity_key): string
+	{
+		$page_type = (string) Options::get($entity_key, 'schema_page_type', '');
+
+		return $page_type !== '' ? $page_type : 'WebPage';
+	}
+
+	/**
+	 * The schema article type a post inherits when it has no per-post value.
+	 */
+	public static function default_schema_article_type(string $entity_key, string $post_type): string
+	{
+		$article_type = (string) Options::get($entity_key, 'schema_article_type', '');
+
+		if ($article_type === '') {
+			/* Backwards compatibility with the single-select option that
+			 * used to be stored as `schema_type`. Page types all end in
+			 * "Page", so anything else is an article type. */
+			$legacy_option = (string) Options::get($entity_key, 'schema_type', '');
+
+			if ($legacy_option !== '' && $legacy_option !== 'none' && strpos($legacy_option, 'Page') === false) {
+				$article_type = $legacy_option;
+			}
+		}
+
+		if ($article_type === '') {
+			/* Only blog posts are articles by default; pages and other
+			 * post types fall back to their page type alone. */
+			$article_type = Entities::default_value(
+				$entity_key,
+				'schema_article_type',
+				$post_type === 'post' ? 'Article' : 'none'
+			);
+		}
+
+		return (string) $article_type;
+	}
+
+	/**
 	 * Whether a robots switch is enabled for an entity screen.
 	 *
 	 * Archive screens store their values under the `archive_` prefix. Every
@@ -1551,9 +1600,7 @@ class FrontendOutput
 		$page_type = (string) MetaFields::get($post->ID, MetaFields::SCHEMA_PAGE_TYPE, '');
 
 		if ($page_type === '') {
-			/* Fall back to global setting, then entity default. */
-			$global_page = (string) Options::get($data['entity'], 'schema_page_type', '');
-			$page_type   = $global_page !== '' ? $global_page : 'WebPage';
+			$page_type = self::default_schema_page_type($data['entity']);
 		}
 
 		if ($page_type === 'none') {
@@ -1571,28 +1618,7 @@ class FrontendOutput
 			if ($legacy !== '' && $legacy !== 'none' && strpos($legacy, 'Page') === false) {
 				$article_type = $legacy;
 			} else {
-				$article_type = (string) Options::get($data['entity'], 'schema_article_type', '');
-
-				if ($article_type === '') {
-					/* Backwards compatibility with the single-select option that
-					 * used to be stored as `schema_type`. Page types all end in
-					 * "Page", so anything else is an article type. */
-					$legacy_option = (string) Options::get($data['entity'], 'schema_type', '');
-
-					if ($legacy_option !== '' && $legacy_option !== 'none' && strpos($legacy_option, 'Page') === false) {
-						$article_type = $legacy_option;
-					}
-				}
-
-				if ($article_type === '') {
-					/* Only blog posts are articles by default; pages and other
-					 * post types fall back to their page type alone. */
-					$article_type = Entities::default_value(
-						$data['entity'],
-						'schema_article_type',
-						$post->post_type === 'post' ? 'Article' : 'none'
-					);
-				}
+				$article_type = self::default_schema_article_type($data['entity'], $post->post_type);
 			}
 		}
 

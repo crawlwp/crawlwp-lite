@@ -2,11 +2,13 @@
 
 namespace Mihdan\IndexNow;
 
+use Mihdan\IndexNow\SEOCore\MetaBox\MetaFields;
+
 class DBUpdates
 {
 	public static $instance;
 
-	const DB_VER = 3;
+	const DB_VER = 5;
 
 	public function init_options()
 	{
@@ -159,6 +161,42 @@ class DBUpdates
 
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 		dbDelta($sql);
+	}
+
+	/**
+	 * Reset the robots and schema values the SEO forms used to store on every
+	 * save to "Default" (empty), so posts and terms inherit the post type and
+	 * taxonomy settings from Title & Meta again.
+	 *
+	 * The old forms had no "Default" choice, so a stored `index`, `follow`,
+	 * `WebPage` or `Article` cannot be told apart from an untouched field.
+	 *
+	 * Numbered 5 because some development installs already report db_ver 4.
+	 */
+	public function update_routine_5()
+	{
+		global $wpdb;
+
+		$defaults = [
+			MetaFields::ROBOTS_INDEX        => 'index',
+			MetaFields::ROBOTS_FOLLOW       => 'follow',
+			MetaFields::SCHEMA_PAGE_TYPE    => 'WebPage',
+			MetaFields::SCHEMA_ARTICLE_TYPE => 'Article',
+		];
+
+		foreach ($defaults as $meta_key => $value) {
+			$wpdb->update($wpdb->postmeta, ['meta_value' => ''], ['meta_key' => $meta_key, 'meta_value' => $value]);
+		}
+
+		$wpdb->update($wpdb->termmeta, ['meta_value' => ''], ['meta_key' => MetaFields::ROBOTS_INDEX, 'meta_value' => 'index']);
+		$wpdb->update($wpdb->termmeta, ['meta_value' => ''], ['meta_key' => MetaFields::ROBOTS_FOLLOW, 'meta_value' => 'follow']);
+
+		if (function_exists('wp_cache_supports') && wp_cache_supports('flush_group')) {
+			wp_cache_flush_group('post_meta');
+			wp_cache_flush_group('term_meta');
+		} else {
+			wp_cache_flush();
+		}
 	}
 
 	public static function get_instance()
