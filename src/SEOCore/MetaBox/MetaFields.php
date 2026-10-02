@@ -141,6 +141,17 @@ class MetaFields
 		];
 	}
 
+	/**
+	 * The value the metabox stores for a select field when the user leaves it
+	 * untouched, or null when the key is not a select field.
+	 */
+	public static function select_default(string $key): ?string
+	{
+		$fields = self::select_fields();
+
+		return isset($fields[$key]) ? $fields[$key][1] : null;
+	}
+
 	private static array $robots_advanced_values = [
 		'noimageindex',
 		'noarchive',

@@ -126,15 +126,20 @@ class RankMath extends Source
 			}
 
 			foreach ($sources as $source) {
-				$from = is_array($source) ? (string) ($source['pattern'] ?? '') : (string) $source;
+				$from       = is_array($source) ? (string) ($source['pattern'] ?? '') : (string) $source;
+				$comparison = is_array($source) ? (string) ($source['comparison'] ?? 'exact') : 'exact';
+				$match      = [
+					'regex'    => 'regex',
+					'contains' => 'contains',
+					'start'    => 'starts_with',
+					'end'      => 'ends_with',
+				][$comparison] ?? 'exact';
 
-				if ($from === '' || $manager->exists_from_url($from)) {
+				if ($from === '' || $manager->exists_from_url($from, 0, $match)) {
 					$skipped++;
 					continue;
 				}
 
-				$comparison = is_array($source) ? (string) ($source['comparison'] ?? 'exact') : 'exact';
-				$match      = $comparison === 'regex' ? 'regex' : 'exact';
 				$type       = (int) ($row['header_code'] ?? 301);
 				$enabled    = (($row['status'] ?? 'active') === 'active') ? 1 : 0;
 
@@ -309,7 +314,7 @@ class RankMath extends Source
 			'fb_app_id'       => (string) ($titles['facebook_app_id'] ?? ''),
 		];
 
-		$card = (string) ($titles['twitter_card_type'] ?? '');
+		$card = $this->card_type((string) ($titles['twitter_card_type'] ?? ''));
 
 		if (in_array($card, ['summary', 'summary_large_image'], true)) {
 			$fields['twitter_card'] = $card;
@@ -324,6 +329,14 @@ class RankMath extends Source
 		return array_filter($fields, static function ($v) {
 			return $v !== '' && $v !== 0;
 		});
+	}
+
+	/**
+	 * Rank Math calls the small card `summary_card`.
+	 */
+	private function card_type(string $card): string
+	{
+		return $card === 'summary_card' ? 'summary' : $card;
 	}
 
 	/**
@@ -431,7 +444,7 @@ class RankMath extends Source
 			'x_image'             => $twitter_use_fb === 'on'
 				? ''
 				: ((string) $get($id, 'rank_math_twitter_image_id', true) ?: (string) $get($id, 'rank_math_twitter_image', true)),
-			'x_card_type'         => (string) $get($id, 'rank_math_twitter_card_type', true),
+			'x_card_type'         => $this->card_type((string) $get($id, 'rank_math_twitter_card_type', true)),
 			'max_image'           => (string) ($advanced['max-image-preview'] ?? ''),
 			'primary_category'    => (int) $get($id, 'rank_math_primary_category', true),
 			'cornerstone'         => (string) $get($id, 'rank_math_pillar_content', true),

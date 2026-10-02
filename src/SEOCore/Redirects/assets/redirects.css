@@ -128,6 +128,10 @@
 	letter-spacing: .02em;
 	border-bottom: 2px solid #dcdcde;
 	white-space: nowrap;
+	/* With table-layout: fixed a nowrap label wider than its column would
+	   otherwise spill over the next header. */
+	overflow: hidden;
+	text-overflow: ellipsis;
 }
 
 .cwp-redirect-table tfoot th {
@@ -148,7 +152,8 @@
 
 /* Column widths — scoped inside .cwp-redirect-table to outspecify WP's
    .form-table th { width: 200px } default.
-   Fixed columns + two 30% URL cols fit any container ≥ 550px. */
+   Narrow columns are sized to fit their bold 12px header label plus the
+   24px cell padding. Fixed columns + two 30% URL cols fit any container ≥ 700px. */
 .cwp-redirect-table .cwp-redirect-col-cb {
 	width: 36px;
 }
@@ -167,15 +172,15 @@
 }
 
 .cwp-redirect-table .cwp-redirect-col-hits {
-	width: 50px;
+	width: 64px;
 }
 
 .cwp-redirect-table .cwp-redirect-col-enable {
-	width: 60px;
+	width: 80px;
 }
 
 .cwp-redirect-table .cwp-redirect-col-actions {
-	width: 70px;
+	width: 90px;
 }
 
 /* URL display — truncate long URLs */

@@ -289,6 +289,13 @@
 			$('#cwpOtherSourcesList').slideUp(150);
 		});
 
+		// Leftover-data sources: the chosen radio is the source to import.
+		$('input[name="chosen_source"]').on('change', function () {
+			if (this.checked) {
+				$('#cwpWizardSource').val($(this).val());
+			}
+		});
+
 		// Deactivate Old Plugin
 		$('.cwp-deactivate-btn').on('click', function () {
 			var $btn = $(this);

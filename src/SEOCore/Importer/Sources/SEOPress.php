@@ -107,22 +107,23 @@ class SEOPress extends Source
 		foreach ($posts as $post) {
 			$to = (string) get_post_meta($post->ID, '_seopress_redirections_value', true);
 
-			$from = $post->post_title;
+			$from  = $post->post_title;
+			$regex = (string) get_post_meta($post->ID, '_seopress_redirections_enabled_regex', true);
+			$match = $regex !== '' ? 'regex' : 'exact';
 
-			if ($from === '' || $manager->exists_from_url($from)) {
+			if ($from === '' || $manager->exists_from_url($from, 0, $match)) {
 				$skipped++;
 				continue;
 			}
 
-			$type   = (int) get_post_meta($post->ID, '_seopress_redirections_type', true);
-			$regex  = (string) get_post_meta($post->ID, '_seopress_redirections_enabled_regex', true);
-			$on     = (string) get_post_meta($post->ID, '_seopress_redirections_enabled', true);
+			$type = (int) get_post_meta($post->ID, '_seopress_redirections_type', true);
+			$on   = (string) get_post_meta($post->ID, '_seopress_redirections_enabled', true);
 
 			$ok = $manager->insert([
 				'from_url'            => $from,
 				'to_url'              => $to,
 				'redirect_type'       => in_array($type, [301, 302, 307, 410, 451], true) ? $type : 301,
-				'match_type'          => $regex !== '' ? 'regex' : 'exact',
+				'match_type'          => $match,
 				'note'                => __('Imported from SEOPress', 'mihdan-index-now'),
 				'ignore_query_string' => 1,
 				'enabled'             => ($on !== '' && $post->post_status === 'publish') ? 1 : 0,
@@ -401,8 +402,12 @@ class SEOPress extends Source
 			$data['robots_advanced'] = $robots_advanced;
 		}
 
+		/*
+		 * A missing primary category is 0, which must not keep an otherwise
+		 * empty payload alive (it would be counted as skipped).
+		 */
 		return array_filter($data, static function ($v) {
-			return $v !== '' && $v !== null;
+			return $v !== '' && $v !== null && $v !== 0;
 		});
 	}
 

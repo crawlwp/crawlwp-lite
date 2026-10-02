@@ -694,7 +694,7 @@ $primary_active = !empty($active_sources) ? reset($active_sources) : (!empty($av
 										<?php
 										/* translators: %s: plugin name */
 										printf(
-											esc_html__('Running two SEO plugins at once output duplicate meta tags and confuse search engines. Since CrawlWP has imported your %s data, you can now safely deactivate it.', 'mihdan-index-now'),
+											esc_html__('Running two SEO plugins at once outputs duplicate meta tags and confuses search engines. Since CrawlWP has imported your %s data, you can now safely deactivate it.', 'mihdan-index-now'),
 											esc_html($active_src['label'])
 										);
 										?>

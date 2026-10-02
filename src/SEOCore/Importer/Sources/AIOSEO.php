@@ -155,9 +155,10 @@ class AIOSEO extends Source
 		$skipped  = 0;
 
 		foreach ($rows as $row) {
-			$from = (string) ($row['source_url'] ?? $row['from_url'] ?? '');
+			$from  = (string) ($row['source_url'] ?? $row['from_url'] ?? '');
+			$match = ! empty($row['regex']) ? 'regex' : 'exact';
 
-			if ($from === '' || $manager->exists_from_url($from)) {
+			if ($from === '' || $manager->exists_from_url($from, 0, $match)) {
 				$skipped++;
 				continue;
 			}
@@ -167,10 +168,10 @@ class AIOSEO extends Source
 				'from_url'            => $from,
 				'to_url'              => (string) ($row['target_url'] ?? ''),
 				'redirect_type'       => in_array($type, [301, 302, 307, 410, 451], true) ? $type : 301,
-				'match_type'          => ! empty($row['regex']) ? 'regex' : 'exact',
+				'match_type'          => $match,
 				'note'                => __('Imported from All in One SEO', 'mihdan-index-now'),
 				'ignore_query_string' => 1,
-				'enabled'             => empty($row['enabled']) ? 1 : (int) (bool) $row['enabled'],
+				'enabled'             => isset($row['enabled']) ? (int) (bool) $row['enabled'] : 1,
 			]);
 
 			$ok ? $imported++ : $skipped++;
@@ -212,10 +213,14 @@ class AIOSEO extends Source
 			$entities[ Entities::taxonomy_key($taxonomy->name) ] = $this->entity_fields($node);
 		}
 
-		$entities['author']    = $this->entity_fields($this->dig($dynamic, 'searchAppearance', 'archives', 'author'));
-		$entities['date']      = $this->entity_fields($this->dig($dynamic, 'searchAppearance', 'archives', 'date'));
-		$entities['search']    = $this->entity_fields($this->dig($dynamic, 'searchAppearance', 'archives', 'search'));
-		$entities['not_found'] = $this->entity_fields($this->dig($dynamic, 'searchAppearance', 'archives', 'notFound'));
+		/*
+		 * The author, date and search archives are static settings stored in
+		 * aioseo_options; the dynamic option only holds post-type archives.
+		 */
+		$entities['author']    = $this->entity_fields($this->dig($options, 'searchAppearance', 'archives', 'author'));
+		$entities['date']      = $this->entity_fields($this->dig($options, 'searchAppearance', 'archives', 'date'));
+		$entities['search']    = $this->entity_fields($this->dig($options, 'searchAppearance', 'archives', 'search'));
+		$entities['not_found'] = $this->entity_fields($this->dig($options, 'searchAppearance', 'archives', 'notFound'));
 
 		return array_filter([
 			'separator' => $this->separator((string) ($global['separator'] ?? '')),
@@ -273,18 +278,42 @@ class AIOSEO extends Source
 
 		$info = [
 			'site_type' => $is_person ? 'person' : 'organization',
-			'site_name' => (string) ($schema['organizationName'] ?? ''),
+			'site_name' => $this->site_name((string) ($schema['organizationName'] ?? '')),
 		];
 
-		$logo = absint($schema['organizationLogo'] ?? 0);
+		/*
+		 * AIOSEO stores the logo as an image URL; Writer::global_image_url()
+		 * accepts either a URL or an attachment ID.
+		 */
+		$logo = $schema['organizationLogo'] ?? '';
 
-		if ($logo > 0) {
+		if ((is_string($logo) || is_numeric($logo)) && $logo !== '' && $logo !== 0 && $logo !== '0') {
 			$info['logo'] = $logo;
 		}
 
 		return array_filter($info, static function ($v) {
 			return $v !== '' && $v !== 0;
 		});
+	}
+
+	/**
+	 * Resolve AIOSEO's `#site_title`/`#tagline` smart tags in the schema name,
+	 * which is output verbatim and does not support template tokens.
+	 */
+	private function site_name(string $name): string
+	{
+		$name = strtr($name, [
+			'#site_title' => (string) get_bloginfo('name'),
+			'#tagline'    => (string) get_bloginfo('description'),
+		]);
+
+		$name = trim($name);
+
+		/*
+		 * The site title is CrawlWP's fallback anyway, so it is not stored as a
+		 * hard-coded copy that would go stale when the site is renamed.
+		 */
+		return $name === (string) get_bloginfo('name') ? '' : $name;
 	}
 
 	/**

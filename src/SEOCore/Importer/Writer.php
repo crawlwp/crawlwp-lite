@@ -307,6 +307,10 @@ class Writer
 
 	/**
 	 * Whether a single meta key may be written for this object.
+	 *
+	 * Saving the SEO metabox stores the default of every select field (e.g.
+	 * `index`, `follow`, `WebPage`), so a stored default counts as "not set"
+	 * rather than as a value the user chose.
 	 */
 	private static function may_write(string $object_type, int $id, string $meta_key, bool $overwrite): bool
 	{
@@ -314,7 +318,15 @@ class Writer
 			return true;
 		}
 
-		return ! self::has_value(self::read_meta($object_type, $id, $meta_key));
+		$stored = self::read_meta($object_type, $id, $meta_key);
+
+		if (! self::has_value($stored)) {
+			return true;
+		}
+
+		$default = MetaFields::select_default($meta_key);
+
+		return $default !== null && $stored === $default;
 	}
 
 	/**

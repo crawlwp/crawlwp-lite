@@ -164,9 +164,10 @@ class Yoast extends Source
 				continue;
 			}
 
-			$from = (string) $row['origin'];
+			$from  = (string) $row['origin'];
+			$match = (($row['format'] ?? '') === 'regex') ? 'regex' : 'exact';
 
-			if ($manager->exists_from_url($from)) {
+			if ($manager->exists_from_url($from, 0, $match)) {
 				$skipped++;
 				continue;
 			}
@@ -176,7 +177,7 @@ class Yoast extends Source
 				'from_url'             => $from,
 				'to_url'               => (string) ($row['url'] ?? ''),
 				'redirect_type'        => in_array($type, [301, 302, 307, 410, 451], true) ? $type : 301,
-				'match_type'           => (($row['format'] ?? '') === 'regex') ? 'regex' : 'exact',
+				'match_type'           => $match,
 				'note'                 => __('Imported from Yoast SEO', 'mihdan-index-now'),
 				'ignore_query_string'  => 1,
 				'enabled'              => 1,
@@ -363,22 +364,22 @@ class Yoast extends Source
 	}
 
 	/**
-	 * Yoast stores the separator as a `sep-*` key.
+	 * Yoast stores the separator as an `sc-*` key (e.g. `sc-dash`).
 	 */
 	private function separator(string $stored): string
 	{
 		$map = [
-			'sep-dash'    => '-',
-			'sep-ndash'   => '–',
-			'sep-mdash'   => '—',
-			'sep-middot'  => '·',
-			'sep-bull'    => '•',
-			'sep-pipe'    => '|',
-			'sep-tilde'   => '~',
-			'sep-laquo'   => '«',
-			'sep-raquo'   => '»',
-			'sep-lt'      => '<',
-			'sep-gt'      => '>',
+			'sc-dash'   => '-',
+			'sc-ndash'  => '–',
+			'sc-mdash'  => '—',
+			'sc-middot' => '·',
+			'sc-bull'   => '•',
+			'sc-pipe'   => '|',
+			'sc-tilde'  => '~',
+			'sc-laquo'  => '«',
+			'sc-raquo'  => '»',
+			'sc-lt'     => '<',
+			'sc-gt'     => '>',
 		];
 
 		return $map[$stored] ?? '';

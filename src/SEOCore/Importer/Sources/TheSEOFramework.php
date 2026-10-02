@@ -8,6 +8,11 @@ use Mihdan\IndexNow\SEOCore\TitleMeta\Entities;
 
 class TheSEOFramework extends Source
 {
+	/**
+	 * @var array<string,mixed>|null
+	 */
+	private ?array $site_settings = null;
+
 	public function id(): string
 	{
 		return 'tsf';
@@ -69,7 +74,10 @@ class TheSEOFramework extends Source
 			}
 
 			$data = [
-				'title'       => $this->convert((string) ($meta['doctitle'] ?? $meta['title'] ?? '')),
+				'title'       => $this->with_site_title(
+					$this->convert((string) ($meta['doctitle'] ?? $meta['title'] ?? '')),
+					! empty($meta['title_no_blog_name'])
+				),
 				'description' => $this->convert((string) ($meta['description'] ?? '')),
 				'canonical'   => (string) ($meta['canonical'] ?? ''),
 				'og_image'    => (string) ($meta['social_image_url'] ?? ''),
@@ -225,6 +233,41 @@ class TheSEOFramework extends Source
 	}
 
 	/**
+	 * TSF appends the site title to custom titles at render time unless the
+	 * object opts out or "Remove site title" is on globally, so the addition is
+	 * written into the imported template to keep the output unchanged.
+	 */
+	private function with_site_title(string $title, bool $no_blogname): string
+	{
+		if ($title === '' || $no_blogname) {
+			return $title;
+		}
+
+		$settings = $this->site_settings();
+
+		if (! empty($settings['title_rem_additions'])) {
+			return $title;
+		}
+
+		return ($settings['title_location'] ?? 'right') === 'left'
+			? '{{ site.title }} {{ sep }} ' . $title
+			: $title . ' {{ sep }} {{ site.title }}';
+	}
+
+	/**
+	 * @return array<string,mixed>
+	 */
+	private function site_settings(): array
+	{
+		if ($this->site_settings === null) {
+			$settings            = get_option('autodescription-site-settings');
+			$this->site_settings = is_array($settings) ? $settings : [];
+		}
+
+		return $this->site_settings;
+	}
+
+	/**
 	 * TSF stores the separator by name.
 	 */
 	private function separator(string $stored): string
@@ -258,7 +301,10 @@ class TheSEOFramework extends Source
 		$nofollow = (int) get_post_meta($post_id, '_genesis_nofollow', true);
 
 		$data = [
-			'title'         => $this->convert((string) get_post_meta($post_id, '_genesis_title', true)),
+			'title'         => $this->with_site_title(
+				$this->convert((string) get_post_meta($post_id, '_genesis_title', true)),
+				(bool) get_post_meta($post_id, '_tsf_title_no_blogname', true)
+			),
 			'description'   => $this->convert((string) get_post_meta($post_id, '_genesis_description', true)),
 			'canonical'     => (string) get_post_meta($post_id, '_genesis_canonical_uri', true),
 			'og_image'      => (string) get_post_meta($post_id, '_social_image_id', true)

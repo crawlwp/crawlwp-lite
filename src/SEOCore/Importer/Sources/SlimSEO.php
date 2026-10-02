@@ -108,12 +108,6 @@ class SlimSEO extends Source
 			}
 
 			$from = (string) ($row['from'] ?? $row['from_url'] ?? '');
-
-			if ($from === '' || $manager->exists_from_url($from)) {
-				$skipped++;
-				continue;
-			}
-
 			$type = (int) ($row['type'] ?? $row['redirect_type'] ?? 301);
 			$cond = (string) ($row['condition'] ?? $row['match_type'] ?? 'exact');
 
@@ -123,6 +117,11 @@ class SlimSEO extends Source
 				$match = $cond;
 			} else {
 				$match = 'exact';
+			}
+
+			if ($from === '' || $manager->exists_from_url($from, 0, $match)) {
+				$skipped++;
+				continue;
 			}
 
 			$ok = $manager->insert([
@@ -161,15 +160,16 @@ class SlimSEO extends Source
 
 		$entities['home'] = $this->entity_fields($option['home'] ?? []);
 
-		$post_types = is_array($option['post_types'] ?? null) ? $option['post_types'] : [];
-		$taxonomies = is_array($option['taxonomies'] ?? null) ? $option['taxonomies'] : [];
-
+		/*
+		 * Slim SEO keys post-type and taxonomy templates by their name at the
+		 * top level of the option (e.g. `slim_seo['post']`, `slim_seo['category']`).
+		 */
 		foreach (Entities::post_types() as $post_type) {
-			$entities[ Entities::post_type_key($post_type->name) ] = $this->entity_fields($post_types[ $post_type->name ] ?? []);
+			$entities[ Entities::post_type_key($post_type->name) ] = $this->entity_fields($option[ $post_type->name ] ?? []);
 		}
 
 		foreach (Entities::taxonomies() as $taxonomy) {
-			$entities[ Entities::taxonomy_key($taxonomy->name) ] = $this->entity_fields($taxonomies[ $taxonomy->name ] ?? []);
+			$entities[ Entities::taxonomy_key($taxonomy->name) ] = $this->entity_fields($option[ $taxonomy->name ] ?? []);
 		}
 
 		$entities['author'] = $this->entity_fields($option['author'] ?? []);
