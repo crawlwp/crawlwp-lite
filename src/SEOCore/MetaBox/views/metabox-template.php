@@ -124,6 +124,19 @@ $cwp_wc_var_items = static function () use ($cwp_is_product): void {
 
     <div class="cwp-field">
       <div class="cwp-label-row">
+        <label class="cwp-label" for="cwpKeyword"><?php esc_html_e('Focus keywords', 'mihdan-index-now'); ?></label>
+        <span class="cwp-help" title="<?php esc_attr_e('Comma-separated. The first phrase is the primary keyword; additional phrases are secondary keywords.', 'mihdan-index-now'); ?>">?</span>
+      </div>
+      <input class="cwp-input" id="cwpKeyword" name="<?php echo esc_attr(MetaFields::FOCUS_KEYWORD); ?>" type="text" value="<?php echo esc_attr($data['focus_keyword']); ?>" placeholder="<?php esc_attr_e('primary keyword, secondary keyword', 'mihdan-index-now'); ?>">
+      <p class="cwp-hint"><?php esc_html_e('Separate secondary keywords with commas. Click each keyword tab below to inspect its individual score.', 'mihdan-index-now'); ?></p>
+      <div class="cwp-kw-warning" id="cwpKwWarning" style="display:none">
+        <svg width="13" height="13" viewBox="0 0 16 16"><path d="M8 1l7 14H1z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M8 6.5v3.5M8 12v.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        <span id="cwpKwWarningText"></span>
+      </div>
+    </div>
+
+    <div class="cwp-field">
+      <div class="cwp-label-row">
         <label class="cwp-label" for="cwpDesc"><?php esc_html_e('Meta description', 'mihdan-index-now'); ?></label>
         <span class="cwp-help" title="<?php esc_attr_e('The snippet under your title. Google may replace it with page text.', 'mihdan-index-now'); ?>">?</span>
         <span class="cwp-spacer"></span>
@@ -656,19 +669,6 @@ $cwp_wc_var_items = static function () use ($cwp_is_product): void {
 
   <!-- ANALYSIS -->
   <div class="cwp-panel" id="cwp-panel-analysis" role="tabpanel">
-    <div class="cwp-field">
-      <div class="cwp-label-row">
-        <label class="cwp-label" for="cwpKeyword"><?php esc_html_e('Focus keywords', 'mihdan-index-now'); ?></label>
-        <span class="cwp-help" title="<?php esc_attr_e('Comma-separated. The first phrase is the primary keyword; additional phrases are secondary keywords.', 'mihdan-index-now'); ?>">?</span>
-      </div>
-      <input class="cwp-input" id="cwpKeyword" name="<?php echo esc_attr(MetaFields::FOCUS_KEYWORD); ?>" type="text" value="<?php echo esc_attr($data['focus_keyword']); ?>" placeholder="<?php esc_attr_e('primary keyword, secondary keyword', 'mihdan-index-now'); ?>">
-      <p class="cwp-hint"><?php esc_html_e('Separate secondary keywords with commas. Click each keyword tab below to inspect its individual score.', 'mihdan-index-now'); ?></p>
-      <div class="cwp-kw-warning" id="cwpKwWarning" style="display:none">
-        <svg width="13" height="13" viewBox="0 0 16 16"><path d="M8 1l7 14H1z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M8 6.5v3.5M8 12v.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
-        <span id="cwpKwWarningText"></span>
-      </div>
-    </div>
-
     <div class="cwp-kw-tabs" id="cwpKwTabs" style="display:none" role="tablist"></div>
 
     <div class="cwp-notice" id="cwpAnalysisNotice">
