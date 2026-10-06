@@ -8,6 +8,7 @@ use Mihdan\IndexNow\SEOCore\SiteInfoSettings\SiteInfoSettings;
 use Mihdan\IndexNow\SEOCore\TitleMeta\Entities;
 use Mihdan\IndexNow\SEOCore\TitleMeta\Options;
 use Mihdan\IndexNow\SEOCore\TitleMeta\Variables;
+use Mihdan\IndexNow\Indexing;
 use Mihdan\IndexNow\Utils;
 
 class Wizard
@@ -336,7 +337,7 @@ class Wizard
 		}
 
 		$key     = Utils::generate_key();
-		$key_url = trailingslashit(Utils::normalized_home_url()) . $key . '.txt';
+		$key_url = Indexing::get_key_location($key);
 
 		wp_send_json_success([
 			'api_key' => $key,
@@ -437,15 +438,15 @@ class Wizard
 			update_option('crawlwp_index_now', $index_now_opts);
 		}
 
-		$current_engine       = $index_now_opts['search_engine'] ?? 'bing-index-now';
-		$ping_on_post         = ($general_opts['ping_on_post'] ?? 'on') === 'on';
-		$ping_on_post_updated = ($general_opts['ping_on_post_updated'] ?? 'on') === 'on';
+		$current_engine       = $index_now_opts['search_engine'] ?? Indexing::get_default('search_engine', 'index_now');
+		$ping_on_post         = ($general_opts['ping_on_post'] ?? Indexing::get_default('ping_on_post', 'general')) === 'on';
+		$ping_on_post_updated = ($general_opts['ping_on_post_updated'] ?? Indexing::get_default('ping_on_post_updated', 'general')) === 'on';
 
 		$sub_post_types = isset($general_opts['post_types']) && is_array($general_opts['post_types'])
 			? array_filter($general_opts['post_types'])
-			: ['post' => 'post', 'page' => 'page'];
+			: Indexing::get_default('post_types', 'general');
 
-		$key_location = trailingslashit(Utils::normalized_home_url()) . $api_key . '.txt';
+		$key_location = Indexing::get_key_location($api_key);
 
 		$search_engines = [
 			'bing-index-now'   => [

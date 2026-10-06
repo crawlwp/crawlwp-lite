@@ -88,7 +88,8 @@ class Log_List_Table extends WP_List_Table
 
 		$table_name = $this->logger->get_logger_table_name();
 
-		$order_by = sanitize_sql_orderby(" {$order_by} {$order} ");
+		// Tie-break on the ID so equal values (e.g. status codes) page deterministically.
+		$order_by = sanitize_sql_orderby("{$order_by} {$order}, log_id {$order}");
 
 		$from = ($cur_page - 1) * $per_page;
 
@@ -118,8 +119,10 @@ class Log_List_Table extends WP_List_Table
 
 		$cur_page = (int)$this->get_pagenum();
 
-		$orderby = 'created_at';
-		$order   = 'DESC';
+		$sortable = $this->get_sortable_columns();
+		$orderby  = isset($_REQUEST['orderby']) ? sanitize_key(wp_unslash($_REQUEST['orderby'])) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$orderby  = isset($sortable[$orderby]) ? $sortable[$orderby][0] : 'created_at';
+		$order    = isset($_REQUEST['order']) && strtolower(sanitize_key(wp_unslash($_REQUEST['order']))) === 'asc' ? 'ASC' : 'DESC'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 
 		$this->items = $this->get_items($per_page, $cur_page, $orderby, $order);
 	}
@@ -147,7 +150,11 @@ class Log_List_Table extends WP_List_Table
 	function get_sortable_columns()
 	{
 		return [
-			'status_code' => ['status_code', 'asc'],
+			'log_id'        => ['log_id', 'desc'],
+			'search_engine' => ['search_engine', 'asc'],
+			'level'         => ['level', 'asc'],
+			'status_code'   => ['status_code', 'asc'],
+			'created_at'    => ['created_at', 'desc'],
 		];
 	}
 
@@ -202,6 +209,16 @@ class Log_List_Table extends WP_List_Table
 			table.logs span.level--info,
 			table.logs span.level--debug {
 				background-color: #0f0;
+			}
+
+			table.logs span.level--warning {
+				background-color: #dba617;
+			}
+
+			/* Keep the absolutely positioned Screen Options tab clear of the top pagination. */
+			.toplevel_page_crawlwp .tablenav.top {
+				clear: both;
+				margin-top: 40px;
 			}
 		</style>
 		<?php

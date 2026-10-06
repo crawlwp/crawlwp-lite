@@ -240,7 +240,7 @@ class CoreSettings
 			'id' => $prefix . 'x_image',
 			'type' => 'image',
 			'name' => __('X/Twitter image', 'mihdan-index-now'),
-			'desc' => esc_html__('Used as twitter:image. Recommended size: 1200×600 px (2:1 ratio, 300–4096 px wide). Falls back to the OG image when empty.', 'mihdan-index-now') . $featured_note,
+			'desc' => esc_html__('Used as twitter:image. Recommended size: 1200×675 px (300–4096 px wide). Falls back to the OG image when empty.', 'mihdan-index-now') . $featured_note,
 		]);
 	}
 

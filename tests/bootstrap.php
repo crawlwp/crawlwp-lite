@@ -1501,6 +1501,31 @@ if (! function_exists('wc_string_to_timestamp')) {
 	}
 }
 
+if (!function_exists('get_post_type')) {
+	function get_post_type($post = null)
+	{
+		$post = get_post($post);
+
+		return $post ? $post->post_type : ($GLOBALS['crawlwp_test_state']['default_post_type'] ?? 'post');
+	}
+}
+
+if (!function_exists('wp_slash')) {
+	function wp_slash($value)
+	{
+		return is_array($value) ? array_map('wp_slash', $value) : (is_string($value) ? addslashes($value) : $value);
+	}
+}
+
+if (!function_exists('wp_get_post_parent_id')) {
+	function wp_get_post_parent_id($post = null)
+	{
+		$post = get_post($post);
+
+		return $post ? (int) $post->post_parent : false;
+	}
+}
+
 if (! class_exists('Elementor\Controls_Manager')) {
 	eval('namespace Elementor; class Controls_Manager {
 		public const TAB_SETTINGS = "settings";
@@ -1542,6 +1567,7 @@ if (! class_exists('CrawlWP_Mock_WPDB')) {
 		public string $postmeta = 'wp_postmeta';
 		public string $termmeta = 'wp_termmeta';
 		public string $usermeta = 'wp_usermeta';
+		public string $commentmeta = 'wp_commentmeta';
 		public string $sitemeta = 'wp_sitemeta';
 		public array $queries = [];
 

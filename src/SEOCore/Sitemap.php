@@ -44,6 +44,71 @@ class Sitemap
 		add_action('save_post', [$this, 'ensure_robots_index_meta'], 99, 2);
 		add_action('init', [$this, 'maybe_schedule_robots_backfill'], 30);
 		add_action(self::ROBOTS_BACKFILL_HOOK, [$this, 'run_robots_backfill_batch']);
+
+		/* 301 sitemap addresses left behind by other SEO plugins to the core index. */
+		add_action('template_redirect', [$this, 'redirect_legacy_sitemaps'], -1);
+	}
+
+	/**
+	 * Redirect sitemap URLs used by Yoast, Rank Math, AIOSEO and SEOPress
+	 * (/sitemap_index.xml, /sitemaps.xml, /post-sitemap.xml,
+	 * /sitemaps/post-sitemap1.xml, …) to the WordPress core sitemap index, so
+	 * search engines that still request them after a migration do not hit 404s.
+	 *
+	 * Only runs on a 404, when core sitemaps are enabled and no other SEO
+	 * plugin (which would serve those URLs itself) is active.
+	 */
+	public function redirect_legacy_sitemaps(): void
+	{
+		if (! is_404() || ! function_exists('wp_sitemaps_get_server')) {
+			return;
+		}
+
+		$path = (string) wp_parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH);
+
+		if ($path === '' || substr($path, -4) !== '.xml') {
+			return;
+		}
+
+		$home_path = rtrim((string) wp_parse_url(home_url(), PHP_URL_PATH), '/');
+
+		if ($home_path !== '' && strpos($path, $home_path . '/') !== 0) {
+			return;
+		}
+
+		$relative = ltrim(substr($path, strlen($home_path)), '/');
+
+		/* Never touch core's own wp-sitemap*.xml URLs (avoids a redirect loop). */
+		if (stripos($relative, 'wp-sitemap') === 0) {
+			return;
+		}
+
+		if (! preg_match('#^(?:sitemap_index\.xml|sitemaps\.xml|(?:sitemaps/)?[a-z0-9_-]+-sitemap\d*\.xml)$#i', $relative)) {
+			return;
+		}
+
+		$server = wp_sitemaps_get_server();
+
+		if (! $server || ! $server->sitemaps_enabled() || \Mihdan\IndexNow\SEOCore\Notifications\Notifications::get_active_conflicting_plugin() !== null) {
+			return;
+		}
+
+		$target = get_sitemap_url('index');
+
+		/**
+		 * Filters the URL legacy SEO-plugin sitemap addresses redirect to.
+		 *
+		 * @param string|false $target   Core sitemap index URL. Return false to disable.
+		 * @param string       $relative Requested path relative to the home URL.
+		 */
+		$target = apply_filters('crawlwp_legacy_sitemap_redirect', $target, $relative);
+
+		if (! is_string($target) || $target === '') {
+			return;
+		}
+
+		wp_safe_redirect($target, 301, 'CrawlWP');
+		exit;
 	}
 
 	// -------------------------------------------------------------------------
@@ -64,12 +129,20 @@ class Sitemap
 		}
 
 		foreach (array_keys($post_types) as $name) {
-			if (FrontendOutput::is_noindexed(Entities::post_type_key((string) $name))) {
+			if (self::is_post_type_hidden((string) $name)) {
 				unset($post_types[$name]);
 			}
 		}
 
 		return $post_types;
+	}
+
+	/**
+	 * Whether a post type is hidden from search results, and so from sitemaps.
+	 */
+	public static function is_post_type_hidden(string $post_type): bool
+	{
+		return FrontendOutput::is_noindexed(Entities::post_type_key($post_type));
 	}
 
 	/**
@@ -125,9 +198,38 @@ class Sitemap
 			return $args;
 		}
 
+		return self::exclude_hidden_posts($args);
+	}
+
+	/**
+	 * Add the sitemap exclusions to a posts query: password-protected posts,
+	 * posts marked noindex in the SEO metabox and posts excluded through the
+	 * `crawlwp_sitemap_excluded_post_ids` filter.
+	 *
+	 * The caller is responsible for skipping post types that are hidden as a
+	 * whole, see {@see self::is_post_type_hidden()}.
+	 *
+	 * @param array $args WP_Query arguments.
+	 */
+	public static function exclude_hidden_posts(array $args): array
+	{
 		$args['has_password'] = false;
 
-		$noindex_clause = $this->get_noindex_meta_clause();
+		/**
+		 * Filter the IDs of posts that are kept out of every sitemap.
+		 *
+		 * @param int[] $post_ids Post IDs.
+		 */
+		$excluded = array_filter(array_map('intval', (array) apply_filters('crawlwp_sitemap_excluded_post_ids', [])));
+
+		if ($excluded !== []) {
+			$args['post__not_in'] = array_values(array_unique(array_merge(
+				array_map('intval', (array) ($args['post__not_in'] ?? [])),
+				$excluded
+			)));
+		}
+
+		$noindex_clause = self::get_noindex_meta_clause();
 
 		if (! empty($args['meta_query']) && is_array($args['meta_query'])) {
 			/* Preserve any existing clauses and AND ours onto them. */
@@ -157,7 +259,7 @@ class Sitemap
 	 *
 	 * @return array
 	 */
-	private function get_noindex_meta_clause(): array
+	private static function get_noindex_meta_clause(): array
 	{
 		$indexed_clause = [
 			'key'     => MetaFields::ROBOTS_INDEX,

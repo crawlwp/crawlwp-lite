@@ -42,6 +42,7 @@ class FeatureGate
 		if (!self::is_enabled()) {
 			add_action('crawlwp_pre_setup_fields', [$this, 'register_menu'], -20);
 			add_action('admin_enqueue_scripts', [$this, 'enqueue_assets']);
+			add_action('admin_notices', [$this, 'features_off_notice']);
 
 			return;
 		}
@@ -51,6 +52,47 @@ class FeatureGate
 		if (is_admin() && Utils::_GET_var('wposa-menu') === self::OPTION_KEY) {
 			Utils::content_http_redirect(CRAWLWP_SETTINGS_URL);
 		}
+	}
+
+	/**
+	 * Tell admins why titles, meta tags and the other on-page SEO output are
+	 * missing (e.g. after upgrading from an indexing-only CrawlWP version) and
+	 * where to switch them on.
+	 *
+	 * Shown on the dashboard and CrawlWP screens; dismissible forever.
+	 */
+	public function features_off_notice(): void
+	{
+		$notice_id = 'crawlwp-seo-features-off-forever';
+
+		if (! current_user_can('manage_options')) {
+			return;
+		}
+
+		if (class_exists('\Mihdan\IndexNow\Dependencies\PAnD') && ! \Mihdan\IndexNow\Dependencies\PAnD::is_admin_notice_active($notice_id)) {
+			return;
+		}
+
+		$screen = function_exists('get_current_screen') ? get_current_screen() : null;
+
+		if (! $screen || ($screen->id !== 'dashboard' && strpos($screen->id, 'crawlwp') === false)) {
+			return;
+		}
+
+		/* Already on the screen that explains and enables the features. */
+		if (Utils::_GET_var('wposa-menu') === self::OPTION_KEY) {
+			return;
+		}
+
+		$url = add_query_arg(['wposa-menu' => self::OPTION_KEY], CRAWLWP_SETTINGS_URL);
+
+		printf(
+			'<div data-dismissible="%1$s" class="notice notice-info is-dismissible"><p>%2$s</p><p><a class="button button-primary" href="%3$s">%4$s</a></p></div>',
+			esc_attr($notice_id),
+			esc_html__('CrawlWP on-page SEO features (title & meta tags, Open Graph, schema, breadcrumbs, redirects, robots.txt editor and more) are currently turned off on this site, so CrawlWP is not outputting any SEO tags.', 'mihdan-index-now'),
+			esc_url($url),
+			esc_html__('Review and enable SEO features', 'mihdan-index-now')
+		);
 	}
 
 	/**

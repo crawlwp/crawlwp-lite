@@ -2,6 +2,9 @@
 
 namespace Mihdan\IndexNow\SEOCore\MetaBox;
 
+use Mihdan\IndexNow\SEOCore\TitleMeta\Entities;
+use Mihdan\IndexNow\SEOCore\TitleMeta\FrontendOutput;
+
 /**
  * Adds an "SEO" column to WordPress post list tables for all public post types.
  *
@@ -78,7 +81,7 @@ class PostListColumn
 	 *
 	 * @return string[]
 	 */
-	private function get_public_post_types(): array
+	private static function get_public_post_types(): array
 	{
 		$types = get_post_types(['public' => true], 'names');
 
@@ -141,10 +144,14 @@ class PostListColumn
 			return;
 		}
 
-		$cached = get_post_meta($post_id, MetaFields::SEO_SCORE, true);
-		$score  = ($cached !== '' && $cached !== false) ? (float) $cached : $this->calculate_score($post_id);
-		$state  = $this->score_state($score, $post_id);
-		$label  = $this->state_label($state, $score);
+		/* Round first so the number, colour and label always agree. */
+		$rounded = self::display_score($post_id);
+		$noindex = self::is_noindex($post_id);
+		$state   = $this->score_state($rounded, $noindex);
+		$label   = $this->state_label($state, $rounded);
+
+		/* Keep the sort key in step with what is displayed (e.g. after a settings change). */
+		self::refresh_sort_key($post_id, $rounded);
 
 		/* Store current SEO values in data attributes so Quick Edit JS can pre-fill the fields. */
 		$seo_title = (string) MetaFields::get($post_id, MetaFields::SEO_TITLE, '');
@@ -164,11 +171,12 @@ class PostListColumn
 		echo '</div>';
 
 		/* Overall score gauge. */
-		$rounded = (int) round($score);
 		/* translators: 1: score, 2: score label */
 		$score_aria = sprintf(__('CrawlWP SEO score: %1$d/100 — %2$s', 'mihdan-index-now'), $rounded, $label);
 
-		if ($state === 'noindex') {
+		if ($state === 'noindex' && (string) MetaFields::get($post_id, MetaFields::ROBOTS_INDEX, '') === '') {
+			$score_detail = __('This post inherits noindex from its post type defaults in Title & Meta, so the score is capped. Search engines are asked not to list it.', 'mihdan-index-now');
+		} elseif ($state === 'noindex') {
 			$score_detail = __('This post is set to noindex, so the score is capped. Search engines are asked not to list it.', 'mihdan-index-now');
 		} else {
 			$score_detail = __('Calculated by the CrawlWP SEO analysis (title, description, focus keyword, readability and more). Open the post to see the full checklist and improve it.', 'mihdan-index-now');
@@ -320,8 +328,16 @@ class PostListColumn
 		 * Bulk Editor's "missing title/description" filters can use an indexed
 		 * comparison. See MetaFields::ALWAYS_STORED.
 		 */
+		$changed = $seo_title !== (string) get_post_meta($post_id, MetaFields::SEO_TITLE, true)
+			|| $seo_desc !== (string) get_post_meta($post_id, MetaFields::SEO_DESCRIPTION, true);
+
 		MetaFields::save_optional($post_id, MetaFields::SEO_TITLE, $seo_title);
 		MetaFields::save_optional($post_id, MetaFields::SEO_DESCRIPTION, $seo_desc);
+
+		/* The stored editor score no longer reflects the new values; fall back to the estimate. */
+		if ($changed) {
+			delete_post_meta($post_id, MetaFields::SEO_SCORE);
+		}
 	}
 
 	// -------------------------------------------------------------------------
@@ -329,10 +345,14 @@ class PostListColumn
 	// -------------------------------------------------------------------------
 
 	/**
-	 * Calculate and persist the SEO score whenever a post is saved.
+	 * Persist the editor-calculated SEO score whenever the SEO metabox is saved.
 	 *
 	 * Runs at priority 20 on save_post so MetaFields::save() (priority 10)
 	 * has already written the fresh meta values.
+	 *
+	 * The stored score is only touched when the metabox score field was
+	 * actually submitted: Quick Edit, bulk edit, REST, WP-CLI, imports and
+	 * scheduled publishing all fire save_post too and must keep it.
 	 *
 	 * @param int $post_id
 	 */
@@ -343,38 +363,87 @@ class PostListColumn
 			return;
 		}
 
-		if (wp_is_post_revision($post_id)) {
+		if (wp_is_post_revision($post_id) || wp_is_post_autosave($post_id)) {
 			return;
 		}
 
-		/*
-		 * Only persist the JS-calculated score (richer analysis: keyword density,
-		 * readability, heading structure, etc.).  When the JS score is absent the
-		 * cached meta is deleted so the post list always shows a fresh PHP-computed
-		 * approximation rather than a stale value from a previous save.
-		 */
-		$submitted = isset($_POST[MetaFields::SEO_SCORE]) ? trim($_POST[MetaFields::SEO_SCORE]) : '';
-
-		if ($submitted !== '' && is_numeric($submitted)) {
-			/* Verify the metabox nonce — only our own form submissions carry this. */
-			$nonce = isset($_POST[MetaFields::NONCE_NAME]) ? $_POST[MetaFields::NONCE_NAME] : '';
-			if (! wp_verify_nonce($nonce, MetaFields::NONCE_ACTION)) {
-				return;
-			}
-
-			if (! current_user_can('edit_post', $post_id)) {
-				return;
-			}
-
-			$score = (float) $submitted;
-			// Clamp to [0, 100] so a tampered value can't break the display.
-			$score = max(0.0, min(100.0, $score));
-			update_post_meta($post_id, MetaFields::SEO_SCORE, (string) $score);
-		} else {
-			/* No JS score submitted — remove any stale cached value so the list
-			   always falls back to the live PHP approximation. */
-			delete_post_meta($post_id, MetaFields::SEO_SCORE);
+		if (! in_array(get_post_type($post_id), self::get_public_post_types(), true)) {
+			return;
 		}
+
+		if (
+			isset($_POST[MetaFields::SEO_SCORE], $_POST[MetaFields::NONCE_NAME]) &&
+			wp_verify_nonce(sanitize_key(wp_unslash($_POST[MetaFields::NONCE_NAME])), MetaFields::NONCE_ACTION) &&
+			current_user_can('edit_post', $post_id)
+		) {
+			$submitted = trim(sanitize_text_field(wp_unslash($_POST[MetaFields::SEO_SCORE])));
+
+			if ($submitted !== '' && is_numeric($submitted)) {
+				// Clamp to [0, 100] so a tampered value can't break the display.
+				$score = max(0.0, min(100.0, (float) $submitted));
+				update_post_meta($post_id, MetaFields::SEO_SCORE, (string) $score);
+			} else {
+				/* The analysis did not run: drop the old value so the estimate is shown. */
+				delete_post_meta($post_id, MetaFields::SEO_SCORE);
+			}
+		}
+
+		self::refresh_sort_key($post_id);
+	}
+
+	/**
+	 * Drop the stored editor score (e.g. after the SEO title/description were
+	 * changed outside the editor) so the post list falls back to the estimate.
+	 */
+	public static function invalidate_score(int $post_id): void
+	{
+		delete_post_meta($post_id, MetaFields::SEO_SCORE);
+		self::refresh_sort_key($post_id);
+	}
+
+	/**
+	 * The rounded score the post list displays: the stored editor score when
+	 * present, otherwise the estimate. Capped for noindex posts.
+	 */
+	public static function display_score(int $post_id): int
+	{
+		$stored = get_post_meta($post_id, MetaFields::SEO_SCORE, true);
+		$score  = is_numeric($stored) ? (float) $stored : self::calculate_score($post_id);
+
+		if (self::is_noindex($post_id)) {
+			$score = min($score, 10.0);
+		}
+
+		return (int) round($score);
+	}
+
+	/**
+	 * Store the displayed score so the column can be sorted by it.
+	 */
+	public static function refresh_sort_key(int $post_id, ?int $score = null): void
+	{
+		$value = (string) ($score ?? self::display_score($post_id));
+
+		if ((string) get_post_meta($post_id, MetaFields::SEO_SCORE_SORT, true) !== $value) {
+			update_post_meta($post_id, MetaFields::SEO_SCORE_SORT, $value);
+		}
+	}
+
+	/**
+	 * Whether the post is effectively noindex: the per-post robots value, or
+	 * the post type default from Title & Meta when the post uses "Default".
+	 */
+	private static function is_noindex(int $post_id): bool
+	{
+		$post_index = (string) MetaFields::get($post_id, MetaFields::ROBOTS_INDEX, '');
+
+		if ($post_index !== '') {
+			return $post_index === 'noindex';
+		}
+
+		$post_type = get_post_type($post_id);
+
+		return $post_type ? FrontendOutput::is_noindexed(Entities::post_type_key($post_type)) : false;
 	}
 
 	/**
@@ -417,12 +486,10 @@ class PostListColumn
 	 * @param int $post_id
 	 * @return float 0–100
 	 */
-	private function calculate_score(int $post_id): float
+	private static function calculate_score(int $post_id): float
 	{
 		/* Noindex: bail early with a low score. */
-		$robots_index = MetaFields::get($post_id, MetaFields::ROBOTS_INDEX, 'index');
-
-		if ($robots_index === 'noindex') {
+		if (self::is_noindex($post_id)) {
 			return 10.0;
 		}
 
@@ -430,8 +497,8 @@ class PostListColumn
 		$description = (string) MetaFields::get($post_id, MetaFields::SEO_DESCRIPTION, '');
 		$keyword     = (string) MetaFields::get($post_id, MetaFields::FOCUS_KEYWORD, '');
 
-		$title_score = $this->length_score(mb_strlen($title), self::TITLE_MIN, self::TITLE_MAX);
-		$desc_score  = $this->length_score(mb_strlen($description), self::DESC_MIN, self::DESC_MAX);
+		$title_score = self::length_score(mb_strlen($title), self::TITLE_MIN, self::TITLE_MAX);
+		$desc_score  = self::length_score(mb_strlen($description), self::DESC_MIN, self::DESC_MAX);
 		$kw_score    = ($keyword !== '') ? 100.0 : 0.0;
 
 		/* Weighted: title 40%, description 40%, keyword 20%. */
@@ -455,7 +522,7 @@ class PostListColumn
 	 * @param int $max     Maximum recommended length.
 	 * @return float 0–100
 	 */
-	private function length_score(int $length, int $min, int $max): float
+	private static function length_score(int $length, int $min, int $max): float
 	{
 		if ($length === 0) {
 			/*
@@ -485,16 +552,16 @@ class PostListColumn
 	/**
 	 * Map a numeric score to a named state.
 	 *
-	 * 'noindex' is driven by the robots meta the editor actually saved, not by
-	 * the score — a low score is 'poor', not 'noindex'.
+	 * 'noindex' is driven by the effective robots setting (per post, else the
+	 * post type default), not by the score — a low score is 'poor', not 'noindex'.
 	 *
-	 * @param float $score   0–100
-	 * @param int   $post_id Post to read the robots meta from.
+	 * @param int  $score   Rounded score, 0–100.
+	 * @param bool $noindex Whether the post is effectively noindex.
 	 * @return string  'good' | 'ok' | 'poor' | 'noindex'
 	 */
-	private function score_state(float $score, int $post_id): string
+	private function score_state(int $score, bool $noindex): string
 	{
-		if (MetaFields::get($post_id, MetaFields::ROBOTS_INDEX, 'index') === 'noindex') {
+		if ($noindex) {
 			return 'noindex';
 		}
 
@@ -550,8 +617,10 @@ class PostListColumn
 	/**
 	 * Allow sorting by the SEO score column.
 	 *
-	 * Sorts numerically on the persisted `_crawlwp_seo_score` meta. Posts that
-	 * have no stored score are NOT dropped from the list: the OR'd
+	 * Sorts numerically on the persisted sort key, which holds the number the
+	 * column displays (the editor score, else the estimate) and is refreshed on
+	 * save and whenever a row is rendered. Posts without a sort key yet (not
+	 * saved or listed since this was introduced) are NOT dropped: the OR'd
 	 * EXISTS / NOT EXISTS clauses make WP_Meta_Query LEFT JOIN, so every post
 	 * is returned. We order on the NOT EXISTS clause because its join is
 	 * restricted to our meta key (the EXISTS join is not, and would pick an
@@ -576,12 +645,12 @@ class PostListColumn
 		$score_query = [
 			'relation'           => 'OR',
 			'cwp_seo_score'      => [
-				'key'     => MetaFields::SEO_SCORE,
+				'key'     => MetaFields::SEO_SCORE_SORT,
 				'compare' => 'EXISTS',
 				'type'    => 'DECIMAL(6,2)',
 			],
 			'cwp_seo_score_none' => [
-				'key'     => MetaFields::SEO_SCORE,
+				'key'     => MetaFields::SEO_SCORE_SORT,
 				'compare' => 'NOT EXISTS',
 				'type'    => 'DECIMAL(6,2)',
 			],
@@ -626,14 +695,25 @@ class PostListColumn
 		?>
 		<style id="cwp-seo-score-styles">
 			/* SEO signal strip column — CrawlWP */
-			.wp-list-table .column-crawlwp_seo_score { width: 190px; }
+			.wp-list-table .column-crawlwp_seo_score { width: 140px; }
+
+			/*
+			 * The list table uses a fixed layout, so every px given to extra
+			 * columns comes out of the Title column. Narrow ours, and the core
+			 * taxonomy columns, on mid-size screens so Title stays readable.
+			 */
+			@media screen and (max-width: 1600px) {
+				.wp-list-table .column-crawlwp_seo_score { width: 118px; }
+				.wp-list-table .column-categories,
+				.wp-list-table .column-tags { width: 11%; }
+			}
 
 			.cwp-seobar {
 				display: flex;
 				flex-direction: column;
 				gap: 5px;
 				width: 100%;
-				max-width: 190px;
+				max-width: 140px;
 				cursor: default;
 			}
 

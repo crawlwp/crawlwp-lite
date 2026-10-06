@@ -109,14 +109,6 @@ class Graph
 			return;
 		}
 
-		if (is_singular()) {
-			$post = get_queried_object();
-
-			if ($post instanceof \WP_Post) {
-				self::add_nodes($this->nodes_for_post($post));
-			}
-		}
-
 		self::print_graph();
 	}
 
@@ -165,9 +157,15 @@ class Graph
 	}
 
 	/**
+	 * The custom JSON-LD nodes saved on a post.
+	 *
+	 * Added by {@see \Mihdan\IndexNow\SEOCore\TitleMeta\FrontendOutput}, which
+	 * skips them on noindexed pages and when the page type is "None". Text that
+	 * is not valid JSON is kept in the editor but never printed.
+	 *
 	 * @return array<int,array<string,mixed>>
 	 */
-	public function nodes_for_post(\WP_Post $post): array
+	public static function nodes_for_post(\WP_Post $post): array
 	{
 		$nodes = [];
 

@@ -29,7 +29,9 @@ class SettingsSidebarWizardTest extends TestCase
 		// Reset cached state
 		$ref = new \ReflectionClass(FeatureGate::class);
 		$prop = $ref->getProperty('cache');
-		$prop->setAccessible(true);
+		if (PHP_VERSION_ID < 80100) {
+			$prop->setAccessible(true);
+		}
 		$prop->setValue(null, true);
 
 		$_GET['wposa-menu'] = 'non_index_menu';
@@ -77,7 +79,9 @@ class SettingsSidebarWizardTest extends TestCase
 	{
 		$ref = new \ReflectionClass(FeatureGate::class);
 		$prop = $ref->getProperty('cache');
-		$prop->setAccessible(true);
+		if (PHP_VERSION_ID < 80100) {
+			$prop->setAccessible(true);
+		}
 		$prop->setValue(null, null);
 
 		// Case 1: Fresh install (crawlwp_index_now is empty, crawlwp_seo_features not set)

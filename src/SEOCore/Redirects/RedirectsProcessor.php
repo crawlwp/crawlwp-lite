@@ -561,6 +561,15 @@ class RedirectsProcessor
 		$matched = @preg_match($regex, $subject, $matches);
 		$error   = preg_last_error();
 
+		// Patterns anchored without a leading slash (e.g. "^recipes/2019/.*",
+		// as imported from Rank Math) can never match a subject that starts
+		// with "/" — retry against the subject without its leading slash.
+		if ($matched === 0 && $error === PREG_NO_ERROR && preg_match('#^\^(?![/\\\\])#', $pattern) && strpos($subject, '/') === 0) {
+			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			$matched = @preg_match($regex, ltrim($subject, '/'), $matches);
+			$error   = preg_last_error();
+		}
+
 		if ($previous_limit !== false) {
 			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.PHP.IniSet.Risky
 			@ini_set('pcre.backtrack_limit', (string) $previous_limit);
@@ -587,6 +596,12 @@ class RedirectsProcessor
 			return false;
 		}
 
+		// A capture that already ends (or starts) with "/" must not produce
+		// "//" in the destination path (e.g. "^/blog/(.*)$" → "/$1/").
+		if ($resolved !== $raw_to) {
+			$resolved = $this->collapse_path_slashes($resolved);
+		}
+
 		// A capture group must never be able to change the destination host
 		// (e.g. "http://$1" with a request of "/old/evil.com").
 		$raw_host      = (string) wp_parse_url($raw_to, PHP_URL_HOST);
@@ -599,6 +614,28 @@ class RedirectsProcessor
 		$to_url = $resolved;
 
 		return true;
+	}
+
+	/**
+	 * Collapse runs of "/" in the path portion of a URL, leaving the
+	 * "scheme://" separator, query string and fragment untouched.
+	 *
+	 * @param string $url Resolved destination.
+	 * @return string
+	 */
+	private function collapse_path_slashes(string $url): string
+	{
+		$prefix = '';
+
+		if (preg_match('#^([a-z][a-z0-9+.\-]*://[^/?\#]*)(.*)$#is', $url, $m)) {
+			$prefix = $m[1];
+			$url    = $m[2];
+		}
+
+		$parts = preg_split('/(?=[?#])/', $url, 2);
+		$path  = (string) preg_replace('#/{2,}#', '/', (string) $parts[0]);
+
+		return $prefix . $path . ($parts[1] ?? '');
 	}
 
 	/**

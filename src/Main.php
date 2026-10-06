@@ -18,7 +18,6 @@ use Mihdan\IndexNow\SEOCore\SEOCoreInit;
 use Mihdan\IndexNow\Views\Settings;
 use Mihdan\IndexNow\Views\UpsellAdminPages;
 use Mihdan\IndexNow\Views\WPOSA;
-use WP_Post;
 use WP_List_Table;
 use WP_Site;
 
@@ -142,21 +141,29 @@ class Main
 			add_action('wp_ajax_dismiss_admin_notice', ['\Mihdan\IndexNow\Dependencies\PAnD', 'dismiss_admin_notice']);
 		}
 
-		// Add last update column.
-		if ($this->wposa->get_option('show_last_update_column', 'general', 'on') === 'on') {
-			foreach ((array)$this->wposa->get_option('post_types', 'general', []) as $post_type) {
-				add_filter("manage_{$post_type}_posts_columns", [$this, 'add_last_update_column']);
-				add_action("manage_{$post_type}_posts_custom_column", [$this, 'add_last_update_column_content'], 10, 2);
-			}
-
-			add_action('admin_head', [$this, 'add_css_for_column']);
-		}
+		// Add last update column. Registered late so the filtered post types are used.
+		add_action('admin_init', [$this, 'register_last_update_column']);
 
 		register_activation_hook(CRAWLWP_FILE, [$this, 'activate_plugin']);
+		register_deactivation_hook(CRAWLWP_FILE, [$this, 'deactivate_plugin']);
 
 		// Multisite.
-		add_action('wp_delete_site', [$this, 'delete_site_tables']);
+		add_filter('wpmu_drop_tables', [$this, 'drop_site_tables'], 10, 2);
 		add_action('wp_insert_site', [$this, 'add_site_tables']);
+	}
+
+	public function register_last_update_column(): void
+	{
+		if ( ! Indexing::is_on('show_last_update_column', 'general')) {
+			return;
+		}
+
+		foreach (Indexing::get_post_types() as $post_type) {
+			add_filter("manage_{$post_type}_posts_columns", [$this, 'add_last_update_column']);
+			add_action("manage_{$post_type}_posts_custom_column", [$this, 'add_last_update_column_content'], 10, 2);
+		}
+
+		add_action('admin_head', [$this, 'add_css_for_column']);
 	}
 
 	public function removable_query_args($args = [])
@@ -169,17 +176,24 @@ class Main
 	}
 
 	/**
-	 * Delete site tables when deleting a site.
+	 * Drop the plugin tables together with the core tables when a site is deleted.
 	 *
-	 * @param WP_Site $old_site Site ID.
+	 * @param string[] $tables  Tables WordPress is about to drop.
+	 * @param int      $site_id Site ID.
 	 *
-	 * @return void
+	 * @return string[]
 	 */
-	public function delete_site_tables(WP_Site $old_site): void
+	public function drop_site_tables($tables, $site_id = 0): array
 	{
-		switch_to_blog($old_site->id);
-		$this->drop_tables();
-		restore_current_blog();
+		global $wpdb;
+
+		$prefix = $wpdb->get_blog_prefix((int)$site_id);
+
+		foreach (['crawlwp_log', 'crawlwp_redirects', 'crawlwp_404_log', 'index_now_log'] as $table) {
+			$tables[$table] = $prefix . $table;
+		}
+
+		return (array)$tables;
 	}
 
 	/**
@@ -227,7 +241,7 @@ class Main
 			return;
 		}
 
-		$last_update = (int)get_post_meta($post_id, Utils::get_plugin_prefix() . '_last_update', true);
+		$last_update = (int)get_post_meta($post_id, Indexing::LAST_UPDATE_META, true);
 
 		if ($last_update === 0) {
 			return;
@@ -258,17 +272,66 @@ class Main
 		global $wpdb;
 
 		if (is_multisite() && $network_wide) {
-			$sites = get_sites(['fields' => 'ids']);
-			foreach ($sites as $site_id) {
-				switch_to_blog($site_id);
+			$this->for_each_site(function () {
 				$this->create_tables();
 				$this->activate_site();
-				restore_current_blog();
-			}
+			});
 		} else {
 			$this->create_tables();
 			$this->activate_site();
 		}
+	}
+
+	/**
+	 * Fired on plugin deactivation: clear this plugin's scheduled events.
+	 */
+	public function deactivate_plugin($network_wide)
+	{
+		if (is_multisite() && $network_wide) {
+			$this->for_each_site([$this, 'clear_scheduled_events']);
+		} else {
+			$this->clear_scheduled_events();
+		}
+	}
+
+	public function clear_scheduled_events(): void
+	{
+		$bg_identifier = 'wp_' . get_current_blog_id() . '_crawlwp_bg_process';
+
+		$hooks = [
+			Cron::EVENT_NAME,
+			Hooks::DELAYED_POST_EVENT,
+			Hooks::DELAYED_TERM_EVENT,
+			'crawlwp_backfill_robots_index_meta',
+			'crawlwp_redirects_flush_hits',
+			'crawlwp_404_prune',
+			$bg_identifier . '_cron',
+			$bg_identifier . '_cron_custom_healthcheck',
+		];
+
+		foreach ($hooks as $hook) {
+			wp_unschedule_hook($hook);
+		}
+	}
+
+	/**
+	 * Run a callback on every site of the network, paging through them.
+	 */
+	private function for_each_site(callable $callback): void
+	{
+		$offset = 0;
+
+		do {
+			$site_ids = get_sites(['fields' => 'ids', 'number' => 100, 'offset' => $offset]);
+
+			foreach ($site_ids as $site_id) {
+				switch_to_blog($site_id);
+				$callback();
+				restore_current_blog();
+			}
+
+			$offset += 100;
+		} while (count($site_ids) === 100);
 	}
 
 	/**
@@ -283,16 +346,9 @@ class Main
 		FeatureGate::maybe_persist_default();
 		add_option(Notifications::KNOWN_POST_TYPES_KEY, Notifications::get_accessible_post_types(), '', false);
 
-		flush_rewrite_rules();
-	}
-
-	private function drop_tables()
-	{
-		global $wpdb;
-
-		$wpdb->query("DROP TABLE IF EXISTS {$wpdb->prefix}crawlwp_log");
-		// Legacy table name.
-		$wpdb->query("DROP TABLE IF EXISTS {$wpdb->prefix}index_now_log");
+		// Flushing here would store the rules of the request's own site (and,
+		// after switch_to_blog(), the wrong site); WordPress rebuilds them on the next load instead.
+		delete_option('rewrite_rules');
 	}
 
 	private function create_tables(bool $upgrade = false)
@@ -384,20 +440,5 @@ class Main
 	private function is_logging_enabled(): bool
 	{
 		return $this->wposa->get_option('enable', 'logs', 'on') === 'on';
-	}
-
-	/**
-	 * Google Webmaster ping.
-	 *
-	 * @param WP_Post $post WP_Post unstance.
-	 */
-	public function google_webmaster_ping(WP_Post $post)
-	{
-		$url = 'https://www.google.com/webmasters/sitemaps/ping?sitemap=%s';
-		$url = sprintf($url, site_url('sitemap_index.xml'));
-		wp_remote_get($url);
-
-		$url = sprintf($url, site_url('sitemap.xml'));
-		wp_remote_get($url);
 	}
 }

@@ -567,6 +567,18 @@ class Generator
 			}
 		}
 
+		// TranslatePress posts are written in its default language and
+		// translated on the fly, so the source text uses that language.
+		if (! defined('ICL_SITEPRESS_VERSION') && ! function_exists('pll_get_post_language') && class_exists('TRP_Translate_Press')) {
+			$trp          = \TRP_Translate_Press::get_trp_instance();
+			$trp_settings = is_object($trp) && method_exists($trp, 'get_component') ? $trp->get_component('settings') : null;
+			$trp_settings = is_object($trp_settings) && method_exists($trp_settings, 'get_settings') ? $trp_settings->get_settings() : [];
+
+			if (is_array($trp_settings) && ! empty($trp_settings['default-language']) && is_string($trp_settings['default-language'])) {
+				$locale = $trp_settings['default-language'];
+			}
+		}
+
 		$language = $locale;
 
 		// Send a human-readable name ("Brazilian Portuguese") rather than a

@@ -44,33 +44,59 @@
   margin-inline-start: auto;
 }
 
+/* Explicit colours + ID scope: Elementor 4.x styles panel buttons with a
+   dark --e-a-btn-bg and its own text colour/size rules, which left this
+   button as an empty dark box with an invisible label. */
+#elementor-panel .cwp-var-btn,
 .cwp-var-btn {
   appearance: none;
   -webkit-appearance: none;
-  border: 1px solid var(--e-a-border-color, #404349);
-  background: var(--e-a-btn-bg, rgba(255, 255, 255, 0.06));
+  border: 1px solid var(--e-a-border-color-bold, #d5d8dc);
+  background: var(--e-a-bg-default, #ffffff);
   border-radius: 4px;
   font-family: inherit;
   font-size: 11px;
   font-weight: 500;
-  color: var(--e-a-color-txt, #a4afb7);
+  color: var(--e-a-color-txt, #515962);
   padding: 3px 8px;
+  min-height: 0;
+  width: auto;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: 5px;
   line-height: 1.3;
+  text-indent: 0;
+  white-space: nowrap;
+  box-shadow: none;
   transition: all 0.15s ease;
 }
 
-.cwp-var-btn:hover {
-  border-color: var(--e-a-color-primary, #39b54a);
-  color: var(--e-a-color-txt-hover, #ffffff);
-  background: var(--e-a-btn-bg-hover, rgba(255, 255, 255, 0.12));
+#elementor-panel .cwp-var-btn span,
+.cwp-var-btn span {
+  display: inline;
+  font-size: 11px;
+  line-height: 1.3;
+  color: inherit;
+  visibility: visible;
+  opacity: 1;
 }
 
+#elementor-panel .cwp-var-btn:hover,
+#elementor-panel .cwp-var-btn:focus,
+.cwp-var-btn:hover,
+.cwp-var-btn:focus {
+  border-color: var(--e-a-color-primary-bold, #93003c);
+  color: var(--e-a-color-txt-accent, #0c0d0e);
+  background: var(--e-a-bg-hover, #f1f2f3);
+}
+
+#elementor-panel .cwp-var-btn svg,
 .cwp-var-btn svg {
   flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  fill: none;
 }
 
 .cwp-var-menu {

@@ -146,7 +146,7 @@ $primary_active = !empty($active_sources) ? reset($active_sources) : (!empty($av
 			<!-- STEP 2: IMPORT -->
 			<section class="cwp-wizard-panel <?php echo $current_step === 'import' ? 'is-active' : ''; ?>" id="cwp-step-import">
 				<div class="cwp-wizard-panel__head">
-					<span class="cwp-wizard-eyebrow"><?php esc_html_e('Step 1 of 4', 'mihdan-index-now'); ?></span>
+					<span class="cwp-wizard-eyebrow"><?php /* translators: 1: current step number, 2: total number of steps. */ echo esc_html(sprintf(__('Step %1$d of %2$d', 'mihdan-index-now'), 2, 6)); ?></span>
 					<h2><?php esc_html_e('Import from Existing SEO Plugin', 'mihdan-index-now'); ?></h2>
 					<p class="cwp-wizard-lead">
 						<?php esc_html_e(
@@ -331,7 +331,7 @@ $primary_active = !empty($active_sources) ? reset($active_sources) : (!empty($av
 			<!-- STEP 3: SITE INFO -->
 			<section class="cwp-wizard-panel <?php echo $current_step === 'site_info' ? 'is-active' : ''; ?>" id="cwp-step-site_info">
 				<div class="cwp-wizard-panel__head">
-					<span class="cwp-wizard-eyebrow"><?php esc_html_e('Step 2 of 4', 'mihdan-index-now'); ?></span>
+					<span class="cwp-wizard-eyebrow"><?php /* translators: 1: current step number, 2: total number of steps. */ echo esc_html(sprintf(__('Step %1$d of %2$d', 'mihdan-index-now'), 3, 6)); ?></span>
 					<h2><?php esc_html_e('Site Representation & Schema', 'mihdan-index-now'); ?></h2>
 					<p class="cwp-wizard-lead">
 						<?php esc_html_e(
@@ -407,7 +407,7 @@ $primary_active = !empty($active_sources) ? reset($active_sources) : (!empty($av
 			<!-- STEP 4: SEARCH APPEARANCE -->
 			<section class="cwp-wizard-panel <?php echo $current_step === 'search_appearance' ? 'is-active' : ''; ?>" id="cwp-step-search_appearance">
 				<div class="cwp-wizard-panel__head">
-					<span class="cwp-wizard-eyebrow"><?php esc_html_e('Step 3 of 4', 'mihdan-index-now'); ?></span>
+					<span class="cwp-wizard-eyebrow"><?php /* translators: 1: current step number, 2: total number of steps. */ echo esc_html(sprintf(__('Step %1$d of %2$d', 'mihdan-index-now'), 4, 6)); ?></span>
 					<h2><?php esc_html_e('Search Appearance & Indexing', 'mihdan-index-now'); ?></h2>
 					<p class="cwp-wizard-lead">
 						<?php esc_html_e(
@@ -497,7 +497,7 @@ $primary_active = !empty($active_sources) ? reset($active_sources) : (!empty($av
 			<!-- STEP 5: INDEXNOW SUBMISSION -->
 			<section class="cwp-wizard-panel <?php echo $current_step === 'index_now' ? 'is-active' : ''; ?>" id="cwp-step-index_now">
 				<div class="cwp-wizard-panel__head">
-					<span class="cwp-wizard-eyebrow"><?php esc_html_e('Step 4 of 4', 'mihdan-index-now'); ?></span>
+					<span class="cwp-wizard-eyebrow"><?php /* translators: 1: current step number, 2: total number of steps. */ echo esc_html(sprintf(__('Step %1$d of %2$d', 'mihdan-index-now'), 5, 6)); ?></span>
 					<h2><?php esc_html_e('Instant Index Submission via IndexNow', 'mihdan-index-now'); ?></h2>
 					<p class="cwp-wizard-lead">
 						<?php esc_html_e(

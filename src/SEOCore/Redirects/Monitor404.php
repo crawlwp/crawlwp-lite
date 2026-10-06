@@ -68,12 +68,18 @@ class Monitor404
 
 		$uri = isset($_SERVER['REQUEST_URI']) ? esc_url_raw(wp_unslash($_SERVER['REQUEST_URI'])) : '';
 
-		if ($uri === '' || preg_match('#\.(css|js|map|png|jpe?g|gif|svg|webp|ico|woff2?|ttf|eot|mp4|zip)$#i', $uri)) {
+		if ($uri === '') {
 			return;
 		}
 
 		$path = (string) (wp_parse_url($uri, PHP_URL_PATH) ?: $uri);
 		$path = '/' . ltrim($path, '/');
+
+		// Test the extension against the path only — a query string such as
+		// "style.css?ver=1.2" would otherwise defeat the "$" anchor.
+		if (preg_match('#\.(css|js|map|png|jpe?g|gif|svg|webp|ico|woff2?|ttf|eot|mp4|zip)$#i', $path)) {
+			return;
+		}
 		$path = substr($path, 0, 2048);
 
 		$referer = isset($_SERVER['HTTP_REFERER']) ? esc_url_raw(wp_unslash($_SERVER['HTTP_REFERER'])) : '';

@@ -135,6 +135,9 @@ class Assets
 		$archive     = isset($defs['archive'])     ? [$defs['archive']]     : [];
 		$woocommerce = isset($defs['woocommerce']) ? [$defs['woocommerce']] : [];
 
+		/* Groups added through the `crawlwp_title_meta_variables` filter apply everywhere. */
+		$extra = array_values(array_diff_key($defs, array_flip(['general', 'post', 'term', 'author', 'archive', 'woocommerce'])));
+
 		$map = [];
 
 		/* Homepage: site-level tokens only */
@@ -173,6 +176,14 @@ class Assets
 		/* 404: no dynamic tokens, just general */
 		$map['not_found'] = $this->format_variables($general);
 
+		if ($extra !== []) {
+			$extra_items = $this->format_variables($extra);
+
+			foreach ($map as $key => $groups) {
+				$map[$key] = array_merge($groups, $extra_items);
+			}
+		}
+
 		return $map;
 	}
 
@@ -187,6 +198,10 @@ class Assets
 		$out = [];
 
 		foreach ($groups as $group) {
+			if (empty($group['variables']) || ! is_array($group['variables'])) {
+				continue;
+			}
+
 			$items = [];
 
 			foreach ($group['variables'] as $token => $description) {
@@ -197,7 +212,7 @@ class Assets
 			}
 
 			$out[] = [
-				'label' => $group['label'],
+				'label' => (string) ($group['label'] ?? ''),
 				'items' => $items,
 			];
 		}

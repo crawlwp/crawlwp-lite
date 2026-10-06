@@ -7,6 +7,7 @@
 
 namespace Mihdan\IndexNow\Views;
 
+use Mihdan\IndexNow\Indexing;
 use Mihdan\IndexNow\Logger\Logger;
 use Mihdan\IndexNow\SEOCore\FeatureGate\FeatureGate;
 use Mihdan\IndexNow\SEOCore\Wizard\Wizard;
@@ -247,7 +248,7 @@ class Settings
 					'type'    => 'multicheck',
 					'name'    => __('Post Types', 'mihdan-index-now'),
 					'options' => $this->get_post_types(),
-					'default' => ['post' => 'post'],
+					'default' => Indexing::get_default('post_types', 'general'),
 					'desc'    => esc_html__('Select the custom post types that can be submitted to Search Engines for indexing.', 'mihdan-index-now')
 				)
 			);
@@ -259,7 +260,7 @@ class Settings
 					'type'    => 'multicheck',
 					'name'    => __('Taxonomies', 'mihdan-index-now'),
 					'options' => $this->get_taxonomies(),
-					'default' => ['category' => 'category'],
+					'default' => Indexing::get_default('taxonomies', 'general'),
 					'desc'    => esc_html__('Select the taxonomies that can be submitted to Search Engines for indexing.', 'mihdan-index-now')
 				)
 			);
@@ -279,7 +280,7 @@ class Settings
 					'id'      => 'ping_on_post',
 					'type'    => 'switch',
 					'name'    => __('Post added', 'mihdan-index-now'),
-					'default' => 'on',
+					'default' => Indexing::get_default('ping_on_post', 'general'),
 				)
 			);
 
@@ -289,16 +290,28 @@ class Settings
 					'id'      => 'ping_on_post_updated',
 					'type'    => 'switch',
 					'name'    => __('Post updated', 'mihdan-index-now'),
-					'default' => 'off',
+					'default' => Indexing::get_default('ping_on_post_updated', 'general'),
 				)
 			);
 
 			$this->wposa->add_field(
 				'general',
 				array(
-					'id'   => 'ping_on_term',
-					'type' => 'switch',
-					'name' => __('Term added', 'mihdan-index-now'),
+					'id'      => 'ping_on_term',
+					'type'    => 'switch',
+					'name'    => __('Term added or updated', 'mihdan-index-now'),
+					'default' => Indexing::get_default('ping_on_term', 'general'),
+				)
+			);
+
+			$this->wposa->add_field(
+				'general',
+				array(
+					'id'      => 'ping_on_comment',
+					'type'    => 'switch',
+					'name'    => __('Comment approved', 'mihdan-index-now'),
+					'desc'    => esc_html__('Resubmit the post to IndexNow when one of its comments is approved.', 'mihdan-index-now'),
+					'default' => Indexing::get_default('ping_on_comment', 'general'),
 				)
 			);
 
@@ -308,7 +321,7 @@ class Settings
 					'id'      => 'disable_for_bulk_edit',
 					'type'    => 'switch',
 					'name'    => __('Disable for Bulk Edit', 'mihdan-index-now'),
-					'default' => 'on',
+					'default' => Indexing::get_default('disable_for_bulk_edit', 'general'),
 				)
 			);
 
@@ -318,7 +331,7 @@ class Settings
 					'id'      => 'show_last_update_column',
 					'type'    => 'switch',
 					'name'    => __('Show last update column', 'mihdan-index-now'),
-					'default' => 'on',
+					'default' => Indexing::get_default('show_last_update_column', 'general'),
 				)
 			);
 
@@ -328,7 +341,8 @@ class Settings
 					'id'      => 'ping_delay',
 					'type'    => 'select',
 					'name'    => __('Ping Delay', 'mihdan-index-now'),
-					'desc'    => __('Delay between notifications for a single URL', 'mihdan-index-now'),
+					'desc'    => __('Minimum time between submissions of a single URL. Changes saved within this window are submitted when it ends.', 'mihdan-index-now'),
+					'default' => Indexing::get_default('ping_delay', 'general'),
 					'options' => [
 						60   => __('1 minute', 'mihdan-index-now'),
 						120  => __('2 minutes', 'mihdan-index-now'),
@@ -356,7 +370,7 @@ class Settings
 					'id'      => 'enable',
 					'type'    => 'switch',
 					'name'    => __('Enable', 'mihdan-index-now'),
-					'default' => 'on',
+					'default' => Indexing::get_default('enable', 'index_now'),
 				)
 			);
 
@@ -378,7 +392,7 @@ class Settings
 					'id'       => 'search_engine',
 					'type'     => 'radio',
 					'name'     => __('Search Engine', 'mihdan-index-now'),
-					'default'  => 'bing-index-now',
+					'default'  => Indexing::get_default('search_engine', 'index_now'),
 					'help_tab' => 'https://crawlwp.com/article/setting-up-search-engine-indexing-for-wordpress/?utm_source=wp_dashboard&utm_medium=indexing_settings_page&utm_campaign=indexnow#wordpress-indexing-via-indexnow',
 					'desc'     => __('You only need to select one search engine because with the IndexNow protocol, the selected one will notify the others.', 'mihdan-index-now'),
 					'options'  => [
@@ -406,7 +420,7 @@ class Settings
 					array(
 						'type' => 'html',
 						'desc' => sprintf(
-							'<div class="notice notice-warning inline"><p>' . __('This setting will not work  because Bing API is not configured. Go to %sAPI Settings%s to set it up.', 'mihdan-index-now') . '</p></div>',
+							'<div class="notice notice-warning inline"><p>' . __('This setting will not work because Bing API is not configured. Go to %sAPI Settings%s to set it up.', 'mihdan-index-now') . '</p></div>',
 							'<a target="_blank" href="' . CRAWLWP_API_SETTINGS_URL . '">', '</a>'
 						),
 					)
@@ -437,7 +451,7 @@ class Settings
 					array(
 						'type' => 'html',
 						'desc' => sprintf(
-							'<div class="notice notice-warning inline"><p>' . __('This setting will not work  because Google API is not configured. Go to %sAPI Settings%s to set it up.', 'mihdan-index-now') . '</p></div>',
+							'<div class="notice notice-warning inline"><p>' . __('This setting will not work because Google API is not configured. Go to %sAPI Settings%s to set it up.', 'mihdan-index-now') . '</p></div>',
 							'<a target="_blank" href="' . CRAWLWP_API_SETTINGS_URL . '">', '</a>'
 						),
 					)
@@ -468,7 +482,7 @@ class Settings
 					array(
 						'type' => 'html',
 						'desc' => sprintf(
-							'<div class="notice notice-warning inline"><p>' . __('This setting will not work  because Yandex API is not configured. Go to %sAPI Settings%s to set it up.', 'mihdan-index-now') . '</p></div>',
+							'<div class="notice notice-warning inline"><p>' . __('This setting will not work because Yandex API is not configured. Go to %sAPI Settings%s to set it up.', 'mihdan-index-now') . '</p></div>',
 							'<a target="_blank" href="' . CRAWLWP_API_SETTINGS_URL . '">', '</a>'
 						),
 					)
@@ -520,7 +534,8 @@ class Settings
 					'id'      => 'outgoing_requests',
 					'type'    => 'switch',
 					'name'    => __('Outgoing requests', 'mihdan-index-now'),
-					'default' => 'on',
+					'desc'    => esc_html__('Log successful submissions and other outgoing API requests. Failed and skipped submissions are always logged.', 'mihdan-index-now'),
+					'default' => Indexing::get_default('outgoing_requests', 'logs'),
 				)
 			);
 

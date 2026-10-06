@@ -2,12 +2,14 @@
 
 namespace Mihdan\IndexNow\Providers\Bing;
 
+use Mihdan\IndexNow\Indexing;
 use Mihdan\IndexNow\WebmasterAbstract;
 use Mihdan\IndexNow\Utils;
 
 class BingWebmaster extends WebmasterAbstract
 {
 	private const RECRAWL_ENDPOINT = 'https://ssl.bing.com/webmaster/api.svc/json/SubmitUrlbatch?apikey=%s';
+	private const RATE_LIMIT_OPTION = 'crawlwp_bing_indexing_rate_limit_expiration';
 
 	public function get_ping_endpoint(): string
 	{
@@ -55,11 +57,13 @@ class BingWebmaster extends WebmasterAbstract
 
 		if (empty($token)) return;
 
-		if (time() < (int)get_option('crawlwp_bing_indexing_rate_limit_expiration', 0)) return;
-
-		$url = sprintf($this->get_ping_endpoint(), $token);
+		if (Indexing::get_post_skip_reason($post_id) !== '') return;
 
 		$post_url = Utils::normalized_get_permalink($post_id);
+
+		if ($this->is_paused(self::RATE_LIMIT_OPTION, $post_url)) return;
+
+		$url = sprintf($this->get_ping_endpoint(), $token);
 
 		$args = array(
 			'timeout' => 30,
@@ -76,27 +80,36 @@ class BingWebmaster extends WebmasterAbstract
 			),
 		);
 
-		$response    = wp_remote_post($url, $args);
-		$status_code = wp_remote_retrieve_response_code($response);
-		$body        = json_decode(wp_remote_retrieve_body($response), true);
+		$response = wp_remote_post($url, $args);
 
-		if ($status_code >= 400 && $status_code < 500) {
-			update_option('crawlwp_bing_indexing_rate_limit_expiration', time() + (6 * HOUR_IN_SECONDS));
+		if (is_wp_error($response)) {
+			$this->log_submission($post_url, get_the_title($post_id), 0, $response->get_error_message());
+
+			return;
 		}
 
-		$data = [
-			'status_code'   => $status_code,
-			'search_engine' => $this->get_slug(),
-		];
+		$status_code = (int)wp_remote_retrieve_response_code($response);
+		$body        = json_decode(wp_remote_retrieve_body($response), true);
+		$error       = is_array($body) ? (string)($body['Message'] ?? '') : '';
+
+		if ($error === '' && ! Utils::is_response_code_success($status_code)) {
+			$error = (string)wp_remote_retrieve_response_message($response);
+		}
+
+		// Bing reports an exhausted daily quota as a 400 with a quota message or a throttle error code.
+		if (
+			$status_code === 429 ||
+			in_array((int)($body['ErrorCode'] ?? 0), [4, 5], true) ||
+			stripos($error, 'quota') !== false
+		) {
+			update_option(self::RATE_LIMIT_OPTION, time() + (6 * HOUR_IN_SECONDS), false);
+		}
+
+		$this->log_submission($post_url, get_the_title($post_id), $status_code, $error);
 
 		if (Utils::is_response_code_success($status_code)) {
-			$message = sprintf('<a href="%s" target="_blank">%s</a> - OK', $post_url, get_the_title($post_id));
-			$this->logger->info($message, $data);
-		} else {
-			$this->logger->error($body['Message'] ?? '', $data);
+			do_action('crawlwp/index_pinged', 'post', $post_id);
 		}
-
-		do_action('crawlwp/index_pinged', 'post', $post_id);
 	}
 
 	public function get_quota(): array

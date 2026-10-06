@@ -1,0 +1,61 @@
+<wpml-config>
+	<custom-fields>
+		<!-- Text written per language. -->
+		<custom-field action="translate">_crawlwp_seo_title</custom-field>
+		<custom-field action="translate">_crawlwp_seo_description</custom-field>
+		<custom-field action="translate">_crawlwp_focus_keyword</custom-field>
+		<custom-field action="translate">_crawlwp_og_title</custom-field>
+		<custom-field action="translate">_crawlwp_og_description</custom-field>
+		<custom-field action="translate">_crawlwp_og_image_alt</custom-field>
+		<custom-field action="translate">_crawlwp_x_title</custom-field>
+		<custom-field action="translate">_crawlwp_x_description</custom-field>
+		<custom-field action="translate">_crawlwp_schema_headline</custom-field>
+		<custom-field action="translate">_crawlwp_schema_breadcrumb</custom-field>
+		<custom-field action="translate">_crawlwp_schema_section</custom-field>
+
+		<!-- Settings shared by every translation. -->
+		<custom-field action="copy">_crawlwp_robots_index</custom-field>
+		<custom-field action="copy">_crawlwp_robots_follow</custom-field>
+		<custom-field action="copy">_crawlwp_robots_advanced</custom-field>
+		<custom-field action="copy">_crawlwp_max_snippet</custom-field>
+		<custom-field action="copy">_crawlwp_max_image_preview</custom-field>
+		<custom-field action="copy">_crawlwp_redirect_type</custom-field>
+		<custom-field action="copy">_crawlwp_og_image</custom-field>
+		<custom-field action="copy">_crawlwp_og_sync</custom-field>
+		<custom-field action="copy">_crawlwp_x_image</custom-field>
+		<custom-field action="copy">_crawlwp_x_card_type</custom-field>
+		<custom-field action="copy">_crawlwp_x_creator</custom-field>
+		<custom-field action="copy">_crawlwp_x_sync</custom-field>
+		<custom-field action="copy">_crawlwp_schema_page_type</custom-field>
+		<custom-field action="copy">_crawlwp_schema_article_type</custom-field>
+		<custom-field action="copy">_crawlwp_schema_type</custom-field>
+		<custom-field action="copy">_crawlwp_cornerstone</custom-field>
+
+		<!-- Copied once, then edited per language (may contain text). -->
+		<custom-field action="copy-once">_crawlwp_schema_custom</custom-field>
+
+		<!-- URLs, term IDs and computed values differ per language. -->
+		<custom-field action="ignore">_crawlwp_canonical_url</custom-field>
+		<custom-field action="ignore">_crawlwp_redirect_url</custom-field>
+		<custom-field action="ignore">_crawlwp_primary_category</custom-field>
+		<custom-field action="ignore">_crawlwp_seo_score</custom-field>
+		<custom-field action="ignore">_crawlwp_seo_score_sort</custom-field>
+		<custom-field action="ignore">_crawlwp_seo_signals</custom-field>
+		<custom-field action="ignore">_crawlwp_last_indexnow</custom-field>
+		<custom-field action="ignore">_crawlwp_video_data</custom-field>
+	</custom-fields>
+	<admin-texts>
+		<!-- Title & Meta templates: crawlwp_tm_home, crawlwp_tm_pt_{post type}, crawlwp_tm_tax_{taxonomy}, crawlwp_tm_author, ... -->
+		<key name="crawlwp_tm_*">
+			<key name="title"/>
+			<key name="description"/>
+			<key name="social_title"/>
+			<key name="social_description"/>
+			<key name="archive_title"/>
+			<key name="archive_description"/>
+		</key>
+		<key name="crawlwp_sitemap_settings">
+			<key name="news_publication_name"/>
+		</key>
+	</admin-texts>
+</wpml-config>

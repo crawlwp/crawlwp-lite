@@ -7,37 +7,22 @@
 
 namespace Mihdan\IndexNow;
 
-use Mihdan\IndexNow\Views\WPOSA;
 use WP_Post;
 use WP_Comment;
 
 /**
- * Class Hooks.
+ * Class Hooks. Settings are read on demand through Indexing.
  */
 class Hooks {
 	/**
-	 * WPOSA Instance.
-	 *
-	 * @var WPOSA
+	 * Single event submitting a post once its Ping Delay window ends.
 	 */
-	private WPOSA $wposa;
+	public const DELAYED_POST_EVENT = 'crawlwp_delayed_post_ping';
 
 	/**
-	 * Ping delay in seconds.
-	 *
-	 * @var int $ping_delay
+	 * Single event submitting a term once its Ping Delay window ends.
 	 */
-	private int $ping_delay;
-
-	/**
-	 * Hooks constructor.
-	 *
-	 * @param WPOSA $wposa WPOSA instance.
-	 */
-	public function __construct( WPOSA $wposa ) {
-		$this->wposa      = $wposa;
-		$this->ping_delay = (int) $this->wposa->get_option( 'ping_delay', 'general', 60 );
-	}
+	public const DELAYED_TERM_EVENT = 'crawlwp_delayed_term_ping';
 
 	/**
 	 * Hooks init.
@@ -51,6 +36,10 @@ class Hooks {
 		add_action( 'transition_comment_status', [ $this, 'comment_updated' ], 10, 3 );
 		add_action( 'wp_insert_comment', [ $this, 'comment_inserted' ], 10, 2 );
 		add_action( 'saved_term', [ $this, 'term_updated' ], 10, 3 );
+		add_action( 'crawlwp/index_pinged', [ $this, 'record_submission' ], 10, 2 );
+		add_action( self::DELAYED_POST_EVENT, [ $this, 'delayed_post_ping' ] );
+		add_action( self::DELAYED_TERM_EVENT, [ $this, 'delayed_term_ping' ], 10, 2 );
+		add_action( 'admin_notices', [ Indexing::class, 'pause_admin_notice' ] );
 	}
 
 	/**
@@ -68,24 +57,52 @@ class Hooks {
 			return;
 		}
 
-		// Delay.
-		$last_update = (int) get_comment_meta(
-			$id,
-			Utils::get_plugin_prefix() . '_last_update',
-			true
-		);
+		$this->maybe_ping_comment_post( $comment );
+	}
 
-		if ( ( current_time( 'timestamp' ) - $last_update ) < $this->ping_delay ) {
+	/**
+	 * Fires when the comment status is in transition
+	 * from one specific status to another.
+	 *
+	 * @param int|string $new_status The new comment status.
+	 * @param int|string $old_status The old comment status.
+	 * @param WP_Comment $comment    Comment object.
+	 *
+	 * @return void
+	 */
+	public function comment_updated( $new_status, $old_status, WP_Comment $comment ): void {
+
+		if ( $new_status !== 'approved' ) {
 			return;
 		}
 
-		do_action( 'crawlwp/comment_updated', $comment->comment_post_ID, $comment );
+		$this->maybe_ping_comment_post( $comment );
+	}
 
-		update_comment_meta(
-			$id,
-			Utils::get_plugin_prefix() . '_last_update',
-			current_time( 'timestamp' )
-		);
+	/**
+	 * Resubmit the parent post of an approved comment, throttled per post.
+	 *
+	 * @param WP_Comment $comment Comment object.
+	 *
+	 * @return void
+	 */
+	private function maybe_ping_comment_post( WP_Comment $comment ): void {
+
+		if ( ! Indexing::is_on( 'ping_on_comment', 'general' ) ) {
+			return;
+		}
+
+		$post = get_post( (int) $comment->comment_post_ID );
+
+		if ( ! $post instanceof WP_Post || Indexing::get_post_skip_reason( $post ) !== '' ) {
+			return;
+		}
+
+		if ( $this->defer_post_if_throttled( $post ) ) {
+			return;
+		}
+
+		do_action( 'crawlwp/comment_updated', $post->ID, $comment );
 	}
 
 	/**
@@ -111,47 +128,118 @@ class Hooks {
 			return;
 		}
 
-		if ( function_exists( 'is_post_publicly_viewable' ) && ! is_post_publicly_viewable( $post ) ) {
-			return;
-		}
-
-		if ( ! in_array( $post->post_type, (array) $this->wposa->get_option( 'post_types', 'general', [] ), true ) ) {
-			return;
-		}
-
 		// Disable for Bulk Edit screen.
-		if ( isset( $_REQUEST['bulk_edit'] ) && $this->wposa->get_option( 'disable_for_bulk_edit', 'general', 'on' ) === 'on' ) {
+		if ( isset( $_REQUEST['bulk_edit'] ) && Indexing::is_on( 'disable_for_bulk_edit', 'general' ) ) {
 			return;
 		}
 
-		// Delay.
-		$last_update = (int) get_post_meta(
-			$post->ID,
-			Utils::get_plugin_prefix() . '_last_update',
-			true
-		);
+		$is_update = $old_status === $new_status;
 
-		if ( ( current_time( 'timestamp' ) - $last_update ) < $this->ping_delay ) {
+		if ( ! Indexing::is_on( $is_update ? 'ping_on_post_updated' : 'ping_on_post', 'general' ) ) {
 			return;
 		}
 
-		if ( $old_status === $new_status ) {
-			// Post updated.
-			if ( $this->wposa->get_option( 'ping_on_post_updated', 'general', 'on' ) === 'on' ) {
-				do_action( 'crawlwp/post_updated', $post->ID, $post );
-			}
-		} else {
-			// Post added.
-			if ( $this->wposa->get_option( 'ping_on_post', 'general', 'on' ) === 'on' ) {
-				do_action( 'crawlwp/post_added', $post->ID, $post );
-			}
+		if ( Indexing::get_post_skip_reason( $post ) !== '' ) {
+			return;
 		}
 
-		update_post_meta(
-			$post->ID,
-			Utils::get_plugin_prefix() . '_last_update',
-			current_time( 'timestamp' )
-		);
+		if ( $this->defer_post_if_throttled( $post ) ) {
+			return;
+		}
+
+		do_action( $is_update ? 'crawlwp/post_updated' : 'crawlwp/post_added', $post->ID, $post );
+	}
+
+	/**
+	 * When the post was submitted within the Ping Delay window, schedule one
+	 * submission for the end of the window instead of sending it now.
+	 *
+	 * @param WP_Post $post Post data.
+	 *
+	 * @return bool True when the submission was deferred.
+	 */
+	private function defer_post_if_throttled( WP_Post $post ): bool {
+
+		$remaining = $this->get_remaining_delay( (int) get_post_meta( $post->ID, Indexing::LAST_UPDATE_META, true ) );
+
+		if ( $remaining <= 0 ) {
+			return false;
+		}
+
+		if ( ! wp_next_scheduled( self::DELAYED_POST_EVENT, [ $post->ID ] ) ) {
+			wp_schedule_single_event( time() + $remaining, self::DELAYED_POST_EVENT, [ $post->ID ] );
+		}
+
+		return true;
+	}
+
+	/**
+	 * Seconds left in the Ping Delay window after the last submission.
+	 *
+	 * @param int $last_update Last submission, site local timestamp.
+	 *
+	 * @return int
+	 */
+	private function get_remaining_delay( int $last_update ): int {
+
+		if ( $last_update <= 0 ) {
+			return 0;
+		}
+
+		return ( $last_update + Indexing::get_ping_delay() ) - (int) current_time( 'timestamp' );
+	}
+
+	/**
+	 * Submit a post whose submission was deferred by the Ping Delay.
+	 *
+	 * @param int $post_id Post ID.
+	 *
+	 * @return void
+	 */
+	public function delayed_post_ping( $post_id ): void {
+
+		$post = get_post( (int) $post_id );
+
+		if ( ! $post instanceof WP_Post || Indexing::get_post_skip_reason( $post ) !== '' ) {
+			return;
+		}
+
+		do_action( 'crawlwp/post_updated', $post->ID, $post );
+	}
+
+	/**
+	 * Submit a term whose submission was deferred by the Ping Delay.
+	 *
+	 * @param int    $term_id  Term ID.
+	 * @param string $taxonomy Taxonomy slug.
+	 *
+	 * @return void
+	 */
+	public function delayed_term_ping( $term_id, $taxonomy ): void {
+
+		if ( Indexing::get_term_skip_reason( (int) $term_id, (string) $taxonomy ) !== '' ) {
+			return;
+		}
+
+		do_action( 'crawlwp/term_updated', (int) $term_id, (string) $taxonomy );
+	}
+
+	/**
+	 * Record the last successful submission, which drives the Ping Delay and
+	 * the "last update" column.
+	 *
+	 * @param string $type      Object type: post or taxonomy.
+	 * @param int    $object_id Object ID.
+	 *
+	 * @return void
+	 */
+	public function record_submission( $type, $object_id ): void {
+
+		if ( $type === 'post' ) {
+			update_post_meta( (int) $object_id, Indexing::LAST_UPDATE_META, current_time( 'timestamp' ) );
+		} elseif ( $type === 'taxonomy' ) {
+			update_term_meta( (int) $object_id, Indexing::LAST_UPDATE_META, current_time( 'timestamp' ) );
+		}
 	}
 
 	/**
@@ -170,6 +258,10 @@ class Hooks {
 			return;
 		}
 
+		// A later republish starts a fresh Ping Delay window.
+		delete_post_meta( $post->ID, Indexing::LAST_UPDATE_META );
+		wp_clear_scheduled_hook( self::DELAYED_POST_EVENT, [ $post->ID ] );
+
 		$this->maybe_fire_post_deleted( $post );
 	}
 
@@ -183,6 +275,8 @@ class Hooks {
 	 * @return void
 	 */
 	public function post_deleted( int $post_id, $post = null ): void {
+
+		wp_clear_scheduled_hook( self::DELAYED_POST_EVENT, [ $post_id ] );
 
 		$post = $post instanceof WP_Post ? $post : get_post( $post_id );
 
@@ -206,12 +300,12 @@ class Hooks {
 			return;
 		}
 
-		if ( ! in_array( $post->post_type, (array) $this->wposa->get_option( 'post_types', 'general', [] ), true ) ) {
+		if ( ! in_array( $post->post_type, Indexing::get_post_types(), true ) ) {
 			return;
 		}
 
 		// Disable for Bulk Edit screen.
-		if ( isset( $_REQUEST['bulk_edit'] ) && $this->wposa->get_option( 'disable_for_bulk_edit', 'general', 'on' ) === 'on' ) {
+		if ( isset( $_REQUEST['bulk_edit'] ) && Indexing::is_on( 'disable_for_bulk_edit', 'general' ) ) {
 			return;
 		}
 
@@ -253,43 +347,7 @@ class Hooks {
 	}
 
 	/**
-	 * Fires when the comment status is in transition
-	 * from one specific status to another.
-	 *
-	 * @param int|string $new_status The new comment status.
-	 * @param int|string $old_status The old comment status.
-	 * @param WP_Comment $comment    Comment object.
-	 *
-	 * @return void
-	 */
-	public function comment_updated( $new_status, $old_status, WP_Comment $comment ): void {
-
-		// Delay.
-		$last_update = (int) get_comment_meta(
-			$comment->comment_ID,
-			Utils::get_plugin_prefix() . '_last_update',
-			true
-		);
-
-		if ( ( current_time( 'timestamp' ) - $last_update ) < $this->ping_delay ) {
-			return;
-		}
-
-		if ( $new_status !== 'approved' ) {
-			return;
-		}
-
-		do_action( 'crawlwp/comment_updated', $comment->comment_post_ID, $comment );
-
-		update_comment_meta(
-			$comment->comment_ID,
-			Utils::get_plugin_prefix() . '_last_update',
-			current_time( 'timestamp' )
-		);
-	}
-
-	/**
-	 * Fires after a term has been saved, and the term cache has been cleared.
+	 * Fires after a term has been created or updated, and the term cache has been cleared.
 	 *
 	 * @param int    $term_id  Term ID.
 	 * @param int    $tt_id    Term taxonomy ID.
@@ -297,23 +355,24 @@ class Hooks {
 	 */
 	public function term_updated( int $term_id, int $tt_id, string $taxonomy ): void {
 
-		// Delay.
-		$last_update = (int) get_term_meta(
-			$term_id,
-			Utils::get_plugin_prefix() . '_last_update',
-			true
-		);
+		if ( ! Indexing::is_on( 'ping_on_term', 'general' ) ) {
+			return;
+		}
 
-		if ( ( current_time( 'timestamp' ) - $last_update ) < $this->ping_delay ) {
+		if ( Indexing::get_term_skip_reason( $term_id, $taxonomy ) !== '' ) {
+			return;
+		}
+
+		$remaining = $this->get_remaining_delay( (int) get_term_meta( $term_id, Indexing::LAST_UPDATE_META, true ) );
+
+		if ( $remaining > 0 ) {
+			if ( ! wp_next_scheduled( self::DELAYED_TERM_EVENT, [ $term_id, $taxonomy ] ) ) {
+				wp_schedule_single_event( time() + $remaining, self::DELAYED_TERM_EVENT, [ $term_id, $taxonomy ] );
+			}
+
 			return;
 		}
 
 		do_action( 'crawlwp/term_updated', $term_id, $taxonomy );
-
-		update_term_meta(
-			$term_id,
-			Utils::get_plugin_prefix() . '_last_update',
-			current_time( 'timestamp' )
-		);
 	}
 }

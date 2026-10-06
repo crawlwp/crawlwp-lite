@@ -2,6 +2,7 @@
 
 namespace Mihdan\IndexNow\SEOCore\Integrations;
 
+use Mihdan\IndexNow\SEOCore\Schema\Graph;
 use Mihdan\IndexNow\SEOCore\SiteInfoSettings\SiteInfoSettings;
 
 /**
@@ -13,8 +14,8 @@ use Mihdan\IndexNow\SEOCore\SiteInfoSettings\SiteInfoSettings;
  *
  *  - Emits Product structured data (price, currency, availability, SKU,
  *    GTIN, seller, rating and reviews) on single product pages via the
- *    {@see crawlwp_schema_data} filter, replacing the generic
- *    Article/WebPage node.
+ *    {@see crawlwp_schema_data} filter, as a separate `#product` node that
+ *    the WebPage node points at through `mainEntity`.
  *  - Prices respect the store's "Display prices during cart/checkout"
  *    tax setting (`woocommerce_tax_display_shop`), match WooCommerce's own
  *    grouped-product price calculation, and always carry a
@@ -22,8 +23,9 @@ use Mihdan\IndexNow\SEOCore\SiteInfoSettings\SiteInfoSettings;
  *    year" unless there is an active sale end date).
  *  - Points breadcrumbs at the "product_cat" taxonomy instead of "category"
  *    on product pages, archives and the shop page.
- *  - Removes WooCommerce's own JSON-LD output so only CrawlWP's Product
- *    schema is printed (avoids duplicate/conflicting structured data).
+ *  - Removes WooCommerce's own JSON-LD output on product pages where
+ *    CrawlWP prints its Product node (avoids duplicate/conflicting
+ *    structured data). Everywhere else WooCommerce's output is untouched.
  *
  * The Product schema replacement (both the removal of WooCommerce's native
  * output and CrawlWP's own Product node) can be turned off entirely via the
@@ -34,6 +36,11 @@ use Mihdan\IndexNow\SEOCore\SiteInfoSettings\SiteInfoSettings;
  */
 class WooCommerce
 {
+	/**
+	 * Whether CrawlWP added a Product node to the current request's graph.
+	 */
+	private bool $product_schema_added = false;
+
 	public function __construct()
 	{
 		add_action('init', [$this, 'init']);
@@ -56,6 +63,9 @@ class WooCommerce
 		add_filter('crawlwp_breadcrumbs_args', [$this, 'change_breadcrumbs_taxonomy']);
 		add_filter('crawlwp_schema_data', [$this, 'add_product_schema'], 10, 2);
 		add_filter('crawlwp_robots_directives', [$this, 'noindex_checkout_pages']);
+		add_filter('crawlwp_sitemap_excluded_post_ids', [$this, 'exclude_checkout_pages_from_sitemap']);
+		add_filter('crawlwp_post_type_archive_page_id', [$this, 'shop_page_id'], 10, 2);
+		add_filter('crawlwp_open_graph_tags', [$this, 'product_open_graph_tags'], 10, 2);
 	}
 
 	/**
@@ -83,7 +93,7 @@ class WooCommerce
 	 */
 	public function remove_woocommerce_schema(): void
 	{
-		if (! $this->is_schema_enabled()) {
+		if (! $this->is_schema_enabled() || ! $this->product_schema_added) {
 			return;
 		}
 
@@ -94,15 +104,16 @@ class WooCommerce
 
 	/**
 	 * Drop WooCommerce's generated Product structured data on single product
-	 * pages, where CrawlWP emits its own Product node. Other contexts (order
-	 * confirmation emails/pages, etc.) are left untouched.
+	 * pages where CrawlWP emitted its own Product node. Other contexts (order
+	 * confirmation emails/pages, noindexed products, page type "None", etc.)
+	 * are left untouched.
 	 *
 	 * @param array $data
 	 * @return array
 	 */
 	public function suppress_woocommerce_product_schema($data)
 	{
-		if (! $this->is_schema_enabled() || ! is_singular('product')) {
+		if (! $this->is_schema_enabled() || ! $this->product_schema_added || ! is_singular('product')) {
 			return $data;
 		}
 
@@ -154,8 +165,96 @@ class WooCommerce
 	}
 
 	/**
-	 * Replace the generic Article/WebPage schema with a Product node on
-	 * single product pages.
+	 * Keep the noindexed cart, checkout and account pages out of the sitemaps.
+	 *
+	 * @param int[] $post_ids
+	 * @return int[]
+	 */
+	public function exclude_checkout_pages_from_sitemap($post_ids): array
+	{
+		$post_ids = is_array($post_ids) ? $post_ids : [];
+
+		if (! apply_filters('crawlwp_woocommerce_noindex_account_pages', true) || ! function_exists('wc_get_page_id')) {
+			return $post_ids;
+		}
+
+		foreach (['cart', 'checkout', 'myaccount'] as $page) {
+			$page_id = (int) wc_get_page_id($page);
+
+			if ($page_id > 0) {
+				$post_ids[] = $page_id;
+			}
+		}
+
+		return $post_ids;
+	}
+
+	/**
+	 * The "Shop" page stands in for the product archive, so its per-page SEO
+	 * values apply there.
+	 *
+	 * @param int    $page_id
+	 * @param string $post_type
+	 */
+	public function shop_page_id($page_id, $post_type): int
+	{
+		if ($post_type !== 'product' || ! function_exists('wc_get_page_id')) {
+			return (int) $page_id;
+		}
+
+		$shop_id = (int) wc_get_page_id('shop');
+
+		return $shop_id > 0 ? $shop_id : (int) $page_id;
+	}
+
+	/**
+	 * Products are not articles: use og:type=product with its price tags.
+	 *
+	 * @param array $tags Open Graph tags keyed by property.
+	 * @param array $data Resolved page data.
+	 * @return array
+	 */
+	public function product_open_graph_tags($tags, $data)
+	{
+		$post = $data['post'] ?? null;
+
+		if (! is_array($tags) || ! $post instanceof \WP_Post || $post->post_type !== 'product' || ($tags['og:type'] ?? '') !== 'article') {
+			return $tags;
+		}
+
+		$product = wc_get_product($post);
+
+		if (! $product) {
+			return $tags;
+		}
+
+		foreach (array_keys($tags) as $property) {
+			if (strpos((string) $property, 'article:') === 0) {
+				unset($tags[$property]);
+			}
+		}
+
+		$tags['og:type'] = 'product';
+
+		$price = $product->get_price();
+
+		if ($price !== '' && $price !== null) {
+			$price_fn = $this->get_price_function();
+
+			$tags['product:price:amount']   = wc_format_decimal($price_fn($product, ['price' => $price]), wc_get_price_decimals());
+			$tags['product:price:currency'] = get_woocommerce_currency();
+		}
+
+		return $tags;
+	}
+
+	/**
+	 * Add a Product node (`…#product`) on single product pages, linked from the
+	 * WebPage node through `mainEntity`.
+	 *
+	 * The Product is the page's primary entity, so it replaces an Article node
+	 * if the product's schema settings produced one; the WebPage node keeps
+	 * its own properties.
 	 *
 	 * @param array         $schema The schema array built by FrontendOutput.
 	 * @param \WP_Post|null $post   The queried post, or null for non-singular requests.
@@ -177,28 +276,44 @@ class WooCommerce
 			return $schema;
 		}
 
-		/* Article-only properties don't apply to a Product node. */
-		unset($schema['headline'], $schema['articleSection'], $schema['author'], $schema['datePublished'], $schema['dateModified']);
+		/* The node handed in is either the WebPage itself (page type only) or an
+		 * Article pointing at it through mainEntityOfPage. */
+		$webpage_id = (string) ($schema['mainEntityOfPage']['@id'] ?? ($schema['@id'] ?? ''));
+		$is_webpage = $webpage_id !== '' && ($schema['@id'] ?? '') === $webpage_id;
+		$url        = (string) ($schema['url'] ?? get_permalink($post));
+		$base       = $webpage_id !== '' ? (string) strtok($webpage_id, '#') : $url;
 
-		$schema['@type']        = 'Product';
-		$schema['name']         = $product->get_name();
+		$node = [
+			'@type' => 'Product',
+			'@id'   => $base . '#product',
+			'name'  => $product->get_name(),
+			'url'   => $url,
+		];
+
+		if ($url === '') {
+			unset($node['url']);
+		}
+
+		if ($webpage_id !== '') {
+			$node['mainEntityOfPage'] = ['@id' => $webpage_id];
+		}
 
 		$description = wp_strip_all_tags($product->get_short_description() ?: $product->get_description());
 
 		if ($description !== '') {
-			$schema['description'] = $description;
+			$node['description'] = $description;
 		}
 
 		$sku = $product->get_sku();
 
 		if ($sku !== '') {
-			$schema['sku'] = $sku;
+			$node['sku'] = $sku;
 		}
 
 		$gtin = $this->get_gtin($product);
 
 		if ($gtin !== '') {
-			$schema['gtin'] = $gtin;
+			$node['gtin'] = $gtin;
 		}
 
 		/* Google Merchant Center rejects a Product without a product-specific
@@ -207,16 +322,22 @@ class WooCommerce
 		$images = $this->get_images($product);
 
 		if ($images !== []) {
-			$schema['image'] = count($images) === 1 ? $images[0] : $images;
+			$node['image'] = count($images) === 1 ? $images[0] : $images;
+		} elseif (! empty($schema['image'])) {
+			$node['image'] = $schema['image'];
 		}
 
-		$schema['offers'] = $this->get_offers($product, $post);
+		$offers = $this->get_offers($product, $post);
+
+		if ($offers !== []) {
+			$node['offers'] = $offers;
+		}
 
 		$rating       = $product->get_average_rating();
 		$review_count = $product->get_review_count();
 
 		if ($rating > 0 && $review_count > 0) {
-			$schema['aggregateRating'] = [
+			$node['aggregateRating'] = [
 				'@type'       => 'AggregateRating',
 				'ratingValue' => $rating,
 				'reviewCount' => $review_count,
@@ -226,10 +347,36 @@ class WooCommerce
 		$reviews = $this->get_reviews($product);
 
 		if ($reviews) {
-			$schema['review'] = $reviews;
+			$node['review'] = $reviews;
 		}
 
-		return $schema;
+		/**
+		 * Filter the Product node printed on single product pages.
+		 *
+		 * @param array       $node    The Product node.
+		 * @param \WC_Product $product The product.
+		 */
+		$node = (array) apply_filters('crawlwp_woocommerce_product_schema', $node, $product);
+
+		if ($node !== []) {
+			Graph::add_node($node);
+
+			$this->product_schema_added = true;
+		}
+
+		if ($webpage_id === '') {
+			return $schema;
+		}
+
+		/* An Article node is dropped; FrontendOutput adds the WebPage node itself
+		 * and this fragment merges into it by `@id`. */
+		$webpage = $is_webpage ? $schema : ['@id' => $webpage_id];
+
+		if ($node !== []) {
+			$webpage['mainEntity'] = ['@id' => $node['@id'] ?? $base . '#product'];
+		}
+
+		return $webpage;
 	}
 
 	/**
@@ -266,6 +413,7 @@ class WooCommerce
 	 * Build the "offers" node — a single Offer for simple/grouped/external
 	 * products, or an AggregateOffer (low/high price across variations) for
 	 * variable products. Prices respect the store's tax display setting.
+	 * Empty when the product has no price — an Offer without one is invalid.
 	 *
 	 * @param \WC_Product $product
 	 * @param \WP_Post    $post
@@ -280,6 +428,10 @@ class WooCommerce
 
 		if ($product->is_type('grouped')) {
 			$price = $this->get_grouped_product_price($product, $price_fn);
+
+			if ($price === '') {
+				return [];
+			}
 
 			$offer = [
 				'@type'           => 'Offer',
@@ -296,6 +448,10 @@ class WooCommerce
 		}
 
 		if ($product->is_type('variable')) {
+			if ((string) $product->get_variation_price('min', false) === '') {
+				return [];
+			}
+
 			$low_price  = $price_fn($product, ['price' => $product->get_variation_price('min', false)]);
 			$high_price = $price_fn($product, ['price' => $product->get_variation_price('max', false)]);
 
@@ -323,6 +479,10 @@ class WooCommerce
 
 		/* External/Affiliate products are redeemed on the merchant's own site, not on ours. */
 		$offer_url = $product->is_type('external') ? $product->get_product_url() : $url;
+
+		if ((string) $product->get_price() === '') {
+			return [];
+		}
 
 		$price = $price_fn($product, ['price' => $product->get_price()]);
 
@@ -360,7 +520,8 @@ class WooCommerce
 	 * Grouped products have no price of their own — WooCommerce's
 	 * `get_price()` returns an empty string for them. Mirror what
 	 * WooCommerce's own structured data does: take the lowest
-	 * regular/sale price across the group's visible children.
+	 * regular/sale price across the group's visible children. Empty when no
+	 * child has a price.
 	 *
 	 * @param \WC_Product $product
 	 * @param callable    $price_fn
@@ -383,7 +544,7 @@ class WooCommerce
 			}
 		}
 
-		return wc_format_decimal($prices ? min($prices) : 0, wc_get_price_decimals());
+		return $prices ? (string) wc_format_decimal(min($prices), wc_get_price_decimals()) : '';
 	}
 
 	/**

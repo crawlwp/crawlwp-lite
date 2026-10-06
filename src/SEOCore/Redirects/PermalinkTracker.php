@@ -90,6 +90,10 @@ class PermalinkTracker
 			$this->manager->delete((int) $reverse->id);
 		}
 
+		// Collapse chains: any redirect that pointed at the old URL (A→B) now
+		// points straight at the new one (A→C) instead of hopping via B.
+		$this->manager->retarget_destination($old_url, $new_url);
+
 		// A redirect from the old URL already exists — point it at the new
 		// destination rather than leaving it aimed at an outdated URL.
 		$existing = $this->manager->get_by_from_url($old_path);

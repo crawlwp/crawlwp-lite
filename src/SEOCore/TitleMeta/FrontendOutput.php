@@ -273,6 +273,10 @@ class FrontendOutput
 		/**
 		 * Filter the resolved meta title for the current request.
 		 *
+		 * Runs after variable replacement: `$title` is the final text, so any
+		 * `{{ variable }}` added here is printed literally. Call
+		 * {@see Variables::replace()} yourself to resolve variables.
+		 *
 		 * @param string $title      The resolved title string.
 		 * @param string $entity_key The matched entity key (e.g. 'pt_post', 'home').
 		 * @param array  $context    The resolution context array.
@@ -286,6 +290,10 @@ class FrontendOutput
 
 		/**
 		 * Filter the resolved meta description for the current request.
+		 *
+		 * Runs after variable replacement: `$description` is the final text, so
+		 * any `{{ variable }}` added here is printed literally. Call
+		 * {@see Variables::replace()} yourself to resolve variables.
 		 *
 		 * @param string $description The resolved description string.
 		 * @param string $entity_key  The matched entity key.
@@ -344,7 +352,9 @@ class FrontendOutput
 		$is_article = $post !== null && is_singular() && ! is_home() && ! is_front_page();
 
 		$og_image = $this->image($entity_key, $prefix, 'og_image', $meta_post, $term);
-		$x_image  = $this->image($entity_key, $prefix, 'x_image', $meta_post, $term);
+		/* No featured image fallback here: an X image that is not set must fall
+		 * back to the OG image chain, which already ends with the featured image. */
+		$x_image  = $this->image($entity_key, $prefix, 'x_image', $meta_post, $term, false);
 
 		$this->resolved = [
 			'entity'         => $entity_key,
@@ -459,7 +469,25 @@ class FrontendOutput
 				return null;
 			}
 
-			return [$entity_key, 'archive_', ['post_type' => $post_type]];
+			$context = ['post_type' => $post_type];
+
+			/**
+			 * Filter the ID of a page that stands in for a post type archive,
+			 * e.g. the WooCommerce "Shop" page. Its per-page SEO values win over
+			 * the archive templates, which stay the fallback.
+			 *
+			 * @param int    $page_id   Page ID, 0 for none.
+			 * @param string $post_type Post type name.
+			 */
+			$page_id = (int) apply_filters('crawlwp_post_type_archive_page_id', 0, $post_type->name);
+			$page    = $page_id > 0 ? get_post($page_id) : null;
+
+			if ($page instanceof \WP_Post && $page->post_status === 'publish') {
+				/* Like the blog "Posts page": feeds the metabox values only. */
+				$context['posts_page'] = $page;
+			}
+
+			return [$entity_key, 'archive_', $context];
 		}
 
 		if (is_category() || is_tag() || is_tax()) {
@@ -1093,9 +1121,11 @@ class FrontendOutput
 	 * need the attachment metadata (dimensions, alt text) do not have to walk
 	 * back from the URL with `attachment_url_to_postid()`.
 	 *
+	 * @param bool $featured_fallback Whether to end the chain with the featured image.
+	 *
 	 * @return array{id: int, url: string} Attachment id (0 when unknown) and URL ('' when unresolved).
 	 */
-	private function image(string $entity_key, string $prefix, string $field, ?\WP_Post $post, ?\WP_Term $term = null): array
+	private function image(string $entity_key, string $prefix, string $field, ?\WP_Post $post, ?\WP_Term $term = null, bool $featured_fallback = true): array
 	{
 		$meta_key = $field === 'og_image' ? MetaFields::OG_IMAGE : MetaFields::X_IMAGE;
 
@@ -1136,7 +1166,7 @@ class FrontendOutput
 			return ['id' => 0, 'url' => $global];
 		}
 
-		if ($post !== null) {
+		if ($post !== null && $featured_fallback) {
 			/* The featured image id is already known — keep it. */
 			$thumbnail_id = (int) get_post_thumbnail_id($post->ID);
 
@@ -1468,6 +1498,8 @@ class FrontendOutput
 			}
 		}
 
+		$creator = UserProfile::x_handle($creator);
+
 		/* Build Twitter card tags array — keyed by name attribute. */
 		$twitter_tags = [
 			'twitter:card'        => $card_type,
@@ -1480,10 +1512,10 @@ class FrontendOutput
 		if ($x_image !== '') {
 			$twitter_tags['twitter:image'] = $x_image;
 
-			/* Alt text: metabox OG image alt → attachment alt. */
+			/* Alt text: metabox OG image alt (only when the OG image is reused) → attachment alt. */
 			$img_alt = '';
 
-			if ($data['meta_post'] instanceof \WP_Post) {
+			if ($data['x_image'] === '' && $data['meta_post'] instanceof \WP_Post) {
 				$img_alt = (string) MetaFields::get($data['meta_post']->ID, MetaFields::OG_IMAGE_ALT, '');
 			}
 
@@ -1566,6 +1598,24 @@ class FrontendOutput
 				return;
 			}
 
+			/*
+			 * A page standing in for the collection (the blog "Posts page", the
+			 * WooCommerce "Shop" page) may carry its own page type.
+			 */
+			$posts_page = $data['posts_page'] ?? null;
+
+			if ($posts_page instanceof \WP_Post) {
+				$page_type = (string) MetaFields::get($posts_page->ID, MetaFields::SCHEMA_PAGE_TYPE, '');
+
+				if ($page_type === 'none') {
+					return;
+				}
+
+				if ($page_type !== '') {
+					$schema_type = $page_type;
+				}
+			}
+
 			$schema = [
 				'@context'   => 'https://schema.org',
 				'@type'      => $schema_type,
@@ -1593,14 +1643,25 @@ class FrontendOutput
 
 			Graph::add_node($schema);
 
+			if ($posts_page instanceof \WP_Post) {
+				Graph::add_nodes(Graph::nodes_for_post($posts_page));
+			}
+
 			return;
 		}
+
+		/*
+		 * Schema defaults live on the post type, never on the matched entity: a
+		 * static front page resolves to the `home` entity, which has no schema
+		 * settings of its own.
+		 */
+		$schema_entity = Entities::post_type_key($post->post_type);
 
 		/* --- resolve page type --- */
 		$page_type = (string) MetaFields::get($post->ID, MetaFields::SCHEMA_PAGE_TYPE, '');
 
 		if ($page_type === '') {
-			$page_type = self::default_schema_page_type($data['entity']);
+			$page_type = self::default_schema_page_type($schema_entity);
 		}
 
 		if ($page_type === 'none') {
@@ -1618,7 +1679,7 @@ class FrontendOutput
 			if ($legacy !== '' && $legacy !== 'none' && strpos($legacy, 'Page') === false) {
 				$article_type = $legacy;
 			} else {
-				$article_type = self::default_schema_article_type($data['entity'], $post->post_type);
+				$article_type = self::default_schema_article_type($schema_entity, $post->post_type);
 			}
 		}
 
@@ -1697,7 +1758,8 @@ class FrontendOutput
 
 		$section = MetaFields::get($post->ID, MetaFields::SCHEMA_SECTION);
 
-		if (! empty($section)) {
+		/* articleSection is an Article property — never on a plain WebPage. */
+		if ($is_article && ! empty($section)) {
 			$schema['articleSection'] = $section;
 		}
 
@@ -1739,6 +1801,9 @@ class FrontendOutput
 		}
 
 		Graph::add_node($schema);
+
+		/* Custom JSON-LD from the metabox — only on pages that carry structured data. */
+		Graph::add_nodes(Graph::nodes_for_post($post));
 	}
 
 	/**
@@ -1784,7 +1849,8 @@ class FrontendOutput
 	private function breadcrumb_node(): ?array
 	{
 		if ($this->breadcrumb_node === null) {
-			$node = $this->get_breadcrumbs()->get_schema_node();
+			/* A 404 or a search results page has no place in the site hierarchy. */
+			$node = is_404() || is_search() ? null : $this->get_breadcrumbs()->get_schema_node();
 
 			if (is_array($node)) {
 				$node['@id']           = $this->schema_id('breadcrumb');
@@ -1811,7 +1877,14 @@ class FrontendOutput
 	 */
 	public function output_site_graph(): void
 	{
-		if (is_admin() || is_feed() || is_trackback() || is_robots()) {
+		if (is_admin() || is_feed() || is_trackback() || is_robots() || is_404()) {
+			return;
+		}
+
+		/* Pages kept out of search results get no structured data at all. */
+		$data = $this->resolve();
+
+		if ($data !== false && in_array('noindex', (array) $data['robots'], true)) {
 			return;
 		}
 

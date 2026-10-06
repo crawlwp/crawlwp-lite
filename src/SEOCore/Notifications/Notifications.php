@@ -5,6 +5,7 @@ namespace Mihdan\IndexNow\SEOCore\Notifications;
 use Mihdan\IndexNow\SEOCore\CoreSettings\CoreSettings;
 use Mihdan\IndexNow\SEOCore\FeatureGate\FeatureGate;
 use Mihdan\IndexNow\SEOCore\MetaBox\MetaFields;
+use Mihdan\IndexNow\SEOCore\RobotsSettings\RobotsSettings;
 use Mihdan\IndexNow\SEOCore\TitleMeta\Entities;
 use Mihdan\IndexNow\SEOCore\TitleMeta\Options;
 use Mihdan\IndexNow\Utils;
@@ -92,10 +93,13 @@ class Notifications
 		'seo-by-rank-math-pro/rank-math-pro.php',
 		'autodescription/autodescription.php',
 		'slim-seo/slim-seo.php',
+		'slim-seo-pro/slim-seo-pro.php',
 		'squirrly-seo/squirrly.php',
-		'seopress/seopress.php',
-		'seopress-pro/seopress-pro.php',
-		'wp-seopress/wp-seopress.php',
+		'wp-seopress/seopress.php',
+		'wp-seopress-pro/seopress-pro.php',
+		'smartcrawl-seo/wpmu-dev-seo.php',
+		'wpmu-dev-seo/wpmu-dev-seo.php',
+		'surerank/surerank.php',
 	];
 
 	/**
@@ -122,6 +126,7 @@ class Notifications
 		/* The cached robots.txt verdict is stale as soon as the editor is saved. */
 		add_action('add_option_crawlwp_robots', [__CLASS__, 'flush_robots_txt_cache']);
 		add_action('update_option_crawlwp_robots', [__CLASS__, 'flush_robots_txt_cache']);
+		add_action('update_option_blog_public', [__CLASS__, 'flush_robots_txt_cache']);
 	}
 
 	/**
@@ -955,8 +960,12 @@ class Notifications
 			];
 		}
 
-		/* 6. WordPress core sitemaps disabled. */
-		if ($wanted('sitemap_disabled') && !$this->is_sitemap_enabled()) {
+		/*
+		 * 6. WordPress core sitemaps disabled. Core disables them while
+		 * "Discourage search engines" is ticked; that case is already covered
+		 * by the blog_not_public notice.
+		 */
+		if ($wanted('sitemap_disabled') && get_option('blog_public', 1) && !$this->is_sitemap_enabled()) {
 			$notices[] = [
 				'id' => 'sitemap_disabled',
 				'severity' => 'warning',
@@ -988,13 +997,16 @@ class Notifications
 		}
 
 		/* 9. Physical robots.txt file on the server overrides WordPress's virtual one. */
-		if ($wanted('physical_robots_txt_exists') && $this->physical_robots_txt_exists()) {
+		$physical_robots_txt = $wanted('physical_robots_txt_exists') ? RobotsSettings::get_physical_file_path() : null;
+
+		if ($physical_robots_txt !== null) {
 			$notices[] = [
 				'id' => 'physical_robots_txt_exists',
 				'severity' => 'warning',
 				'message' => sprintf(
 				/* translators: %s: absolute path to the physical robots.txt file */
-					__('A <strong>physical robots.txt file</strong> was found at in the root folder of your WordPress installation. This file takes precedence over WordPress\'s virtual robots.txt, which means CrawlWP\'s Robots.txt editor (and any other plugin relying on the <code>robots_txt</code> filter) has no effect. Edit or remove that file directly to manage robots.txt through CrawlWP.', 'mihdan-index-now')
+					__('A <strong>physical robots.txt file</strong> was found at %s. This file takes precedence over WordPress\'s virtual robots.txt, which means CrawlWP\'s Robots.txt editor (and any other plugin relying on the <code>robots_txt</code> filter) has no effect. Edit or remove that file directly to manage robots.txt through CrawlWP.', 'mihdan-index-now'),
+					'<code>' . esc_html($physical_robots_txt) . '</code>'
 				),
 			];
 		}
@@ -1121,10 +1133,28 @@ class Notifications
 	 */
 	private function detect_conflicting_plugin(): ?string
 	{
+		$basename = self::get_active_conflicting_plugin();
+
+		if ($basename === null) {
+			return null;
+		}
+
 		if (!function_exists('get_plugins')) {
 			require_once ABSPATH . 'wp-admin/includes/plugin.php';
 		}
 
+		$all_plugins = get_plugins();
+
+		return $all_plugins[$basename]['Name'] ?? $basename;
+	}
+
+	/**
+	 * Basename of the first active SEO plugin that competes with CrawlWP, or null.
+	 *
+	 * @return string|null
+	 */
+	public static function get_active_conflicting_plugin(): ?string
+	{
 		$active = (array)get_option('active_plugins', []);
 
 		/* Include network-activated plugins for multisite. */
@@ -1135,12 +1165,6 @@ class Notifications
 
 		foreach (self::CONFLICTING_PLUGINS as $basename) {
 			if (in_array($basename, $active, true)) {
-				$all_plugins = get_plugins();
-
-				if (isset($all_plugins[$basename]['Name'])) {
-					return $all_plugins[$basename]['Name'];
-				}
-
 				return $basename;
 			}
 		}
@@ -1269,20 +1293,29 @@ class Notifications
 			return $checked;
 		}
 
+		$file_path = RobotsSettings::get_physical_file_path();
+
+		/*
+		 * Tie the cached verdict to the physical file's state so editing,
+		 * adding or deleting robots.txt on the server is picked up right away
+		 * instead of after the TTL expires.
+		 */
+		$signature = $file_path !== null
+			? md5($file_path . '|' . (int) @filemtime($file_path) . '|' . (int) @filesize($file_path))
+			: 'virtual';
+
 		/* Remote robots.txt fetches are far too slow to repeat per page load. */
 		$cached = get_transient(self::ROBOTS_BLOCK_TRANSIENT);
 
-		if ($cached !== false) {
-			$checked = ('1' === $cached);
+		if (is_array($cached) && ($cached['sig'] ?? '') === $signature) {
+			$checked = ('1' === ($cached['verdict'] ?? '0'));
 
 			return $checked;
 		}
 
-		$file_path = $this->get_physical_robots_txt_path();
-		$fs = $this->get_filesystem();
-		$exists = $fs !== null ? $fs->exists($file_path) : file_exists($file_path);
+		$fs = $file_path !== null ? $this->get_filesystem() : null;
 
-		if ($exists) {
+		if ($file_path !== null) {
 			$content = $fs !== null ? $fs->get_contents($file_path) : @file_get_contents($file_path);
 		} else {
 			$robots_url = home_url('/robots.txt');
@@ -1296,7 +1329,7 @@ class Notifications
 
 		$checked = $this->content_blocks_all_crawlers((string)$content);
 
-		set_transient(self::ROBOTS_BLOCK_TRANSIENT, $checked ? '1' : '0', self::ROBOTS_BLOCK_TTL);
+		set_transient(self::ROBOTS_BLOCK_TRANSIENT, ['verdict' => $checked ? '1' : '0', 'sig' => $signature], self::ROBOTS_BLOCK_TTL);
 
 		return $checked;
 	}
@@ -1349,45 +1382,6 @@ class Notifications
 	private function site_uses_https(): bool
 	{
 		return str_starts_with(get_option('home', ''), 'https://');
-	}
-
-	/**
-	 * Whether a physical robots.txt file exists in the site's root directory.
-	 *
-	 * When present, this file is served directly by the web server (or matched
-	 * before WordPress's own rewrite rules), so WordPress's virtual robots.txt
-	 * (and the `robots_txt` filter CrawlWP's Robots.txt editor relies on) never runs.
-	 *
-	 * Uses the WordPress Filesystem API (`WP_Filesystem`) rather than raw PHP
-	 * file functions, so the check honours the filesystem method WordPress is
-	 * actually configured to use (direct, ftpext, ssh2, etc.) instead of
-	 * assuming local PHP file access is always the right way to reach it.
-	 *
-	 * @return bool
-	 */
-	private function physical_robots_txt_exists(): bool
-	{
-		$path = $this->get_physical_robots_txt_path();
-		$fs = $this->get_filesystem();
-
-		if ($fs !== null) {
-			return $fs->exists($path);
-		}
-
-		// Fall back to a direct PHP check when the Filesystem API can't
-		// initialise without prompting for FTP/SSH credentials — this is a
-		// read-only existence check, so it must never block on credentials.
-		return file_exists($path);
-	}
-
-	/**
-	 * Absolute filesystem path where a physical robots.txt would live.
-	 *
-	 * @return string
-	 */
-	private function get_physical_robots_txt_path(): string
-	{
-		return get_home_path() . 'robots.txt';
 	}
 
 	/**

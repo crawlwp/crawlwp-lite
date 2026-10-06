@@ -62,11 +62,12 @@ class ElementorIntegrationTest extends TestCase
 		$this->assertTrue($document->controls[MetaFields::SEO_TITLE]['label_block'] ?? false);
 		$this->assertTrue($document->controls[MetaFields::SEO_DESCRIPTION]['label_block'] ?? false);
 
-		// Assert dynamic tags are enabled on text and url controls
-		$this->assertTrue($document->controls[MetaFields::SEO_TITLE]['dynamic']['active'] ?? false);
-		$this->assertTrue($document->controls[MetaFields::SEO_DESCRIPTION]['dynamic']['active'] ?? false);
-		$this->assertTrue($document->controls[MetaFields::FOCUS_KEYWORD]['dynamic']['active'] ?? false);
-		$this->assertTrue($document->controls[MetaFields::CANONICAL_URL]['dynamic']['active'] ?? false);
+		// Dynamic tags are disabled: their values live in __dynamic__ and were
+		// never read, so picking a tag silently saved an empty value.
+		$this->assertArrayNotHasKey('dynamic', $document->controls[MetaFields::SEO_TITLE]);
+		$this->assertArrayNotHasKey('dynamic', $document->controls[MetaFields::SEO_DESCRIPTION]);
+		$this->assertArrayNotHasKey('dynamic', $document->controls[MetaFields::FOCUS_KEYWORD]);
+		$this->assertArrayNotHasKey('dynamic', $document->controls[MetaFields::CANONICAL_URL]);
 
 		// Assert social controls
 		$this->assertArrayHasKey(MetaFields::OG_SYNC, $document->controls);
@@ -177,5 +178,44 @@ class ElementorIntegrationTest extends TestCase
 
 		$meta = $GLOBALS['crawlwp_test_state']['post_meta'][$post_id] ?? [];
 		$this->assertSame('', $meta[MetaFields::REDIRECT_URL] ?? null);
+	}
+
+	public function test_partial_save_does_not_reset_omitted_switchers_or_directives(): void
+	{
+		$post_id      = 42;
+		$document     = new Document();
+		$document->id = $post_id;
+
+		$GLOBALS['crawlwp_test_state']['post_meta'][$post_id] = [
+			MetaFields::OG_SYNC         => '1',
+			MetaFields::X_SYNC          => '1',
+			MetaFields::ROBOTS_ADVANCED => ['noarchive'],
+		];
+
+		// Elementor omits unchanged settings — only the title is submitted.
+		$this->elementor->save($document, ['settings' => [MetaFields::SEO_TITLE => 'Only title']]);
+
+		$meta = $GLOBALS['crawlwp_test_state']['post_meta'][$post_id];
+		$this->assertSame('Only title', $meta[MetaFields::SEO_TITLE]);
+		$this->assertSame('1', $meta[MetaFields::OG_SYNC]);
+		$this->assertSame('1', $meta[MetaFields::X_SYNC]);
+		$this->assertSame(['noarchive'], $meta[MetaFields::ROBOTS_ADVANCED]);
+	}
+
+	public function test_controls_not_registered_for_unsupported_post_types(): void
+	{
+		$document     = new Document();
+		$document->id = 77;
+
+		$GLOBALS['crawlwp_test_state']['default_post_type'] = 'elementor_library';
+
+		try {
+			$this->elementor->register_controls($document);
+		} finally {
+			unset($GLOBALS['crawlwp_test_state']['default_post_type']);
+		}
+
+		$this->assertSame([], $document->sections);
+		$this->assertSame([], $document->controls);
 	}
 }

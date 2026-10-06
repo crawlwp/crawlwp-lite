@@ -86,6 +86,21 @@ class WooCommerceVariablesTest extends TestCase
 		$this->assertSame('2026-12-31', Variables::replace('{{ product.sale_to }}', $context));
 	}
 
+	public function test_sale_to_is_empty_without_sale_end_date(): void
+	{
+		$post            = new \WP_Post();
+		$post->ID        = 102;
+		$post->post_type = 'product';
+
+		$product        = new \WC_Product();
+		$product->id    = 102;
+		$product->price = '10';
+
+		$GLOBALS['crawlwp_test_state']['wc_products'][102] = $product;
+
+		$this->assertSame('', Variables::replace('{{ product.sale_to }}', ['post' => $post]));
+	}
+
 	public function test_variable_product_tokens_resolution(): void
 	{
 		$post            = new \WP_Post();
@@ -96,16 +111,32 @@ class WooCommerceVariablesTest extends TestCase
 		$product->id               = 202;
 		$product->type             = 'variable';
 		$product->variation_prices = ['min' => 15, 'max' => 35];
-		$product->children         = [203, 204, 205];
+		$product->children         = [203, 204, 205, 206];
 
 		$GLOBALS['crawlwp_test_state']['wc_products'][202] = $product;
 
+		/* Three variations exist; 206 was deleted. */
+		foreach ([203, 204, 205] as $child_id) {
+			$child     = new \WC_Product();
+			$child->id = $child_id;
+
+			$GLOBALS['crawlwp_test_state']['wc_products'][$child_id] = $child;
+		}
+
+		$GLOBALS['crawlwp_test_state']['options']['woocommerce_tax_display_shop'] = 'incl';
+
 		$context = ['post' => $post];
 
-		// tax rate 1.2: 15 * 1.2 = 18, 35 * 1.2 = 42
+		// Prices shown including tax, tax rate 1.2: 15 * 1.2 = 18, 35 * 1.2 = 42
 		$this->assertSame('18', Variables::replace('{{ product.low_price }}', $context));
 		$this->assertSame('42', Variables::replace('{{ product.high_price }}', $context));
 		$this->assertSame('3', Variables::replace('{{ product.offer_count }}', $context));
+
+		unset($GLOBALS['crawlwp_test_state']['options']['woocommerce_tax_display_shop']);
+		Variables::flush_cache();
+
+		// Prices shown excluding tax.
+		$this->assertSame('15', Variables::replace('{{ product.low_price }}', $context));
 	}
 
 	public function test_non_product_post_returns_empty_for_product_tokens(): void

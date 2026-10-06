@@ -42,6 +42,27 @@ $cwp_wc_var_items = static function () use ($cwp_is_product): void {
   <button class="cwp-var-item" type="button" data-token="{{ product.offer_count }}"><code>{{ product.offer_count }}</code><span><?php esc_html_e('Offer count (variable product)', 'mihdan-index-now'); ?></span></button>
   <?php
 };
+
+/* Variable groups added through the `crawlwp_title_meta_variables` filter. */
+$cwp_extra_var_groups = array_diff_key(
+  \Mihdan\IndexNow\SEOCore\TitleMeta\Variables::definitions(),
+  array_flip(['general', 'post', 'term', 'author', 'archive', 'woocommerce'])
+);
+$cwp_extra_var_items = static function () use ($cwp_extra_var_groups): void {
+  foreach ($cwp_extra_var_groups as $cwp_group) {
+    if (empty($cwp_group['variables']) || ! is_array($cwp_group['variables'])) {
+      continue;
+    }
+    foreach ($cwp_group['variables'] as $cwp_token => $cwp_desc) {
+      $cwp_token = '{{ ' . $cwp_token . ' }}';
+      ?>
+      <button class="cwp-var-item" type="button" data-token="<?php echo esc_attr($cwp_token); ?>"><code><?php echo esc_html($cwp_token); ?></code><span><?php echo esc_html((string) $cwp_desc); ?></span></button>
+      <?php
+    }
+  }
+};
+
+$cwp_templates = \Mihdan\IndexNow\SEOCore\MetaBox\Assets::title_meta_templates($post instanceof \WP_Post ? $post : null);
 ?>
 <div class="cwp-metabox" id="crawlwp-seo-metabox-inner">
 
@@ -107,14 +128,14 @@ $cwp_wc_var_items = static function () use ($cwp_is_product): void {
             <button class="cwp-var-item" type="button" data-token="{{ post.auto_description }}"><code>{{ post.auto_description }}</code><span><?php esc_html_e('Post excerpt', 'mihdan-index-now'); ?></span></button>
             <button class="cwp-var-item" type="button" data-token="{{ current.year }}"><code>{{ current.year }}</code><span><?php esc_html_e('Current year', 'mihdan-index-now'); ?></span></button>
             <button class="cwp-var-item" type="button" data-token="{{ post.author }}"><code>{{ post.author }}</code><span><?php esc_html_e('Author name', 'mihdan-index-now'); ?></span></button>
-            <?php $cwp_wc_var_items(); ?>
+            <?php $cwp_wc_var_items(); $cwp_extra_var_items(); ?>
           </div>
         </div>
       </div>
       <input class="cwp-input" id="cwpTitle" name="<?php echo esc_attr(MetaFields::SEO_TITLE); ?>" type="text"
              value="<?php echo esc_attr($data['seo_title']); ?>"
-             placeholder="{{ post.title }} {{ sep }} {{ site.title }}"
-             data-meter="cwpTitleMeter" data-limit="580" data-font="bold 20px Arial">
+             placeholder="<?php echo esc_attr($cwp_templates['title']); ?>"
+             data-meter="cwpTitleMeter" data-limit="580" data-min="200" data-font="bold 20px Arial">
       <div class="cwp-meter">
         <div class="cwp-meter-bar"><div class="cwp-meter-fill" id="cwpTitleMeterFill"></div></div>
         <div class="cwp-meter-text" id="cwpTitleMeter">—</div>
@@ -152,12 +173,13 @@ $cwp_wc_var_items = static function () use ($cwp_is_product): void {
             <button class="cwp-var-item" type="button" data-token="{{ site.title }}"><code>{{ site.title }}</code><span><?php esc_html_e('Site name', 'mihdan-index-now'); ?></span></button>
             <button class="cwp-var-item" type="button" data-token="{{ post.category }}"><code>{{ post.category }}</code><span><?php esc_html_e('Primary category', 'mihdan-index-now'); ?></span></button>
             <button class="cwp-var-item" type="button" data-token="{{ current.year }}"><code>{{ current.year }}</code><span><?php esc_html_e('Current year', 'mihdan-index-now'); ?></span></button>
-            <?php $cwp_wc_var_items(); ?>
+            <?php $cwp_wc_var_items(); $cwp_extra_var_items(); ?>
           </div>
         </div>
       </div>
       <textarea class="cwp-textarea" id="cwpDesc" name="<?php echo esc_attr(MetaFields::SEO_DESCRIPTION); ?>"
-                data-meter="cwpDescMeter" data-limit="920" data-font="14px Arial"><?php echo esc_textarea($data['seo_description']); ?></textarea>
+                placeholder="<?php echo esc_attr($cwp_templates['description']); ?>"
+                data-meter="cwpDescMeter" data-limit="920" data-min="400" data-font="14px Arial"><?php echo esc_textarea($data['seo_description']); ?></textarea>
       <div class="cwp-meter">
         <div class="cwp-meter-bar"><div class="cwp-meter-fill" id="cwpDescMeterFill"></div></div>
         <div class="cwp-meter-text" id="cwpDescMeter">—</div>
@@ -252,7 +274,7 @@ $cwp_wc_var_items = static function () use ($cwp_is_product): void {
               <button class="cwp-var-item" type="button" data-token="{{ post.auto_description }}"><code>{{ post.auto_description }}</code><span><?php esc_html_e('Post excerpt', 'mihdan-index-now'); ?></span></button>
               <button class="cwp-var-item" type="button" data-token="{{ current.year }}"><code>{{ current.year }}</code><span><?php esc_html_e('Current year', 'mihdan-index-now'); ?></span></button>
               <button class="cwp-var-item" type="button" data-token="{{ post.author }}"><code>{{ post.author }}</code><span><?php esc_html_e('Author name', 'mihdan-index-now'); ?></span></button>
-              <?php $cwp_wc_var_items(); ?>
+              <?php $cwp_wc_var_items(); $cwp_extra_var_items(); ?>
             </div>
           </div>
         </div>
@@ -275,7 +297,7 @@ $cwp_wc_var_items = static function () use ($cwp_is_product): void {
               <button class="cwp-var-item" type="button" data-token="{{ site.title }}"><code>{{ site.title }}</code><span><?php esc_html_e('Site name', 'mihdan-index-now'); ?></span></button>
               <button class="cwp-var-item" type="button" data-token="{{ post.category }}"><code>{{ post.category }}</code><span><?php esc_html_e('Primary category', 'mihdan-index-now'); ?></span></button>
               <button class="cwp-var-item" type="button" data-token="{{ current.year }}"><code>{{ current.year }}</code><span><?php esc_html_e('Current year', 'mihdan-index-now'); ?></span></button>
-              <?php $cwp_wc_var_items(); ?>
+              <?php $cwp_wc_var_items(); $cwp_extra_var_items(); ?>
             </div>
           </div>
         </div>
@@ -338,6 +360,7 @@ $cwp_wc_var_items = static function () use ($cwp_is_product): void {
         <div class="cwp-field">
           <div class="cwp-label-row"><label class="cwp-label" for="cwpXCard"><?php esc_html_e('Card type', 'mihdan-index-now'); ?></label></div>
           <select class="cwp-select" id="cwpXCard" name="<?php echo esc_attr(MetaFields::X_CARD_TYPE); ?>">
+            <option value="" <?php selected($data['x_card_type'], ''); ?>><?php echo \Mihdan\IndexNow\SEOCore\SocialSettings\SocialSettings::get('twitter_card', 'summary_large_image') === 'summary' ? esc_html__('Default (Summary)', 'mihdan-index-now') : esc_html__('Default (Summary with large image)', 'mihdan-index-now'); ?></option>
             <option value="summary_large_image" <?php selected($data['x_card_type'], 'summary_large_image'); ?>><?php esc_html_e('Summary with large image', 'mihdan-index-now'); ?></option>
             <option value="summary" <?php selected($data['x_card_type'], 'summary'); ?>><?php esc_html_e('Summary', 'mihdan-index-now'); ?></option>
           </select>
@@ -366,7 +389,7 @@ $cwp_wc_var_items = static function () use ($cwp_is_product): void {
               <button class="cwp-var-item" type="button" data-token="{{ post.auto_description }}"><code>{{ post.auto_description }}</code><span><?php esc_html_e('Post excerpt', 'mihdan-index-now'); ?></span></button>
               <button class="cwp-var-item" type="button" data-token="{{ current.year }}"><code>{{ current.year }}</code><span><?php esc_html_e('Current year', 'mihdan-index-now'); ?></span></button>
               <button class="cwp-var-item" type="button" data-token="{{ post.author }}"><code>{{ post.author }}</code><span><?php esc_html_e('Author name', 'mihdan-index-now'); ?></span></button>
-              <?php $cwp_wc_var_items(); ?>
+              <?php $cwp_wc_var_items(); $cwp_extra_var_items(); ?>
             </div>
           </div>
         </div>
@@ -389,7 +412,7 @@ $cwp_wc_var_items = static function () use ($cwp_is_product): void {
               <button class="cwp-var-item" type="button" data-token="{{ site.title }}"><code>{{ site.title }}</code><span><?php esc_html_e('Site name', 'mihdan-index-now'); ?></span></button>
               <button class="cwp-var-item" type="button" data-token="{{ post.category }}"><code>{{ post.category }}</code><span><?php esc_html_e('Primary category', 'mihdan-index-now'); ?></span></button>
               <button class="cwp-var-item" type="button" data-token="{{ current.year }}"><code>{{ current.year }}</code><span><?php esc_html_e('Current year', 'mihdan-index-now'); ?></span></button>
-              <?php $cwp_wc_var_items(); ?>
+              <?php $cwp_wc_var_items(); $cwp_extra_var_items(); ?>
             </div>
           </div>
         </div>
@@ -496,7 +519,7 @@ $cwp_wc_var_items = static function () use ($cwp_is_product): void {
 
     <div class="cwp-section">
       <h4 class="cwp-section-title"><?php esc_html_e('Output', 'mihdan-index-now'); ?></h4>
-      <p class="cwp-section-desc"><?php esc_html_e('What gets written into the page. Read-only.', 'mihdan-index-now'); ?></p>
+      <p class="cwp-section-desc"><?php esc_html_e('An approximate preview of the structured data for this post, built from the fields above. Site-wide nodes such as the website and publisher are not shown. Read-only.', 'mihdan-index-now'); ?></p>
       <div class="cwp-code-head">
         <button class="cwp-btn cwp-btn-link" type="button" id="cwpJsonToggle"><?php esc_html_e('Show JSON-LD', 'mihdan-index-now'); ?></button>
       </div>
@@ -510,7 +533,7 @@ $cwp_wc_var_items = static function () use ($cwp_is_product): void {
     <div class="cwp-linkbar">
       <div class="cwp-linkstat">
         <b id="cwpLinksOut">0</b>
-        <span><?php esc_html_e('links out', 'mihdan-index-now'); ?></span>
+        <span><?php esc_html_e('internal links out', 'mihdan-index-now'); ?></span>
       </div>
       <div class="cwp-linkstat">
         <b id="cwpLinksIn">0</b>

@@ -142,10 +142,12 @@ class FieldProcessor
 	/**
 	 * Validate *and* value-sanitise a JSON payload.
 	 *
-	 * Invalid JSON is discarded. Valid JSON is decoded, every string key and
-	 * value is run through wp_strip_all_tags() recursively, and the result is
-	 * re-encoded — so markup pasted into a schema field can never reach the
-	 * front end inside the JSON-LD block.
+	 * Invalid JSON is kept as tag-stripped text, so the editor does not lose
+	 * what they typed and can fix it; it is never printed, because the front
+	 * end only outputs values that decode. Valid JSON is decoded, every string
+	 * key and value is run through wp_strip_all_tags() recursively, and the
+	 * result is re-encoded — so markup pasted into a schema field can never
+	 * reach the front end inside the JSON-LD block.
 	 *
 	 * @param mixed $raw
 	 */
@@ -160,7 +162,7 @@ class FieldProcessor
 		$decoded = json_decode($json, true);
 
 		if (json_last_error() !== JSON_ERROR_NONE) {
-			return '';
+			return wp_strip_all_tags($json);
 		}
 
 		$encoded = wp_json_encode(self::strip_tags_deep($decoded), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);

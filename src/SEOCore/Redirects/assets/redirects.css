@@ -112,12 +112,19 @@
 }
 
 .cwp-redirect-table th,
-.cwp-redirect-table td {
+.cwp-redirect-table td,
+/* ID-scoped duplicate: the settings row rule ".wposa-form-table__row_… th"
+   (display:none !important) and WP's ".form-table th" (width:200px,
+   zero left padding) share this specificity and would otherwise win on
+   load order, collapsing the header cells into each other. */
+#cwp-redirect-table th,
+#cwp-redirect-table td {
 	padding: 10px 12px;
 	display: table-cell !important;
 	text-align: left;
 	vertical-align: middle;
 	border-bottom: 1px solid #dcdcde;
+	box-sizing: border-box;
 }
 
 .cwp-redirect-table thead th {
@@ -150,37 +157,39 @@
 	background: #f0f6fc;
 }
 
-/* Column widths — scoped inside .cwp-redirect-table to outspecify WP's
-   .form-table th { width: 200px } default.
+/* Column widths — ID-scoped to outspecify WP's .form-table th { width: 200px }.
    Narrow columns are sized to fit their bold 12px header label plus the
-   24px cell padding. Fixed columns + two 30% URL cols fit any container ≥ 700px. */
-.cwp-redirect-table .cwp-redirect-col-cb {
-	width: 36px;
+   24px cell padding. From/To have no explicit width so, under
+   table-layout: fixed, they split whatever space is left and never push
+   the total past the container (previously 2×30% + fixed columns overflowed
+   and the header labels ran together). */
+#cwp-redirect-table .cwp-redirect-col-cb {
+	width: 40px;
 }
 
-.cwp-redirect-table .cwp-redirect-col-type {
+#cwp-redirect-table .cwp-redirect-col-type {
 	width: 80px;
 }
 
-.cwp-redirect-table .cwp-redirect-col-from,
-.cwp-redirect-table .cwp-redirect-col-to {
-	width: 30%;
+#cwp-redirect-table .cwp-redirect-col-from,
+#cwp-redirect-table .cwp-redirect-col-to {
+	width: auto;
 }
 
-.cwp-redirect-table .cwp-redirect-col-note {
-	width: 80px;
+#cwp-redirect-table .cwp-redirect-col-note {
+	width: 18%;
 }
 
-.cwp-redirect-table .cwp-redirect-col-hits {
+#cwp-redirect-table .cwp-redirect-col-hits {
 	width: 64px;
 }
 
-.cwp-redirect-table .cwp-redirect-col-enable {
+#cwp-redirect-table .cwp-redirect-col-enable {
 	width: 80px;
 }
 
-.cwp-redirect-table .cwp-redirect-col-actions {
-	width: 90px;
+#cwp-redirect-table .cwp-redirect-col-actions {
+	width: 96px;
 }
 
 /* URL display — truncate long URLs */

@@ -3,6 +3,7 @@
 namespace Mihdan\IndexNow\SEOCore\Importer;
 
 use Mihdan\IndexNow\SEOCore\MetaBox\MetaFields;
+use Mihdan\IndexNow\SEOCore\MetaBox\SeoSignals;
 use Mihdan\IndexNow\SEOCore\TitleMeta\Options;
 use Mihdan\IndexNow\Utils;
 
@@ -60,7 +61,14 @@ class Writer
 			return false;
 		}
 
-		return self::persist('post', $post_id, $data, $overwrite) > 0;
+		$written = self::persist('post', $post_id, $data, $overwrite) > 0;
+
+		if ($written) {
+			/* Imported values feed the post list SEO signals. */
+			SeoSignals::flush($post_id);
+		}
+
+		return $written;
 	}
 
 	/**
