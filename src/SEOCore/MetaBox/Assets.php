@@ -147,6 +147,7 @@ class Assets
 			'breadcrumbs'      => self::get_breadcrumb_trail($post),
 			'ajaxUrl'          => admin_url('admin-ajax.php'),
 			'aiNonce'          => wp_create_nonce('crawlwp_ai_generate'),
+			'aiReady'          => Generator::is_ready(),
 			'indexNowNonce'    => wp_create_nonce('crawlwp_submit_indexnow'),
 			'postId'           => $post instanceof \WP_Post ? $post->ID : 0,
 			'featuredImageUrl' => $post instanceof \WP_Post ? (get_the_post_thumbnail_url($post->ID, 'medium') ?: '') : '',
@@ -520,6 +521,7 @@ class Assets
 		$content = isset($_POST['post_content']) ? wp_kses_post(wp_unslash($_POST['post_content'])) : '';
 		$keyword = isset($_POST['focus_keyword']) ? sanitize_text_field(wp_unslash($_POST['focus_keyword'])) : '';
 		$previous = isset($_POST['previous_value']) ? sanitize_textarea_field(wp_unslash($_POST['previous_value'])) : '';
+		$reserved = isset($_POST['reserved_length']) ? absint($_POST['reserved_length']) : 0;
 
 		// Check the capability against the actual post being edited, not just
 		// the generic edit_posts capability.
@@ -543,6 +545,7 @@ class Assets
 			'content'  => $content,
 			'keyword'  => $keyword,
 			'previous' => $previous,
+			'reserved' => $reserved,
 		];
 
 		/**
@@ -553,11 +556,12 @@ class Assets
 		 *
 		 * @param string $text    The generated text (empty by default).
 		 * @param string $field   The field being generated.
-		 * @param array  $context Post context: post_id, title, content, keyword, previous.
+		 * @param array  $context Post context: post_id, title, content, keyword, previous, reserved.
 		 */
 		$generated = apply_filters('crawlwp_ai_generate_seo', '', $field, $context);
 
 		if (! empty($generated)) {
+			$this->ai_count_request();
 			wp_send_json_success(['text' => $generated, 'source' => 'filter']);
 		}
 
@@ -568,42 +572,51 @@ class Assets
 			wp_send_json_error($this->ai_error_response($generated));
 		}
 
+		$this->ai_count_request();
 		wp_send_json_success(['text' => $generated, 'source' => 'ai']);
 	}
 
 	/**
-	 * Per-user rate limit for AI generation: at most 20 requests per 5 minutes.
-	 *
-	 * Increments the counter on every call, so call it once per request.
+	 * Per-user rate limit for AI generation: at most 20 generated values per
+	 * 5 minutes. Only successful generations count (see ai_count_request()),
+	 * so provider errors or missing content never lock a user out.
 	 */
 	private function ai_rate_limited(): bool
 	{
-		$limit  = (int) apply_filters('crawlwp_ai_rate_limit', 20);
-		$window = (int) apply_filters('crawlwp_ai_rate_limit_window', 5 * MINUTE_IN_SECONDS);
+		$limit = (int) apply_filters('crawlwp_ai_rate_limit', 20);
 
 		if ($limit <= 0) {
 			return false;
 		}
 
-		$key   = 'crawlwp_ai_rl_' . get_current_user_id();
-		$state = get_transient($key);
-		$now   = time();
+		return (int) $this->ai_rate_state()['count'] >= $limit;
+	}
 
-		// Fixed window: [count, window start]. A missing/expired transient starts a fresh window.
+	private function ai_count_request(): void
+	{
+		$window = (int) apply_filters('crawlwp_ai_rate_limit_window', 5 * MINUTE_IN_SECONDS);
+		$state  = $this->ai_rate_state();
+
+		$state['count'] = (int) $state['count'] + 1;
+		$remaining      = $window - (time() - (int) $state['start']);
+
+		set_transient('crawlwp_ai_rl_' . get_current_user_id(), $state, max(1, $remaining));
+	}
+
+	/**
+	 * Fixed window: [count, window start]. A missing/expired transient starts a fresh window.
+	 */
+	private function ai_rate_state(): array
+	{
+		$window = (int) apply_filters('crawlwp_ai_rate_limit_window', 5 * MINUTE_IN_SECONDS);
+		$state  = get_transient('crawlwp_ai_rl_' . get_current_user_id());
+		$now    = time();
+
 		if (! is_array($state) || ! isset($state['count'], $state['start']) || ($now - (int) $state['start']) >= $window) {
 			$state = ['count' => 0, 'start' => $now];
 		}
 
-		if ((int) $state['count'] >= $limit) {
-			return true;
-		}
-
-		$state['count'] = (int) $state['count'] + 1;
-		$remaining      = $window - ($now - (int) $state['start']);
-
-		set_transient($key, $state, max(1, $remaining));
-
-		return false;
+		return $state;
 	}
 
 	/**
@@ -621,6 +634,8 @@ class Assets
 		$connection_codes = ['crawlwp_ai_unavailable', 'crawlwp_ai_unsupported'];
 
 		if (in_array($code, $connection_codes, true)) {
+			Generator::forget_ready();
+
 			return [
 				'message'    => __('AI generation is unavailable. Connect an AI provider in WordPress under Settings → Connectors, then try again.', 'mihdan-index-now')
 					. ($message !== '' ? "\n\n" . $message : ''),
@@ -844,7 +859,10 @@ class Assets
 			'aiGenerate'       => __('Generate with AI', 'mihdan-index-now'),
 			'aiGenerating'     => __('Generating…', 'mihdan-index-now'),
 			'aiError'          => __('AI generation is unavailable. Connect an AI provider in WordPress under Settings → Connectors, then try again.', 'mihdan-index-now'),
-			'aiOpenConnectors' => __('Open the Connectors settings page in a new tab?', 'mihdan-index-now'),
+			'aiOpenConnectorsLink' => __('Open Connectors settings', 'mihdan-index-now'),
+			'aiDismiss'        => __('Dismiss', 'mihdan-index-now'),
+			'aiLockedOg'       => __('This field uses the SEO title and description. Turn off "Use the SEO title and description" to edit it or generate it with AI.', 'mihdan-index-now'),
+			'aiLockedX'        => __('This field uses the Facebook values. Turn off "Use the Facebook values" to edit it or generate it with AI.', 'mihdan-index-now'),
 			'aiRewrite'        => __('Rewrite with AI', 'mihdan-index-now'),
 
 			/* IndexNow submit */

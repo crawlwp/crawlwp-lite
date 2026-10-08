@@ -343,6 +343,11 @@
           field = $btn.data('aiTarget') === 'cwpTitle' ? 'title' : 'description';
         }
 
+        if ($btn.hasClass('is-locked')) {
+          self.aiShowNotice($btn, self.aiLockedMessage($btn));
+          return;
+        }
+
         self.aiGenerate(field, $btn);
       });
 
@@ -427,13 +432,22 @@
       this.$xTitle.prop('disabled', this.$xSync.prop('checked'));
       this.$xDesc.prop('disabled', this.$xSync.prop('checked'));
 
-      /* Nothing to generate into while the field mirrors another value. */
+      /* Nothing to generate into while the field mirrors another value.
+         The button stays focusable so its tooltip can say why. */
       var self = this;
       this.$mb.find('.cwp-ai-btn[data-ai-target]').each(function() {
         var $btn = $(this);
         var $target = $('#' + $btn.data('aiTarget'));
-        if ($target.length) {
-          $btn.prop('disabled', $target.prop('disabled'));
+        if (!$target.length) return;
+
+        var locked = $target.prop('disabled');
+        $btn.toggleClass('is-locked', locked).attr('aria-disabled', locked ? 'true' : 'false');
+
+        if (locked) {
+          $btn.attr('title', self.aiLockedMessage($btn));
+        } else {
+          self.aiClearNotice($btn);
+          self.aiSyncLabel($btn);
         }
       });
 
@@ -745,6 +759,8 @@
 
     /* The tooltip tells the user whether the value will be written or rewritten. */
     aiSyncLabel: function($btn) {
+      if ($btn.hasClass('is-locked')) return;
+
       var L = crawlwpSEO.i18n;
       var $target = $('#' + $btn.data('aiTarget'));
       var hasValue = $target.length && $.trim($target.val() || '') !== '';
@@ -777,6 +793,10 @@
 
       var content = this.getEditorContent();
       var keyword = $('#cwpKeyword').val() || '';
+      var previous = $.trim($target.val() || '');
+      var template = field === 'title' ? this.aiTitleTemplate(previous) : '';
+
+      this.aiClearNotice($btn);
 
       $.ajax({
         url: crawlwpSEO.ajaxUrl,
@@ -789,22 +809,29 @@
           post_title: postTitle,
           post_content: content,
           focus_keyword: keyword,
-          /* Sent so the model rewrites instead of repeating itself. */
-          previous_value: $target.val() || ''
+          /* Sent resolved, so the model rewrites the text instead of
+             repeating variable tokens back. */
+          previous_value: previous ? self.resolve(previous) : '',
+          /* The template text kept around a generated title, e.g. " – Site". */
+          reserved_length: template ? self.resolve(template.replace(self.aiTitleToken, '')).length : 0
         },
         success: function(resp) {
           if (resp.success && resp.data && resp.data.text) {
-            $target.val(resp.data.text).trigger('input').trigger('change');
+            var text = resp.data.text;
+            if (template) {
+              text = template.replace(self.aiTitleToken, function() { return text; });
+            }
+            $target.val(text).trigger('input').trigger('change');
             self.aiSyncLabel($btn);
             return;
           }
 
           /* No AI provider connected, or the request failed: there is no
              fallback, so tell the user how to fix it. */
-          self.aiShowError(resp.data);
+          self.aiShowError($btn, resp.data);
         },
-        error: function() {
-          self.aiShowError(null);
+        error: function(xhr) {
+          self.aiShowError($btn, xhr && xhr.responseJSON ? xhr.responseJSON.data : null);
         },
         complete: function() {
           $btn.removeClass('is-loading').prop('disabled', false).html(origHtml);
@@ -812,25 +839,58 @@
       });
     },
 
-    aiShowError: function(data) {
+    /* The {{ post.title }} token a generated SEO title is put in place of. */
+    aiTitleToken: /\{\{\s*post\.title\s*\}\}/,
+
+    /* The template a generated SEO title goes into: the field's own value, or
+       the post type template when the field is empty. Only used when it holds
+       {{ post.title }}; otherwise the generated title replaces the field. */
+    aiTitleTemplate: function(previous) {
+      var template = previous || crawlwpSEO.titleTemplate || '';
+      return this.aiTitleToken.test(template) ? template : '';
+    },
+
+    aiLockedMessage: function($btn) {
+      var L = crawlwpSEO.i18n;
+      return String($btn.data('aiTarget')).indexOf('cwpX') === 0 ? L.aiLockedX : L.aiLockedOg;
+    },
+
+    aiShowError: function($btn, data) {
       var L = crawlwpSEO.i18n;
       var msg = (data && data.message) ? data.message : L.aiError;
 
-      window.alert(msg);
+      this.aiShowNotice($btn, msg, data && data.connectUrl ? data.connectUrl : '');
+    },
 
-      /* Offer to open the WordPress Connectors screen in a new tab so the
-         user can connect an AI provider without losing their edits. */
-      if (data && data.connectUrl && window.confirm(L.aiOpenConnectors)) {
-        var win = window.open(data.connectUrl, '_blank');
-        if (win) {
-          win.opener = null;
-          win.focus();
-        } else {
-          /* Popup blocked: fall back to the current tab, the user already
-             agreed to open the page. */
-          window.location.href = data.connectUrl;
-        }
+    /* Inline message under the field, instead of a blocking dialog. The
+       Connectors link opens in a new tab so unsaved edits are kept. */
+    aiShowNotice: function($btn, message, connectUrl) {
+      var L = crawlwpSEO.i18n;
+      var $field = $('#' + $btn.data('aiTarget')).closest('.cwp-field');
+      if (!$field.length) return;
+
+      this.aiClearNotice($btn);
+
+      var $notice = $('<div class="cwp-ai-notice" role="alert"></div>');
+      $notice.append($('<span class="cwp-ai-notice__text"></span>').text(message));
+
+      if (connectUrl) {
+        $notice.append(' ').append(
+          $('<a target="_blank" rel="noopener noreferrer"></a>').attr('href', connectUrl).text(L.aiOpenConnectorsLink)
+        );
       }
+
+      $notice.append(
+        $('<button type="button" class="cwp-ai-notice__close"></button>').attr('aria-label', L.aiDismiss).html('&times;').on('click', function() {
+          $notice.remove();
+        })
+      );
+
+      $field.append($notice);
+    },
+
+    aiClearNotice: function($btn) {
+      $('#' + $btn.data('aiTarget')).closest('.cwp-field').find('.cwp-ai-notice').remove();
     },
 
     /* ---------- IndexNow submit ---------- */

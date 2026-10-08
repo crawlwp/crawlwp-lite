@@ -12,8 +12,15 @@ $categories = is_array($categories) ? $categories : [];
  *
  * @param string $target The id of the input the generated text goes into.
  * @param string $field  The field key sent to the server.
+ *
+ * Hidden when no AI provider is connected (Settings > Connectors).
  */
-$cwp_ai_button = static function (string $target, string $field): void {
+$cwp_ai_ready  = \Mihdan\IndexNow\SEOCore\AI\Generator::is_ready();
+$cwp_ai_button = static function (string $target, string $field) use ($cwp_ai_ready): void {
+  /* No provider connected: the buttons could only ever fail. */
+  if (! $cwp_ai_ready) {
+    return;
+  }
   ?>
   <button class="cwp-ai-btn" type="button" data-ai-target="<?php echo esc_attr($target); ?>" data-ai-field="<?php echo esc_attr($field); ?>" title="<?php esc_attr_e('Generate with AI', 'mihdan-index-now'); ?>">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.09 6.26L20 10l-5.91 1.74L12 18l-2.09-6.26L4 10l5.91-1.74z"/><path d="M19 2l.87 2.61L22.5 5.5l-2.63.89L19 9l-.87-2.61L15.5 5.5l2.63-.89z"/></svg>
