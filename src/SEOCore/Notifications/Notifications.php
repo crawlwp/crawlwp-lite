@@ -1274,10 +1274,9 @@ class Notifications
 	 */
 	private function is_sitemap_enabled(): bool
 	{
-		/** @global \WP_Sitemaps $wp_sitemaps */
-		global $wp_sitemaps;
+		$wp_sitemaps = wp_sitemaps_get_server();
 
-		return is_a($wp_sitemaps, \WP_Sitemaps::class) && $wp_sitemaps->sitemaps_enabled();
+		return is_object($wp_sitemaps) && $wp_sitemaps->sitemaps_enabled();
 	}
 
 	/**

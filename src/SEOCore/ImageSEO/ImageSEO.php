@@ -29,8 +29,7 @@ class ImageSEO
 			'header_menu_id' => 'advanced_settings',
 			'id'             => self::SECTION,
 			'title'          => __('Image SEO', 'mihdan-index-now'),
-			'desc'           => __('Automatically fill missing alt text from the image title or file name.', 'mihdan-index-now'),
-			'reset_button'   => true,
+			'desc'           => __('Automatically fill missing alt text from the image title or file name.', 'mihdan-index-now')
 		]);
 
 		$wposa->add_field(self::SECTION, [
