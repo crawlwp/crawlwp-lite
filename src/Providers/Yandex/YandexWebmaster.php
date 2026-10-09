@@ -7,6 +7,7 @@
 
 namespace Mihdan\IndexNow\Providers\Yandex;
 
+use Mihdan\IndexNow\Indexing;
 use Mihdan\IndexNow\Utils;
 use Mihdan\IndexNow\WebmasterAbstract;
 
@@ -18,6 +19,7 @@ class YandexWebmaster extends WebmasterAbstract
 	private const RECRAWL_ENDPOINT = 'https://api.webmaster.yandex.net/v4/user/%s/hosts/%s/recrawl/queue';
 	private const QUOTA_ENDPOINT = 'https://api.webmaster.yandex.net/v4/user/%s/hosts/%s/recrawl/quota';
 	private const API_BASE_URL = 'https://api.webmaster.yandex.net/v4/user/%s/hosts/%s/';
+	private const RATE_LIMIT_OPTION = 'crawlwp_yandex_indexing_rate_limit_expiration';
 
 	public function get_slug(): string
 	{
@@ -325,11 +327,13 @@ class YandexWebmaster extends WebmasterAbstract
 
 		if (empty($token) || empty($user_id) || empty($host_id)) return;
 
-		if (time() < (int)get_option('crawlwp_yandex_indexing_rate_limit_expiration', 0)) return;
-
-		$url = sprintf($this->get_ping_endpoint(), $this->get_user_id(), $this->get_host_id());
+		if (Indexing::get_post_skip_reason($post_id) !== '') return;
 
 		$post_url = Utils::normalized_get_permalink($post_id);
+
+		if ($this->is_paused(self::RATE_LIMIT_OPTION, $post_url)) return;
+
+		$url = sprintf($this->get_ping_endpoint(), $this->get_user_id(), $this->get_host_id());
 
 		$args = [
 			'timeout' => 60,
@@ -345,26 +349,28 @@ class YandexWebmaster extends WebmasterAbstract
 		];
 
 		$response = wp_remote_post($url, $args);
-		$status_code = wp_remote_retrieve_response_code($response);
+
+		if (is_wp_error($response)) {
+			$this->log_submission($post_url, get_the_title($post_id), 0, $response->get_error_message());
+
+			return;
+		}
+
+		$status_code = (int)wp_remote_retrieve_response_code($response);
 		$body = json_decode(wp_remote_retrieve_body($response), true);
 
-		$data = [
-			'status_code' => $status_code,
-			'search_engine' => $this->get_slug(),
-		];
-
-		if ($status_code >= 400 && $status_code < 500) {
-			update_option('crawlwp_yandex_indexing_rate_limit_expiration', time() + (6 * HOUR_IN_SECONDS));
+		// Only the daily recrawl quota (429 QUOTA_EXCEEDED) pauses submissions.
+		if ($status_code === 429) {
+			update_option(self::RATE_LIMIT_OPTION, time() + (6 * HOUR_IN_SECONDS), false);
 		}
+
+		$error = is_array($body) ? (string)($body['error_message'] ?? '') : '';
+
+		$this->log_submission($post_url, get_the_title($post_id), $status_code, $error);
 
 		if (Utils::is_response_code_success($status_code)) {
-			$message = sprintf('<a href="%s" target="_blank">%s</a> - OK', $post_url, get_the_title($post_id));
-			$this->logger->info($message, $data);
-		} else {
-			$this->logger->error($body['error_message'] ?? 'Unknown error', $data);
+			do_action('crawlwp/index_pinged', 'post', $post_id);
 		}
-
-		do_action('crawlwp/index_pinged', 'post', $post_id);
 	}
 
 	public function get_quota(): array

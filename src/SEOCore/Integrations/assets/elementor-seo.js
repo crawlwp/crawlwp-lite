@@ -125,9 +125,9 @@
       });
 
       return '<div class="cwp-var">' +
-        '<button class="cwp-var-btn" type="button" title="' + btnLabel + '">' +
-        '<svg width="10" height="10" viewBox="0 0 10 10"><path d="M5 1v8M1 5h8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>' +
-        '<span>' + btnLabel + '</span>' +
+        '<button class="cwp-var-btn" type="button" title="' + btnLabel + '" aria-label="' + btnLabel + '">' +
+        '<svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M5 1v8M1 5h8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>' +
+        '<span class="cwp-var-btn-label">' + btnLabel + '</span>' +
         '</button>' +
         '<div class="cwp-var-menu">' + itemsHtml + '</div>' +
         '</div>';

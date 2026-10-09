@@ -30,17 +30,42 @@ class SitemapSettings
 		/*
 		 * Record a timestamp whenever the sitemap settings option is saved.
 		 * CustomUrlsSitemapProvider uses this to populate the lastmod field.
+		 *
+		 * update_option() skips the update_option_* hooks when the value is
+		 * unchanged, so a plain "Save Changes" would do nothing; the
+		 * pre_update_option_* filter runs on every save.
 		 */
-		add_action('update_option_crawlwp_' . self::SECTION, [$this, 'record_save_timestamp']);
+		add_filter('pre_update_option_crawlwp_' . self::SECTION, [$this, 'on_settings_save']);
 		add_action('add_option_crawlwp_' . self::SECTION, [$this, 'record_save_timestamp']);
 	}
 
 	/**
-	 * Save the current UTC timestamp whenever the sitemap settings are written.
+	 * Runs on every save of the sitemap settings, changed or not.
+	 *
+	 * @param mixed $value New option value.
+	 *
+	 * @return mixed Unmodified value.
+	 */
+	public function on_settings_save($value)
+	{
+		$this->record_save_timestamp();
+
+		return $value;
+	}
+
+	/**
+	 * Save the current UTC timestamp whenever the sitemap settings are written
+	 * and let the sitemaps drop their caches.
 	 */
 	public function record_save_timestamp(): void
 	{
 		update_option('crawlwp_sitemap_settings_updated', time(), false);
+
+		/**
+		 * Fires every time the sitemap settings are saved, even when no value
+		 * changed. Cached sitemaps hook this to flush themselves.
+		 */
+		do_action('crawlwp_sitemap_settings_saved');
 	}
 
 	// -------------------------------------------------------------------------
@@ -189,7 +214,7 @@ class SitemapSettings
 			esc_html__('PRO', 'mihdan-index-now'),
 			esc_html__('Ensure all language versions of your content are properly discovered and indexed by global search engines. CrawlWP SEO Premium seamlessly bridges WPML, Polylang, and TranslatePress with your XML sitemaps.', 'mihdan-index-now'),
 			esc_html__('Premium Features:', 'mihdan-index-now'),
-			esc_html__('Automatic xhtml:link rel="alternate" hreflang cross-links in XML sitemaps, per-language sitemap index queries, and frontend <head> alternate link output.', 'mihdan-index-now'),
+			esc_html__('Every translation listed in your XML sitemaps with automatic xhtml:link rel="alternate" hreflang cross-links. The hreflang tags in the page <head> remain handled by your multilingual plugin.', 'mihdan-index-now'),
 			esc_url($upgrade_url),
 			esc_html__('Upgrade to CrawlWP SEO Premium', 'mihdan-index-now')
 		);

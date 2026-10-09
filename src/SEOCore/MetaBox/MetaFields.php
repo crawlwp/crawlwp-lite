@@ -45,6 +45,9 @@ class MetaFields
 	/** Cached SEO score (0–100 float stored as string). Updated on each metabox/inline save. */
 	public const SEO_SCORE = '_crawlwp_seo_score';
 
+	/** Score shown in the post list (stored score, else the estimate). Used for sorting only. */
+	public const SEO_SCORE_SORT = '_crawlwp_seo_score_sort';
+
 	public const NONCE_ACTION = 'crawlwp_seo_metabox';
 	public const NONCE_NAME   = '_crawlwp_seo_nonce';
 
@@ -136,7 +139,7 @@ class MetaFields
 			self::ROBOTS_FOLLOW       => [['', 'follow', 'nofollow'], ''],
 			self::MAX_SNIPPET         => [['', 'none', '160'], ''],
 			self::MAX_IMAGE           => [['large', 'standard', 'none'], 'large'],
-			self::X_CARD_TYPE         => [['summary_large_image', 'summary'], 'summary_large_image'],
+			self::X_CARD_TYPE         => [['', 'summary_large_image', 'summary'], ''],
 			self::SCHEMA_TYPE         => [array_merge(self::$page_types, self::$article_types), ''],
 			self::SCHEMA_PAGE_TYPE    => [array_merge([''], self::$page_types), ''],
 			self::SCHEMA_ARTICLE_TYPE => [array_merge([''], self::$article_types), ''],
@@ -440,7 +443,7 @@ class MetaFields
 			'x_title'             => self::get($post_id, self::X_TITLE),
 			'x_description'       => self::get($post_id, self::X_DESCRIPTION),
 			'x_image'             => self::get($post_id, self::X_IMAGE, 0),
-			'x_card_type'         => self::get($post_id, self::X_CARD_TYPE, 'summary_large_image'),
+			'x_card_type'         => self::get($post_id, self::X_CARD_TYPE),
 			'x_creator'           => self::get($post_id, self::X_CREATOR),
 			'x_sync'              => self::get($post_id, self::X_SYNC, '1'),
 			'schema_page_type'    => self::get($post_id, self::SCHEMA_PAGE_TYPE),

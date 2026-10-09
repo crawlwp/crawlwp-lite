@@ -236,10 +236,7 @@ https://github.com/yourprofile"
 		   sanitize_textarea_field() would mangle otherwise valid URLs. */
 		$additional = isset($_POST[self::META_ADDITIONAL_PROFILES]) ? wp_unslash((string) $_POST[self::META_ADDITIONAL_PROFILES]) : '';
 
-		/* Ensure @handle always starts with @. */
-		if ($twitter !== '' && strncmp($twitter, '@', 1) !== 0) {
-			$twitter = '@' . ltrim($twitter, '@');
-		}
+		$twitter = self::x_handle($twitter);
 
 		/* Sanitize each additional profile URL individually. */
 		$additional_lines = array_filter(array_map('esc_url_raw', array_map('trim', explode("\n", $additional))));
@@ -317,6 +314,27 @@ https://github.com/yourprofile"
 	public static function get(int $user_id, string $meta_key): string
 	{
 		return (string) get_user_meta($user_id, $meta_key, true);
+	}
+
+	/**
+	 * Normalise an X username to "@handle". Accepts "handle", "@handle" and
+	 * profile URLs such as "https://x.com/handle" or "twitter.com/handle".
+	 */
+	public static function x_handle(string $value): string
+	{
+		$value = trim($value);
+
+		if ($value === '') {
+			return '';
+		}
+
+		$value = ltrim($value, '@');
+
+		if (preg_match('#^(?:https?://)?(?:www\.|mobile\.)?(?:x|twitter)\.com/@?([A-Za-z0-9_]+)#i', $value, $matches)) {
+			$value = $matches[1];
+		}
+
+		return '@' . $value;
 	}
 
 	/**

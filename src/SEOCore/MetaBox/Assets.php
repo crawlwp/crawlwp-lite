@@ -4,7 +4,12 @@ namespace Mihdan\IndexNow\SEOCore\MetaBox;
 
 use Mihdan\IndexNow\SEOCore\AI\Generator;
 use Mihdan\IndexNow\SEOCore\Breadcrumbs\BreadcrumbSettings;
+use Mihdan\IndexNow\SEOCore\SiteInfoSettings\SiteInfoSettings;
+use Mihdan\IndexNow\SEOCore\TitleMeta\Entities;
+use Mihdan\IndexNow\SEOCore\TitleMeta\Options;
 use Mihdan\IndexNow\SEOCore\TitleMeta\Variables;
+use Mihdan\IndexNow\Indexing;
+use Mihdan\IndexNow\Utils;
 
 class Assets
 {
@@ -88,8 +93,10 @@ class Assets
 
 		$author      = '';
 		$categories  = [];
-		$inbound     = [];
+		$inbound     = ['links' => [], 'more' => false];
 		$suggested   = [];
+		$templates   = self::title_meta_templates($post);
+		$variables   = [];
 
 		if ($post instanceof \WP_Post) {
 			$author_obj = get_userdata((int) $post->post_author);
@@ -100,6 +107,14 @@ class Assets
 			}
 			$inbound   = self::get_inbound_links($post->ID);
 			$suggested = self::get_suggested_links($post->ID);
+			$variables = self::resolved_variables($post, array_merge(array_values($templates), [
+				(string) MetaFields::get($post->ID, MetaFields::SEO_TITLE),
+				(string) MetaFields::get($post->ID, MetaFields::SEO_DESCRIPTION),
+				(string) MetaFields::get($post->ID, MetaFields::OG_TITLE),
+				(string) MetaFields::get($post->ID, MetaFields::OG_DESCRIPTION),
+				(string) MetaFields::get($post->ID, MetaFields::X_TITLE),
+				(string) MetaFields::get($post->ID, MetaFields::X_DESCRIPTION),
+			]));
 		}
 
 		$localize_data = [
@@ -116,7 +131,14 @@ class Assets
 			   hundreds of kilobytes on every editor load. The JS reads the live
 			   content from the block editor store (or the Classic editor) via
 			   getEditorContent(). */
-			'inboundLinks'     => $inbound,
+			/* Title & Meta templates the front end falls back to when the fields are empty. */
+			'titleTemplate'    => $templates['title'],
+			'descTemplate'     => $templates['description'],
+			/* Server-resolved values of every known variable, so the preview matches the front end. */
+			'variables'        => (object) $variables,
+			'hasExcerpt'       => $post instanceof \WP_Post && trim($post->post_excerpt) !== '',
+			'inboundLinks'     => $inbound['links'],
+			'inboundLinksMore' => $inbound['more'],
 			'suggestedLinks'   => $suggested,
 			'kwCheckNonce'     => wp_create_nonce('crawlwp_check_keyword'),
 			'suggestedNonce'   => wp_create_nonce('crawlwp_suggested_links'),
@@ -125,9 +147,14 @@ class Assets
 			'breadcrumbs'      => self::get_breadcrumb_trail($post),
 			'ajaxUrl'          => admin_url('admin-ajax.php'),
 			'aiNonce'          => wp_create_nonce('crawlwp_ai_generate'),
+			'aiReady'          => Generator::is_ready(),
 			'indexNowNonce'    => wp_create_nonce('crawlwp_submit_indexnow'),
 			'postId'           => $post instanceof \WP_Post ? $post->ID : 0,
 			'featuredImageUrl' => $post instanceof \WP_Post ? (get_the_post_thumbnail_url($post->ID, 'medium') ?: '') : '',
+			'featuredImageFull' => $post instanceof \WP_Post ? (get_the_post_thumbnail_url($post->ID, 'full') ?: '') : '',
+			'language'         => get_bloginfo('language'),
+			'websiteId'        => home_url('/') . '#website',
+			'publisherId'      => home_url('/') . '#' . ((string) SiteInfoSettings::get('site_type', 'organization') === 'person' ? 'person' : 'organization'),
 			'i18n'             => self::get_i18n_strings(),
 		];
 
@@ -161,6 +188,82 @@ class Assets
 	}
 
 	/**
+	 * Title & Meta templates the front end uses for this post when its own
+	 * SEO title/description are empty (see FrontendOutput::resolve()).
+	 *
+	 * @return array{title: string, description: string}
+	 */
+	public static function title_meta_templates(?\WP_Post $post): array
+	{
+		/* Post types CrawlWP does not handle keep the WordPress document title. */
+		$templates = [
+			'title'       => '{{ post.title }} {{ sep }} {{ site.title }}',
+			'description' => '',
+		];
+
+		if (! $post instanceof \WP_Post) {
+			return $templates;
+		}
+
+		$is_front_page = get_option('show_on_front') === 'page' && (int) get_option('page_on_front') === $post->ID;
+		$entity_key    = $is_front_page ? 'home' : Entities::post_type_key($post->post_type);
+
+		if (Entities::get($entity_key) === null) {
+			return $templates;
+		}
+
+		foreach (array_keys($templates) as $field) {
+			$templates[$field] = (string) Options::get($entity_key, $field, Entities::default_value($entity_key, $field));
+		}
+
+		return $templates;
+	}
+
+	/**
+	 * Resolve every advertised variable, plus any used in the given strings,
+	 * against the post, keyed by token name.
+	 *
+	 * @param string[] $strings Templates/values whose tokens must be resolvable too.
+	 * @return array<string,string>
+	 */
+	private static function resolved_variables(\WP_Post $post, array $strings): array
+	{
+		$tokens = [];
+
+		foreach (Variables::definitions() as $group) {
+			foreach (array_keys((array) ($group['variables'] ?? [])) as $token) {
+				$tokens[strtolower((string) $token)] = true;
+			}
+		}
+
+		/* Placeholders documented in the reference, not real variables. */
+		unset($tokens['post.custom_field.key'], $tokens['post.taxonomy.slug']);
+
+		foreach ($strings as $string) {
+			if (preg_match_all('/\{\{\s*([a-z0-9_]+(?:\.[a-z0-9_\-]+)*)\s*\}\}/i', (string) $string, $matches)) {
+				foreach ($matches[1] as $token) {
+					$tokens[strtolower($token)] = true;
+				}
+			}
+		}
+
+		$context = [
+			'post'      => $post,
+			'post_type' => get_post_type_object($post->post_type),
+		];
+
+		$values = [];
+
+		foreach (array_keys($tokens) as $token) {
+			/* The markers stop the separator cleanup from trimming a lone value such as {{ sep }}. */
+			$resolved       = Variables::replace("\x02{{ " . $token . " }}\x03", $context);
+			$values[$token] = trim(str_replace(["\x02", "\x03"], '', $resolved));
+		}
+
+		return $values;
+	}
+
+	/**
 	 * Related posts an editor could link to from this content.
 	 *
 	 * @param int         $post_id The post being edited.
@@ -177,12 +280,13 @@ class Assets
 		$categories = wp_get_post_categories($post_id, ['fields' => 'ids']);
 		$tags       = wp_get_post_tags($post_id, ['fields' => 'ids']);
 
-		$args = [
-			'post_type'      => $post->post_type,
-			'post_status'    => 'publish',
-			'posts_per_page' => 10,
-			'post__not_in'   => [$post_id],
-			'orderby'        => 'relevance',
+		$limit = 10;
+		$base  = [
+			'post_type'           => $post->post_type,
+			'post_status'         => 'publish',
+			'posts_per_page'      => $limit,
+			'ignore_sticky_posts' => true,
+			'no_found_rows'       => true,
 		];
 
 		/* Try keyword-based search first */
@@ -192,36 +296,47 @@ class Assets
 
 		$parsed_keywords = MetaFields::parse_keywords($keyword);
 		$search_keyword  = $parsed_keywords[0] ?? '';
+		$recent          = ['orderby' => 'date', 'order' => 'DESC'];
 
 		if ($search_keyword !== '') {
-			$args['s'] = $search_keyword;
-		} elseif (! empty($categories)) {
-			/* Fall back to same-category posts */
-			unset($args['orderby']);
-			$args['category__in'] = $categories;
-			$args['orderby']      = 'date';
-			$args['order']        = 'DESC';
-		} elseif (! empty($tags)) {
-			unset($args['orderby']);
-			$args['tag__in'] = $tags;
-			$args['orderby'] = 'date';
-			$args['order']   = 'DESC';
+			/* Keyword suggestions stay keyword-only, so "no matches" stays visible. */
+			$strategies = [['s' => $search_keyword, 'orderby' => 'relevance']];
 		} else {
-			/* Last resort: recent posts */
-			unset($args['orderby']);
-			$args['orderby'] = 'date';
-			$args['order']   = 'DESC';
+			/* Same-category posts, topped up with same-tag and then recent posts. */
+			$strategies = [];
+
+			if (! empty($categories)) {
+				$strategies[] = ['category__in' => $categories] + $recent;
+			}
+
+			if (! empty($tags)) {
+				$strategies[] = ['tag__in' => $tags] + $recent;
+			}
+
+			$strategies[] = $recent;
 		}
 
-		$query = new \WP_Query($args);
-		$links = [];
+		$links   = [];
+		$exclude = [$post_id];
 
-		foreach ($query->posts as $suggested) {
-			$links[] = [
-				'title' => $suggested->post_title,
-				'url'   => get_permalink($suggested->ID),
-				'date'  => mysql2date('j M Y', $suggested->post_date),
-			];
+		foreach ($strategies as $strategy) {
+			$query = new \WP_Query(array_merge($base, $strategy, [
+				'post__not_in'   => $exclude,
+				'posts_per_page' => $limit - count($links),
+			]));
+
+			foreach ($query->posts as $suggested) {
+				$exclude[] = $suggested->ID;
+				$links[]   = [
+					'title' => $suggested->post_title,
+					'url'   => get_permalink($suggested->ID),
+					'date'  => mysql2date('j M Y', $suggested->post_date),
+				];
+			}
+
+			if (count($links) >= $limit) {
+				break;
+			}
 		}
 
 		wp_reset_postdata();
@@ -275,65 +390,113 @@ class Assets
 	}
 
 	/**
-	 * Published posts/pages that link to this post.
+	 * Published content that links to this post.
 	 *
-	 * The lookup is an unindexed LIKE over post_content, so the result is
-	 * cached in a transient and only the columns actually needed are selected:
-	 * the anchor text comes from a bounded substring around the first match
-	 * instead of the whole content column.
+	 * A link may use the absolute permalink (http or https, with or without
+	 * www.), a site-relative path or the ?p= / ?page_id= form. The lookup is an
+	 * unindexed LIKE over post_content, so the candidates are narrowed in SQL,
+	 * confirmed against the actual href in PHP and the result is cached in a
+	 * transient.
+	 *
+	 * @return array{links: array, more: bool}
 	 */
 	private static function get_inbound_links(int $post_id): array
 	{
+		$empty     = ['links' => [], 'more' => false];
 		$permalink = get_permalink($post_id);
 
-		if (! $permalink) return [];
+		if (! $permalink) return $empty;
 
 		$cache_key = self::inbound_links_cache_key($post_id);
 		$cached    = get_transient($cache_key);
 
-		if (is_array($cached)) {
+		if (is_array($cached) && isset($cached['links'])) {
 			return $cached;
 		}
 
 		global $wpdb;
 
-		/* Characters kept before/after the match so the anchor tag fits in the excerpt. */
+		/* Number of linking posts listed before the count shows as "N+". */
+		$max = 50;
+
+		/* The path also matches relative links and either scheme. The home page path is too broad to search for. */
+		$path    = untrailingslashit((string) wp_parse_url($permalink, PHP_URL_PATH));
+		$home    = untrailingslashit((string) wp_parse_url(home_url('/'), PHP_URL_PATH));
+		$needles = $path !== '' && $path !== $home ? [$path] : [];
+
+		foreach (['?p=', '&p=', ';p=', 'page_id='] as $prefix) {
+			$needles[] = $prefix . $post_id;
+		}
+
+		$host    = preg_replace('/^www\./i', '', (string) wp_parse_url(home_url('/'), PHP_URL_HOST));
+		$host_re = '(?:(?:https?:)?//(?:www\.)?' . preg_quote($host, '#') . '(?::\d+)?)?';
+		$alts    = [];
+
+		if ($path !== '' && $path !== $home) {
+			$alts[] = $host_re . preg_quote($path, '#') . '/?(?:[?\#][^"\']*)?';
+		}
+
+		$alts[]  = $host_re . '(?:/[^"\'?]*)?\?(?:[^"\']*?(?:&amp;|&|;))?(?:p|page_id)=' . $post_id . '(?:(?:&|\#)[^"\']*)?';
+		$pattern = '#<a\s[^>]*?href=(["\'])(?:' . implode('|', $alts) . ')\1[^>]*>(.*?)</a>#is';
+
+		$post_types = array_values(array_diff(get_post_types(['public' => true]), ['attachment']));
+
+		if ($post_types === []) return $empty;
+
+		/* Characters kept before/after the first match so the anchor tag usually fits in the excerpt. */
 		$before = 300;
 		$length = 900;
+
+		$like_sql  = implode(' OR ', array_fill(0, count($needles), 'post_content LIKE %s'));
+		$types_sql = implode(',', array_fill(0, count($post_types), '%s'));
+		$params    = array_merge(
+			[$needles[0], $before, $length],
+			array_map(static function ($needle) use ($wpdb) {
+				return '%' . $wpdb->esc_like($needle) . '%';
+			}, $needles),
+			$post_types,
+			[$post_id]
+		);
 
 		$results = $wpdb->get_results(
 			$wpdb->prepare(
 				"SELECT ID, post_title, post_date,
 					SUBSTRING(post_content, GREATEST(1, LOCATE(%s, post_content) - %d), %d) AS content_excerpt
 				 FROM {$wpdb->posts}
-				 WHERE post_status = 'publish'
-				   AND post_type IN ('post','page')
-				   AND post_content LIKE %s
+				 WHERE ({$like_sql})
+				   AND post_status = 'publish'
+				   AND post_type IN ({$types_sql})
 				   AND ID != %d
-				 LIMIT 20",
-				$permalink,
-				$before,
-				$length,
-				'%' . $wpdb->esc_like($permalink) . '%',
-				$post_id
+				 ORDER BY post_date DESC
+				 LIMIT 200",
+				$params
 			)
 		);
 
 		$links = [];
+		$more  = false;
 
 		foreach ($results as $row) {
-			$anchor = '';
-			if (preg_match('/<a[^>]+href=["\']' . preg_quote($permalink, '/') . '["\'][^>]*>(.*?)<\/a>/is', (string) $row->content_excerpt, $m)) {
-				$anchor = wp_strip_all_tags($m[1]);
+			/* The excerpt only covers the first needle; check the whole content before giving up. */
+			if (! preg_match($pattern, (string) $row->content_excerpt, $m)
+				&& ! preg_match($pattern, (string) get_post_field('post_content', (int) $row->ID, 'raw'), $m)) {
+				continue;
+			}
+
+			if (count($links) >= $max) {
+				$more = true;
+				break;
 			}
 
 			$links[] = [
 				'title'  => $row->post_title,
 				'url'    => get_permalink($row->ID),
-				'anchor' => $anchor,
+				'anchor' => wp_strip_all_tags($m[2]),
 				'date'   => mysql2date('j M Y', $row->post_date),
 			];
 		}
+
+		$result = ['links' => $links, 'more' => $more];
 
 		/**
 		 * Filters how long the inbound link list of a post stays cached.
@@ -343,9 +506,9 @@ class Assets
 		 */
 		$ttl = (int) apply_filters('crawlwp_inbound_links_cache_ttl', 15 * MINUTE_IN_SECONDS, $post_id);
 
-		set_transient($cache_key, $links, max(MINUTE_IN_SECONDS, $ttl));
+		set_transient($cache_key, $result, max(MINUTE_IN_SECONDS, $ttl));
 
-		return $links;
+		return $result;
 	}
 
 	public function ajax_ai_generate(): void
@@ -358,6 +521,7 @@ class Assets
 		$content = isset($_POST['post_content']) ? wp_kses_post(wp_unslash($_POST['post_content'])) : '';
 		$keyword = isset($_POST['focus_keyword']) ? sanitize_text_field(wp_unslash($_POST['focus_keyword'])) : '';
 		$previous = isset($_POST['previous_value']) ? sanitize_textarea_field(wp_unslash($_POST['previous_value'])) : '';
+		$reserved = isset($_POST['reserved_length']) ? absint($_POST['reserved_length']) : 0;
 
 		// Check the capability against the actual post being edited, not just
 		// the generic edit_posts capability.
@@ -381,6 +545,7 @@ class Assets
 			'content'  => $content,
 			'keyword'  => $keyword,
 			'previous' => $previous,
+			'reserved' => $reserved,
 		];
 
 		/**
@@ -391,11 +556,12 @@ class Assets
 		 *
 		 * @param string $text    The generated text (empty by default).
 		 * @param string $field   The field being generated.
-		 * @param array  $context Post context: post_id, title, content, keyword, previous.
+		 * @param array  $context Post context: post_id, title, content, keyword, previous, reserved.
 		 */
 		$generated = apply_filters('crawlwp_ai_generate_seo', '', $field, $context);
 
 		if (! empty($generated)) {
+			$this->ai_count_request();
 			wp_send_json_success(['text' => $generated, 'source' => 'filter']);
 		}
 
@@ -406,42 +572,51 @@ class Assets
 			wp_send_json_error($this->ai_error_response($generated));
 		}
 
+		$this->ai_count_request();
 		wp_send_json_success(['text' => $generated, 'source' => 'ai']);
 	}
 
 	/**
-	 * Per-user rate limit for AI generation: at most 20 requests per 5 minutes.
-	 *
-	 * Increments the counter on every call, so call it once per request.
+	 * Per-user rate limit for AI generation: at most 20 generated values per
+	 * 5 minutes. Only successful generations count (see ai_count_request()),
+	 * so provider errors or missing content never lock a user out.
 	 */
 	private function ai_rate_limited(): bool
 	{
-		$limit  = (int) apply_filters('crawlwp_ai_rate_limit', 20);
-		$window = (int) apply_filters('crawlwp_ai_rate_limit_window', 5 * MINUTE_IN_SECONDS);
+		$limit = (int) apply_filters('crawlwp_ai_rate_limit', 20);
 
 		if ($limit <= 0) {
 			return false;
 		}
 
-		$key   = 'crawlwp_ai_rl_' . get_current_user_id();
-		$state = get_transient($key);
-		$now   = time();
+		return (int) $this->ai_rate_state()['count'] >= $limit;
+	}
 
-		// Fixed window: [count, window start]. A missing/expired transient starts a fresh window.
+	private function ai_count_request(): void
+	{
+		$window = (int) apply_filters('crawlwp_ai_rate_limit_window', 5 * MINUTE_IN_SECONDS);
+		$state  = $this->ai_rate_state();
+
+		$state['count'] = (int) $state['count'] + 1;
+		$remaining      = $window - (time() - (int) $state['start']);
+
+		set_transient('crawlwp_ai_rl_' . get_current_user_id(), $state, max(1, $remaining));
+	}
+
+	/**
+	 * Fixed window: [count, window start]. A missing/expired transient starts a fresh window.
+	 */
+	private function ai_rate_state(): array
+	{
+		$window = (int) apply_filters('crawlwp_ai_rate_limit_window', 5 * MINUTE_IN_SECONDS);
+		$state  = get_transient('crawlwp_ai_rl_' . get_current_user_id());
+		$now    = time();
+
 		if (! is_array($state) || ! isset($state['count'], $state['start']) || ($now - (int) $state['start']) >= $window) {
 			$state = ['count' => 0, 'start' => $now];
 		}
 
-		if ((int) $state['count'] >= $limit) {
-			return true;
-		}
-
-		$state['count'] = (int) $state['count'] + 1;
-		$remaining      = $window - ($now - (int) $state['start']);
-
-		set_transient($key, $state, max(1, $remaining));
-
-		return false;
+		return $state;
 	}
 
 	/**
@@ -459,6 +634,8 @@ class Assets
 		$connection_codes = ['crawlwp_ai_unavailable', 'crawlwp_ai_unsupported'];
 
 		if (in_array($code, $connection_codes, true)) {
+			Generator::forget_ready();
+
 			return [
 				'message'    => __('AI generation is unavailable. Connect an AI provider in WordPress under Settings → Connectors, then try again.', 'mihdan-index-now')
 					. ($message !== '' ? "\n\n" . $message : ''),
@@ -470,6 +647,20 @@ class Assets
 			'message' => $message !== ''
 				? $message
 				: __('AI generation failed. Please try again.', 'mihdan-index-now'),
+		];
+	}
+
+	/**
+	 * Singular and plural form of a translatable string, for the JS plural() helper.
+	 *
+	 * @param array $nooped Result of _n_noop().
+	 * @return array{one: string, other: string}
+	 */
+	private static function plural(array $nooped): array
+	{
+		return [
+			'one'   => translate_nooped_plural($nooped, 1, 'mihdan-index-now'),
+			'other' => translate_nooped_plural($nooped, 2, 'mihdan-index-now'),
 		];
 	}
 
@@ -515,6 +706,10 @@ class Assets
 			/* translators: %s: date string */
 			'publishedDate'    => __('published %s', 'mihdan-index-now'),
 
+			/* Suggested links empty state when a focus keyword is set */
+			'noSuggestionsForKw' => __('No published posts match the focus keyword yet. Try a broader keyword.', 'mihdan-index-now'),
+			'noSuggestions'      => __('No suggestions available yet. Add a focus keyword to get link suggestions.', 'mihdan-index-now'),
+
 			/* Links notice */
 			'noInternalLinks'  => __('This post links to nothing on your site. Adding two or three internal links helps crawlers reach related posts and passes ranking signals along.', 'mihdan-index-now'),
 
@@ -532,7 +727,7 @@ class Assets
 			'secondaryKw'             => __('Secondary', 'mihdan-index-now'),
 			'kwInContentGood'         => __('Keyword is in the post content.', 'mihdan-index-now'),
 			/* translators: %s: number of occurrences */
-			'kwInContentGoodD'        => __('Found %s time(s) in post content.', 'mihdan-index-now'),
+			'kwInContentGoodD'        => self::plural(_n_noop('Found %s time in post content.', 'Found %s times in post content.', 'mihdan-index-now')),
 			'kwInContentBad'          => __('Keyword is missing from post content.', 'mihdan-index-now'),
 			'kwInContentBadD'         => __('Mention this secondary keyword naturally in your article body.', 'mihdan-index-now'),
 
@@ -565,6 +760,9 @@ class Assets
 			'kwInDescWarnD'    => __('Mentioning it helps bold the term in search results.', 'mihdan-index-now'),
 			'noDescBad'        => __('No meta description set.', 'mihdan-index-now'),
 			'noDescFix'        => __('Write a compelling description that includes the keyword.', 'mihdan-index-now'),
+			'descGenerated'    => __('No custom meta description — one is generated from the post type template.', 'mihdan-index-now'),
+			'descGeneratedFix' => __('Write your own that includes the keyword for more control over the snippet.', 'mihdan-index-now'),
+			'descGeneratedD'   => __('The meta description is generated from the post type template.', 'mihdan-index-now'),
 
 			/* Analysis: 5 – Meta description length */
 			'descLenGood'      => __('Meta description length is good.', 'mihdan-index-now'),
@@ -591,16 +789,16 @@ class Assets
 
 			/* translators: %s: number of H1 tags */
 			'h1Multiple'       => __('Multiple H1 tags found (%s).', 'mihdan-index-now'),
-			'h1MultipleFix'    => __('Use only one H1 per page for best SEO practice.', 'mihdan-index-now'),
+			'h1MultipleFix'    => __('Use only one H1 per page; the theme usually prints the title as the H1, so use H2 and below in the content.', 'mihdan-index-now'),
 
 			/* Analysis: 9 – Images alt text */
 			'noImages'         => __('No images found.', 'mihdan-index-now'),
 			'noImagesFix'      => __('Adding relevant images can improve engagement and image search traffic.', 'mihdan-index-now'),
 			'allImgAlt'        => __('All images have alt text.', 'mihdan-index-now'),
 			/* translators: %s: number of images */
-			'imgAltDetail'     => __('%s image(s) found.', 'mihdan-index-now'),
+			'imgAltDetail'     => self::plural(_n_noop('%s image found.', '%s images found.', 'mihdan-index-now')),
 			/* translators: %s: number of images missing alt */
-			'imgAltMissing'    => __('%s image(s) missing alt text.', 'mihdan-index-now'),
+			'imgAltMissing'    => self::plural(_n_noop('%s image is missing alt text.', '%s images are missing alt text.', 'mihdan-index-now')),
 			'imgAltFix'        => __('Describe what each one shows for accessibility and SEO.', 'mihdan-index-now'),
 
 			/* Analysis: 10 – Keyword in image alt */
@@ -619,7 +817,7 @@ class Assets
 
 			/* Analysis: 12 – External links */
 			/* translators: %s: number of external links */
-			'extLinksGood'     => __('%s external link(s).', 'mihdan-index-now'),
+			'extLinksGood'     => self::plural(_n_noop('%s external link.', '%s external links.', 'mihdan-index-now')),
 			'extLinksGoodD'    => __('Linking to authoritative sources adds credibility.', 'mihdan-index-now'),
 			'extLinksNone'     => __('No external links.', 'mihdan-index-now'),
 			'extLinksNoneFix'  => __('Consider linking to a relevant authoritative source to add context.', 'mihdan-index-now'),
@@ -655,13 +853,16 @@ class Assets
 
 			/* Analysis dot */
 			/* translators: %s: number of issues */
-			'issueCount'       => __('%s issue(s)', 'mihdan-index-now'),
+			'issueCount'       => self::plural(_n_noop('%s issue', '%s issues', 'mihdan-index-now')),
 
 			/* AI generate */
 			'aiGenerate'       => __('Generate with AI', 'mihdan-index-now'),
 			'aiGenerating'     => __('Generating…', 'mihdan-index-now'),
 			'aiError'          => __('AI generation is unavailable. Connect an AI provider in WordPress under Settings → Connectors, then try again.', 'mihdan-index-now'),
-			'aiOpenConnectors' => __('Open the Connectors settings page in a new tab?', 'mihdan-index-now'),
+			'aiOpenConnectorsLink' => __('Open Connectors settings', 'mihdan-index-now'),
+			'aiDismiss'        => __('Dismiss', 'mihdan-index-now'),
+			'aiLockedOg'       => __('This field uses the SEO title and description. Turn off "Use the SEO title and description" to edit it or generate it with AI.', 'mihdan-index-now'),
+			'aiLockedX'        => __('This field uses the Facebook values. Turn off "Use the Facebook values" to edit it or generate it with AI.', 'mihdan-index-now'),
 			'aiRewrite'        => __('Rewrite with AI', 'mihdan-index-now'),
 
 			/* IndexNow submit */
@@ -669,6 +870,7 @@ class Assets
 			'submitting'       => __('Submitting…', 'mihdan-index-now'),
 			'submitSuccess'    => __('Successfully submitted for indexing!', 'mihdan-index-now'),
 			'submitError'      => __('Failed to submit. Please try again.', 'mihdan-index-now'),
+			'submitPartial'    => __('Submitted, but a search engine returned an error.', 'mihdan-index-now'),
 			'savePostFirst'    => __('Please save the post first before submitting to IndexNow.', 'mihdan-index-now'),
 
 			/* Readability badge */
@@ -723,20 +925,150 @@ class Assets
 			wp_send_json_error(['message' => __('Only published posts can be submitted for indexing.', 'mihdan-index-now')]);
 		}
 
+		/* Same rules as automatic submissions: enabled post type, not noindex. */
+		$skip_reason = Indexing::get_post_skip_reason($post);
+
+		if ($skip_reason !== '') {
+			wp_send_json_error(['message' => $skip_reason]);
+		}
+
+		/* Every engine hooks this action only while it is enabled. */
+		if (! has_action('crawlwp/post_updated')) {
+			wp_send_json_error(['message' => __('No search engine is enabled for indexing. Enable IndexNow or a webmaster API in the CrawlWP settings.', 'mihdan-index-now')]);
+		}
+
+		$paused_until = self::indexing_paused_until();
+
+		if ($paused_until > 0) {
+			wp_send_json_error([
+				'message' => sprintf(
+					/* translators: %s: date and time the submissions resume. */
+					__('Submissions are paused because a search engine reported a rate limit. They resume on %s.', 'mihdan-index-now'),
+					wp_date(get_option('date_format') . ' ' . get_option('time_format'), $paused_until)
+				),
+			]);
+		}
+
+		/* Watch what the engines actually do: what they report, and how their HTTP requests end. */
+		$pinged     = 0;
+		$successes  = 0;
+		$errors     = [];
+		$on_pinged  = static function ($type, $object_id) use (&$pinged, $post_id) {
+			if ($type === 'post' && (int) $object_id === $post_id) {
+				$pinged++;
+			}
+		};
+		$on_http    = static function ($response) use (&$successes, &$errors) {
+			if (is_wp_error($response)) {
+				$errors[] = $response->get_error_message();
+				return;
+			}
+
+			$code = (int) wp_remote_retrieve_response_code($response);
+
+			if ($code >= 200 && $code < 300) {
+				$successes++;
+				return;
+			}
+
+			$body     = json_decode((string) wp_remote_retrieve_body($response), true);
+			$errors[] = is_array($body) && ! empty($body['message']) && is_string($body['message'])
+				? $body['message']
+				: trim($code . ' ' . wp_remote_retrieve_response_message($response));
+		};
+		/* Engines that do not use the WordPress HTTP API store a rate-limit pause on a 4xx reply. */
+		$on_option  = static function ($option) use (&$errors) {
+			if (is_string($option) && preg_match('/^crawlwp_.+_rate_limit_expiration$/', $option)) {
+				$errors[] = __('The search engine rejected the request.', 'mihdan-index-now');
+			}
+		};
+
+		add_action('crawlwp/index_pinged', $on_pinged, 10, 2);
+		add_action('http_api_debug', $on_http, 10, 1);
+		add_action('added_option', $on_option, 10, 1);
+		add_action('updated_option', $on_option, 10, 1);
+
 		/**
 		 * Trigger the same action the plugin fires when a post is updated,
 		 * so all registered IndexNow providers will ping the URL.
 		 */
 		do_action('crawlwp/post_updated', $post->ID, $post);
 
+		remove_action('crawlwp/index_pinged', $on_pinged, 10);
+		remove_action('http_api_debug', $on_http, 10);
+		remove_action('added_option', $on_option, 10);
+		remove_action('updated_option', $on_option, 10);
+
+		$errors = array_values(array_unique(array_filter(array_map('wp_strip_all_tags', $errors))));
+
+		if ($errors !== [] && $successes === 0) {
+			wp_send_json_error([
+				'message' => sprintf(
+					/* translators: %s: error returned by the search engine. */
+					__('Submission failed: %s', 'mihdan-index-now'),
+					implode(' ', $errors)
+				),
+			]);
+		}
+
+		if ($pinged === 0 && $successes === 0) {
+			wp_send_json_error(['message' => __('Nothing was submitted. Check that an API key or token is configured for the enabled search engine.', 'mihdan-index-now')]);
+		}
+
 		$timestamp = time();
 		update_post_meta($post_id, '_crawlwp_last_indexnow', $timestamp);
 
+		$message = __('Successfully submitted for indexing!', 'mihdan-index-now');
+
+		if ($errors !== []) {
+			$message = sprintf(
+				/* translators: %s: error returned by a search engine. */
+				__('Submitted, but a search engine returned an error: %s', 'mihdan-index-now'),
+				implode(' ', $errors)
+			);
+		}
+
 		wp_send_json_success([
-			'message'   => 'Submitted',
+			'message'   => $message,
+			'partial'   => $errors !== [],
 			'timestamp' => $timestamp,
 			'date'      => wp_date(get_option('date_format'), $timestamp),
 		]);
+	}
+
+	/**
+	 * When every enabled search engine is in a rate-limit pause, the time the
+	 * first of them resumes; 0 when at least one engine can submit now.
+	 */
+	private static function indexing_paused_until(): int
+	{
+		$engines = [];
+
+		if (Indexing::is_on('enable', 'index_now')) {
+			$engines[] = Indexing::get_indexnow_pause_option((string)Indexing::get_option('search_engine', 'index_now'));
+		}
+
+		foreach (['google', 'bing', 'yandex'] as $engine) {
+			if (Utils::wposa_get_option('enable', $engine . '_webmaster', 'off') === 'on') {
+				$engines[] = 'crawlwp_' . $engine . '_indexing_rate_limit_expiration';
+			}
+		}
+
+		$now   = time();
+		$until = [];
+
+		foreach ($engines as $option) {
+			$expires = (int) get_option($option, 0);
+
+			if ($expires <= $now) {
+				return 0;
+			}
+
+			$until[] = $expires;
+		}
+
+		/* No known engine enabled (an add-on may handle the action): nothing to report. */
+		return $until === [] ? 0 : min($until);
 	}
 
 	/**
@@ -809,23 +1141,30 @@ class Assets
 		global $wpdb;
 
 		foreach ($keywords as $kw) {
+			$target_lower = mb_strtolower($kw);
+
+			/* Match the keyword as a whole entry of the comma-separated list in SQL,
+			 * so posts that merely contain it as a substring cannot crowd out the match. */
 			$rows = $wpdb->get_results(
 				$wpdb->prepare(
 					"SELECT p.ID, p.post_title, pm.meta_value
 					 FROM {$wpdb->postmeta} pm
 					 INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id
 					 WHERE pm.meta_key = %s
-					   AND pm.meta_value LIKE %s
+					   AND (
+						LOWER(TRIM(pm.meta_value)) = %s
+						OR CONCAT(',', REPLACE(REPLACE(REPLACE(LOWER(pm.meta_value), '  ', ' '), ', ', ','), ' ,', ','), ',') LIKE %s
+					   )
 					   AND p.post_status = 'publish'
 					   AND p.ID != %d
 					 LIMIT 20",
 					MetaFields::FOCUS_KEYWORD,
-					'%' . $wpdb->esc_like($kw) . '%',
+					$target_lower,
+					'%,' . $wpdb->esc_like($target_lower) . ',%',
 					$post_id
 				)
 			);
 
-			$target_lower = mb_strtolower($kw);
 			foreach ($rows as $row) {
 				$existing_kws = array_map('mb_strtolower', MetaFields::parse_keywords((string) $row->meta_value));
 				if (in_array($target_lower, $existing_kws, true)) {

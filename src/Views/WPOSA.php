@@ -330,6 +330,12 @@ class WPOSA
 
 		// Menu.
 		add_action('admin_menu', array($this, 'admin_menu'));
+
+		add_filter('removable_query_args', function ($args) {
+			$args[] = 'settings-reset';
+
+			return $args;
+		});
 	}
 
 	/**
@@ -591,6 +597,19 @@ class WPOSA
 
 			foreach ($_POST as $k => $v) {
 
+				if (strpos($k, 'reset_') === 0) {
+					$name = substr($k, strlen('reset_'));
+
+					if ( ! isset($section_ids[$name]) || ! $this->section_has_reset_button($name)) {
+						continue;
+					}
+
+					$this->reset_section($name);
+
+					wp_safe_redirect(add_query_arg(['settings-reset' => 'true'], remove_query_arg('settings-updated', Utils::get_current_url_query_string())));
+					exit;
+				}
+
 				if (strstr($k, 'submit_') !== false) {
 					$name = str_replace('submit_', '', $k);
 
@@ -610,7 +629,17 @@ class WPOSA
 
 					update_option($name, $value);
 
-					wp_safe_redirect(add_query_arg(['settings-updated' => 'true'], Utils::get_current_url_query_string()));
+					/*
+					 * Field sanitize callbacks may report invalid input via
+					 * add_settings_error(). Persist them across the redirect the
+					 * same way wp-admin/options.php does.
+					 */
+					$settings_errors = get_settings_errors();
+					if ( ! empty($settings_errors)) {
+						set_transient('settings_errors', $settings_errors, 30);
+					}
+
+					wp_safe_redirect(add_query_arg(['settings-updated' => 'true'], remove_query_arg('settings-reset', Utils::get_current_url_query_string())));
 					exit;
 				}
 			}
@@ -972,6 +1001,101 @@ class WPOSA
 		}
 
 		return $this->sanitize_index[$slug] ?? false;
+	}
+
+	/**
+	 * Sanitize a plain-text textarea whose content is served verbatim as a text
+	 * file (robots.txt, llms.txt, …).
+	 *
+	 * Unlike sanitize_textarea_field() this keeps angle brackets (Markdown
+	 * autolinks such as <https://…>) and percent-encoded sequences (%20) intact;
+	 * it only drops invalid UTF-8 and control characters and normalises newlines.
+	 *
+	 * @param mixed $value Submitted value.
+	 *
+	 * @return string
+	 */
+	public static function sanitize_plain_textarea($value): string
+	{
+		if ( ! is_scalar($value)) {
+			return '';
+		}
+
+		$value = wp_check_invalid_utf8((string)$value);
+		$value = str_replace(["\r\n", "\r"], "\n", $value);
+
+		// Strip control characters except tab and newline.
+		return (string)preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $value);
+	}
+
+	/**
+	 * Whether the given (prefixed) section renders a "Reset to defaults" button.
+	 *
+	 * Opt-in per section via 'reset_button' => true, and only when the section
+	 * has at least one savable field.
+	 *
+	 * @param string $section_id Prefixed section id.
+	 *
+	 * @return bool
+	 */
+	private function section_has_reset_button(string $section_id): bool
+	{
+		$section = null;
+
+		foreach ($this->sections_array as $item) {
+			if (($item['id'] ?? '') === $section_id) {
+				$section = $item;
+				break;
+			}
+		}
+
+		if ($section === null || empty($section['reset_button'])) {
+			return false;
+		}
+
+		return $this->get_resettable_field_ids($section_id) !== [];
+	}
+
+	/**
+	 * Ids of the savable fields registered for a section.
+	 *
+	 * @param string $section_id Prefixed section id.
+	 *
+	 * @return string[]
+	 */
+	private function get_resettable_field_ids(string $section_id): array
+	{
+		$ids = [];
+
+		foreach ($this->fields_array[$section_id] ?? [] as $field) {
+			$type = $field['type'] ?? 'text';
+
+			if (empty($field['id']) || in_array($type, ['html', 'separator', 'button', 'title'], true)) {
+				continue;
+			}
+
+			$ids[] = (string)$field['id'];
+		}
+
+		return $ids;
+	}
+
+	/**
+	 * Reset a section's registered fields to their defaults by removing their
+	 * stored values. Values stored under keys that are not registered fields
+	 * (tokens, internal state) are left untouched.
+	 *
+	 * @param string $section_id Prefixed section id.
+	 */
+	private function reset_section(string $section_id): void
+	{
+		$stored = get_option($section_id, []);
+		$stored = is_array($stored) ? $stored : [];
+
+		$value = array_diff_key($stored, array_flip($this->get_resettable_field_ids($section_id)));
+
+		update_option($section_id, $value);
+		unset($this->option_cache[$section_id]);
 	}
 
 
@@ -1448,6 +1572,19 @@ class WPOSA
 			</div>
 			<?php
 		}
+
+		if (Utils::_GET_var('settings-reset') == 'true') {
+			?>
+			<div class="notice notice-success is-dismissible">
+				<p><?php esc_html_e('Settings reset to defaults.', 'mihdan-index-now'); ?></p>
+			</div>
+			<?php
+		}
+
+		// Errors reported by field sanitize callbacks during the last save.
+		if (Utils::_GET_var('settings-updated') == 'true') {
+			settings_errors();
+		}
 	}
 
 	public function plugin_page()
@@ -1669,7 +1806,8 @@ class WPOSA
 			'submit_type'  => 'primary',
 			'wrap'         => false,
 			'attributes'   => null,
-			'reset_button' => true,
+			// Opt-in: sections pass 'reset_button' => true to render "Reset to defaults".
+			'reset_button' => false,
 		);
 
 		if ($this->enable_blank_mode):
@@ -1696,6 +1834,19 @@ class WPOSA
 									<input type="hidden" name="crawlwp_options_save" value="true">
 									<?php submit_button($form['label_submit'], $form['submit_type'], 'submit_' . $form['id'], $form['wrap'], $form['attributes']); ?>
 								</div>
+								<?php if ($this->section_has_reset_button($form['id'])) : ?>
+									<div class="wposa-footer__column wposa-footer__column--right">
+										<?php
+										submit_button(
+											__('Reset to defaults', 'mihdan-index-now'),
+											'secondary',
+											'reset_' . $form['id'],
+											false,
+											['onclick' => 'return window.confirm(' . wp_json_encode(__('Reset all settings in this section to their defaults? This cannot be undone.', 'mihdan-index-now')) . ');']
+										);
+										?>
+									</div>
+								<?php endif; ?>
 							</div>
 						</form>
 					</div>

@@ -31,7 +31,9 @@ class EmailReportsUpsellTest extends TestCase
 	private function get_sections(WPOSA $wposa): array
 	{
 		$refProperty = new \ReflectionProperty(WPOSA::class, 'sections_array');
-		$refProperty->setAccessible(true);
+		if (PHP_VERSION_ID < 80100) {
+			$refProperty->setAccessible(true);
+		}
 		/** @var array<int, array<string, mixed>> $sections */
 		$sections = $refProperty->getValue($wposa);
 
@@ -44,7 +46,9 @@ class EmailReportsUpsellTest extends TestCase
 	private function get_fields(WPOSA $wposa): array
 	{
 		$refProperty = new \ReflectionProperty(WPOSA::class, 'fields_array');
-		$refProperty->setAccessible(true);
+		if (PHP_VERSION_ID < 80100) {
+			$refProperty->setAccessible(true);
+		}
 		/** @var array<string, list<array<string, mixed>>> $fields */
 		$fields = $refProperty->getValue($wposa);
 

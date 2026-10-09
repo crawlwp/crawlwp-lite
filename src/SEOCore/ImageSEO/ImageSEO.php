@@ -29,7 +29,7 @@ class ImageSEO
 			'header_menu_id' => 'advanced_settings',
 			'id'             => self::SECTION,
 			'title'          => __('Image SEO', 'mihdan-index-now'),
-			'desc'           => __('Automatically fill missing alt text from the image title or file name.', 'mihdan-index-now'),
+			'desc'           => __('Automatically fill missing alt text from the image title or file name.', 'mihdan-index-now')
 		]);
 
 		$wposa->add_field(self::SECTION, [
@@ -57,18 +57,39 @@ class ImageSEO
 
 		$alt = isset($attr['alt']) ? trim((string) $attr['alt']) : '';
 
-		if ($alt !== '') {
+		if ($alt !== '' || ! $attachment instanceof \WP_Post) {
 			return $attr;
 		}
 
-		$attr['alt'] = self::suggest($attachment instanceof \WP_Post ? $attachment : null);
+		/* Images explicitly marked as decorative keep their empty alt. */
+		if (
+			(isset($attr['role']) && in_array(strtolower((string) $attr['role']), ['presentation', 'none'], true))
+			|| (isset($attr['aria-hidden']) && strtolower((string) $attr['aria-hidden']) === 'true')
+		) {
+			return $attr;
+		}
+
+		/*
+		 * Only fill images whose alt text was never set. Once the alt meta row
+		 * exists (even empty, i.e. cleared on purpose in the Media Library to
+		 * mark the image as decorative) the stored value is respected.
+		 */
+		if (metadata_exists('post', $attachment->ID, '_wp_attachment_image_alt')) {
+			return $attr;
+		}
+
+		$suggested = self::suggest($attachment);
+
+		if ($suggested !== '') {
+			$attr['alt'] = $suggested;
+		}
 
 		return $attr;
 	}
 
 	public function on_upload(int $attachment_id): void
 	{
-		if (self::get('auto_alt', 'on') === 'off') {
+		if (self::get('auto_alt', 'on') === 'off' || ! wp_attachment_is_image($attachment_id)) {
 			return;
 		}
 
@@ -80,8 +101,15 @@ class ImageSEO
 
 		$post = get_post($attachment_id);
 
-		if ($post) {
-			update_post_meta($attachment_id, '_wp_attachment_image_alt', self::suggest($post));
+		if (! $post) {
+			return;
+		}
+
+		$suggested = self::suggest($post);
+
+		/* No usable text (e.g. "IMG_4021"): leave the alt unset rather than storing "". */
+		if ($suggested !== '') {
+			update_post_meta($attachment_id, '_wp_attachment_image_alt', $suggested);
 		}
 	}
 
@@ -91,22 +119,55 @@ class ImageSEO
 			return '';
 		}
 
-		$title = trim((string) $attachment->post_title);
+		$title = self::clean_name((string) $attachment->post_title);
 
-		if ($title !== '' && ! preg_match('/^[a-f0-9-]{8,}$/i', $title)) {
+		if ($title !== '') {
 			return $title;
 		}
 
 		$file = get_attached_file($attachment->ID);
 
 		if (! is_string($file) || $file === '') {
-			return $title;
+			return '';
 		}
 
-		$base = pathinfo($file, PATHINFO_FILENAME);
-		$base = preg_replace('/[-_]+/', ' ', (string) $base);
+		return self::clean_name((string) pathinfo($file, PATHINFO_FILENAME));
+	}
 
-		return ucwords(trim((string) $base));
+	/**
+	 * Turn a title/file name into human-readable alt text.
+	 *
+	 * "red-rose_garden" → "Red rose garden"; camera names such as "IMG_4021",
+	 * "DSC_0042" or hash-like names yield an empty string.
+	 */
+	public static function clean_name(string $name): string
+	{
+		$name = trim(wp_strip_all_tags($name));
+
+		if ($name === '' || preg_match('/^[a-f0-9-]{8,}$/i', $name)) {
+			return '';
+		}
+
+		/* Looks like a file name (no spaces): treat dashes/underscores as spaces. */
+		if (! preg_match('/\s/u', $name)) {
+			/* Drop WordPress size / "-scaled" / "-rotated" / "-e123456" suffixes. */
+			$name = (string) preg_replace('/(?:-\d+x\d+|-scaled|-rotated|-e\d{10,})+$/i', '', $name);
+			$name = (string) preg_replace('/[-_]+/', ' ', $name);
+		}
+
+		/* Strip camera / phone prefixes followed by a counter or timestamp. */
+		$name = (string) preg_replace('/^(?:IMG|DSC[NF]?|DCIM|PXL|MVIMG|CIMG|GOPR|GX|DJI|SAM|PANO|VID)[\s_-]*\d[\d\s_-]*/i', '', $name);
+
+		$name = trim((string) preg_replace('/\s+/u', ' ', $name));
+
+		/* Nothing descriptive left (only digits / punctuation). */
+		if (! preg_match('/\p{L}{2,}/u', $name)) {
+			return '';
+		}
+
+		return function_exists('mb_strtoupper')
+			? mb_strtoupper(mb_substr($name, 0, 1)) . mb_substr($name, 1)
+			: ucfirst($name);
 	}
 
 	public static function get(string $field, $default = '')

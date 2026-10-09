@@ -48,6 +48,7 @@ class RobotsSettings
 			'header_menu_id' => 'advanced_settings',
 			'id'             => self::SECTION,
 			'title'          => __('Robots.txt', 'mihdan-index-now'),
+			'reset_button'   => true,
 		]);
 
 		$this->add_physical_file_warning($wposa);
@@ -62,7 +63,9 @@ class RobotsSettings
 	 */
 	private function add_physical_file_warning(WPOSA $wposa): void
 	{
-		if (! self::has_physical_file()) {
+		$physical_file = self::get_physical_file_path();
+
+		if ($physical_file === null) {
 			return;
 		}
 
@@ -72,7 +75,7 @@ class RobotsSettings
 			sprintf(
 				/* translators: %s: absolute path to the robots.txt file. */
 				esc_html__('Your web server serves %s directly, so none of the settings below affect what search engines see. Delete or rename that file to use the settings on this screen.', 'mihdan-index-now'),
-				'<code>' . esc_html(ABSPATH . 'robots.txt') . '</code>'
+				'<code>' . esc_html($physical_file) . '</code>'
 			)
 		);
 
@@ -89,7 +92,38 @@ class RobotsSettings
 	 */
 	public static function has_physical_file(): bool
 	{
-		return file_exists(ABSPATH . 'robots.txt');
+		return self::get_physical_file_path() !== null;
+	}
+
+	/**
+	 * Absolute path of a physical robots.txt that shadows the virtual one, or
+	 * null when there is none.
+	 *
+	 * The web server serves /robots.txt from the site root, which is the home
+	 * path — that differs from ABSPATH when WordPress lives in a subdirectory —
+	 * so both locations are checked.
+	 */
+	public static function get_physical_file_path(): ?string
+	{
+		$roots = [];
+
+		if (! function_exists('get_home_path') && file_exists(ABSPATH . 'wp-admin/includes/file.php')) {
+			require_once ABSPATH . 'wp-admin/includes/file.php';
+		}
+
+		if (function_exists('get_home_path')) {
+			$roots[] = trailingslashit(wp_normalize_path((string) get_home_path()));
+		}
+
+		$roots[] = trailingslashit(wp_normalize_path(ABSPATH));
+
+		foreach (array_unique($roots) as $root) {
+			if (@is_file($root . 'robots.txt')) {
+				return $root . 'robots.txt';
+			}
+		}
+
+		return null;
 	}
 
 	// -------------------------------------------------------------------------
@@ -99,7 +133,7 @@ class RobotsSettings
 	private function add_robots_fields(WPOSA $wposa): void
 	{
 		$options = get_option('crawlwp_' . self::SECTION, []);
-		$editing_enabled = ! empty($options['enable_editing']) && 'on' == $options['enable_editing'];
+		$editing_enabled = self::is_editing_enabled();
 
 		/* Enable editing toggle — disabled by default. */
 		$wposa->add_field(self::SECTION, [
@@ -132,6 +166,8 @@ class RobotsSettings
 			'rows'       => 15,
 			'attributes' => $editing_enabled ? [] : ['readonly' => 'readonly'],
 			'desc'       => $content_desc,
+			/* robots.txt is plain text: never strip "<" or %XX sequences. */
+			'sanitize_callback' => [WPOSA::class, 'sanitize_plain_textarea'],
 		]);
 
 		/* Small inline script to live-toggle the textarea readonly state. */
@@ -167,12 +203,15 @@ class RobotsSettings
 	 */
 	public function replace_robots_txt(string $output, bool $public): string
 	{
-		$options = get_option('crawlwp_' . self::SECTION, []);
-
-		/* Only replace when the admin has explicitly enabled editing. */
-		if (empty($options['enable_editing'])) {
+		/*
+		 * Only replace when the admin has explicitly enabled editing. An
+		 * unticked checkbox is stored as 'off', so test for 'on' explicitly.
+		 */
+		if (! self::is_editing_enabled()) {
 			return $output;
 		}
+
+		$options = get_option('crawlwp_' . self::SECTION, []);
 
 		$content = isset($options['robots_content']) ? trim($options['robots_content']) : '';
 
@@ -209,21 +248,18 @@ class RobotsSettings
 	{
 		remove_filter('robots_txt', [$this, 'replace_robots_txt'], PHP_INT_MAX - 1);
 
-		$public = get_option('blog_public');
-
 		/*
 		 * Replicate WordPress's do_robots() base output exactly:
-		 * see wp-includes/functions.php::do_robots().
+		 * see wp-includes/functions.php::do_robots(). The prefill always
+		 * mirrors a public site — a temporary "Discourage search engines"
+		 * setting must not end up persisted as "Disallow: /".
 		 */
-		if ('0' === $public) {
-			$output = "User-agent: *\nDisallow: /\n";
-		} else {
-			$output  = "User-agent: *\n";
-			$output .= "Disallow:\n";
-		}
+		$output  = "User-agent: *\n";
+		$output .= 'Disallow: ' . wp_parse_url(admin_url(), PHP_URL_PATH) . "\n";
+		$output .= 'Allow: ' . wp_parse_url(admin_url('admin-ajax.php'), PHP_URL_PATH) . "\n";
 
-		/* Let every other plugin (including our own Sitemap.php) add its lines. */
-		$output = apply_filters('robots_txt', $output, $public);
+		/* Let core (Sitemap line) and every other plugin add its lines. */
+		$output = apply_filters('robots_txt', $output, true);
 
 		add_filter('robots_txt', [$this, 'replace_robots_txt'], PHP_INT_MAX - 1, 2);
 
@@ -241,9 +277,14 @@ class RobotsSettings
 	 * @param mixed  $default Default value when the key is absent.
 	 * @return mixed
 	 */
+	public static function is_editing_enabled(): bool
+	{
+		return self::get('enable_editing', 'off') === 'on';
+	}
+
 	public static function get(string $key, $default = '')
 	{
 		$options = get_option('crawlwp_' . self::SECTION, []);
-		return $options[$key] ?? $default;
+		return is_array($options) ? ($options[$key] ?? $default) : $default;
 	}
 }

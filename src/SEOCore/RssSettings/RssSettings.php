@@ -55,6 +55,7 @@ class RssSettings
 			'header_menu_id' => 'advanced_settings',
 			'id'             => self::SECTION,
 			'title'          => __('RSS', 'mihdan-index-now'),
+			'reset_button'   => true,
 		]);
 
 		$this->add_feed_fields($wposa);
@@ -80,6 +81,7 @@ class RssSettings
 			'name'       => __('Content to put before each post in the feed', 'mihdan-index-now'),
 			'rows'       => 5,
 			'attributes' => ['data-cwp-rss' => 'before'],
+			'sanitize_callback' => [$this, 'sanitize_field'],
 		]);
 
 		$wposa->add_field(self::SECTION, [
@@ -89,6 +91,7 @@ class RssSettings
 			'rows'       => 5,
 			'default'    => self::DEFAULT_AFTER,
 			'attributes' => ['data-cwp-rss' => 'after'],
+			'sanitize_callback' => [$this, 'sanitize_field'],
 		]);
 	}
 
@@ -550,6 +553,25 @@ class RssSettings
 	// -------------------------------------------------------------------------
 	// Helpers
 	// -------------------------------------------------------------------------
+
+	/**
+	 * Save-time sanitizer for the before/after templates.
+	 *
+	 * Uses the same allowlist as render time (crawlwp_rss_allowed_html) so
+	 * permitted markup such as <strong> or links survives saving.
+	 *
+	 * @param mixed $value Submitted value.
+	 *
+	 * @return string
+	 */
+	public function sanitize_field($value): string
+	{
+		if (! is_scalar($value)) {
+			return '';
+		}
+
+		return $this->sanitize_template((string) $value);
+	}
 
 	/**
 	 * Run the admin-supplied template through a light wp_kses() pass.

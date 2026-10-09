@@ -70,6 +70,10 @@
 
 		// Post type filter.
 		$wrap.on('change', '#cwp-bulk-post-type', function () {
+			if (!confirmDiscard()) {
+				$(this).val(state.post_type);
+				return;
+			}
 			state.post_type = $(this).val();
 			state.page = 1;
 			loadTable();
@@ -77,6 +81,10 @@
 
 		// Missing title/description filter.
 		$wrap.on('change', '#cwp-bulk-filter', function () {
+			if (!confirmDiscard()) {
+				$(this).val(state.filter);
+				return;
+			}
 			state.filter = $(this).val();
 			state.page = 1;
 			loadTable();
@@ -84,17 +92,28 @@
 
 		// Search (debounced).
 		$wrap.on('input', '#cwp-bulk-search', function () {
-			var val = $(this).val();
+			var $search = $(this);
 			clearTimeout(searchTimer);
 			searchTimer = setTimeout(function () {
-				state.search = val;
-				state.page   = 1;
-				loadTable();
+				runSearch($search);
 			}, 300);
+		});
+
+		// The table sits inside the settings form: Enter must search, not submit it.
+		$wrap.on('keydown', '#cwp-bulk-search', function (e) {
+			if (e.key === 'Enter' || e.which === 13) {
+				e.preventDefault();
+				clearTimeout(searchTimer);
+				runSearch($(this));
+			}
 		});
 
 		// Per-page.
 		$wrap.on('change', '#cwp-bulk-per-page', function () {
+			if (!confirmDiscard()) {
+				$(this).val(String(state.per_page));
+				return;
+			}
 			state.per_page = parseInt($(this).val(), 10) || 20;
 			state.page     = 1;
 			loadTable();
@@ -103,7 +122,7 @@
 		// Pagination links (delegated, injected dynamically).
 		$wrap.on('click', '.cwp-bulk-page-btn', function () {
 			var page = parseInt($(this).data('page'), 10);
-			if (page && page !== state.page) {
+			if (page && page !== state.page && confirmDiscard()) {
 				state.page = page;
 				loadTable();
 			}
@@ -128,10 +147,43 @@
 		// Warn on navigating away with unsaved changes.
 		$(window).on('beforeunload', function (e) {
 			if (hasDirty()) {
+				var message = i18n.confirmLeave || 'You have unsaved changes.';
 				e.preventDefault();
-				return i18n.confirmLeave || 'You have unsaved changes.';
+				if (e.originalEvent) {
+					e.originalEvent.returnValue = message;
+				}
+				return message;
 			}
 		});
+	}
+
+	/**
+	 * Apply the search box value, unless the user keeps their unsaved edits.
+	 */
+	function runSearch($search) {
+		var val = $search.val();
+
+		if (val === state.search) {
+			return;
+		}
+
+		if (!confirmDiscard()) {
+			$search.val(state.search);
+			return;
+		}
+
+		state.search = val;
+		state.page   = 1;
+		loadTable();
+	}
+
+	/**
+	 * Reloading the table drops unsaved edits — ask first.
+	 *
+	 * @return {boolean} True when it is fine to reload.
+	 */
+	function confirmDiscard() {
+		return !hasDirty() || window.confirm(i18n.confirmDiscard || 'You have unsaved changes in the table. Discard them?');
 	}
 
 	// -------------------------------------------------------------------------
@@ -140,7 +192,7 @@
 
 	function loadTable() {
 		closeVarsPanel();
-		$tbody.html('<tr class="cwp-bulk-loading-row"><td colspan="3">' + escapeHtml('Loading…') + '</td></tr>');
+		$tbody.html('<tr class="cwp-bulk-loading-row"><td colspan="3">' + escapeHtml(i18n.loading || 'Loading…') + '</td></tr>');
 		dirty = {};
 		toggleSaveButton();
 
@@ -154,7 +206,7 @@
 			page:      state.page
 		}, function (resp) {
 			if (!resp.success) {
-				$tbody.html('<tr><td colspan="3">' + escapeHtml((resp.data && resp.data.message) ? resp.data.message : 'Error') + '</td></tr>');
+				$tbody.html('<tr><td colspan="3">' + escapeHtml((resp.data && resp.data.message) ? resp.data.message : (i18n.error || 'Error')) + '</td></tr>');
 				return;
 			}
 
@@ -162,10 +214,12 @@
 			$tbody.html(data.html);
 
 			$tbody.find('.cwp-bulk-input').each(function () {
+				// The server-rendered length belongs to the stored value.
+				$(this).closest('td').find('.cwp-bulk-count').data('resolvedFor', $(this).val());
 				updateCount($(this));
 			});
 
-			$totalInfo.text('Total ' + data.total + ' item' + (data.total === 1 ? '' : 's') + '.');
+			$totalInfo.text(data.total_label || String(data.total));
 
 			renderPagination(data.page, data.pages);
 		});
@@ -321,13 +375,49 @@
 	// Character count
 	// -------------------------------------------------------------------------
 
+	/**
+	 * Values with variables are counted as they will be output: the length is
+	 * rendered by the server for stored values and fetched for edited ones.
+	 */
 	function updateCount($input) {
 		var $count = $input.closest('td').find('.cwp-bulk-count');
-		var max    = parseInt($count.data('max'), 10) || 0;
-		var length = $input.val().length;
+		var val    = $input.val();
+
+		clearTimeout($input.data('cwpPreviewTimer'));
+
+		if (val.indexOf('{{') === -1) {
+			setCount($count, val.length, false);
+			return;
+		}
+
+		if ($count.data('resolvedFor') === val) {
+			setCount($count, parseInt($count.attr('data-length'), 10) || 0, true);
+			return;
+		}
+
+		$input.data('cwpPreviewTimer', setTimeout(function () {
+			$.post(cfg.ajaxUrl, {
+				action: 'crawlwp_bulk_editor_preview',
+				nonce:  cfg.nonce,
+				id:     $input.closest('tr').data('id'),
+				text:   val
+			}, function (resp) {
+				if (!resp || !resp.success || $input.val() !== val) {
+					return;
+				}
+
+				$count.attr('data-length', resp.data.length).data('resolvedFor', val);
+				setCount($count, parseInt(resp.data.length, 10) || 0, true);
+			});
+		}, 400));
+	}
+
+	function setCount($count, length, resolved) {
+		var max = parseInt($count.data('max'), 10) || 0;
 
 		$count.text(length + ' / ' + max);
 		$count.toggleClass('is-over', max > 0 && length > max);
+		$count.attr('title', resolved ? (i18n.resolvedLength || '') : '');
 	}
 
 	// -------------------------------------------------------------------------

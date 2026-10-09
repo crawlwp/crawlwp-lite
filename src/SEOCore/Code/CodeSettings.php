@@ -19,6 +19,12 @@ class CodeSettings
 	 */
 	private const RAW_CODE_FIELDS = ['head', 'body', 'footer'];
 
+	/** Valid GA4 measurement ID. */
+	private const GA4_REGEX = '/^G-[A-Z0-9]{4,}$/';
+
+	/** Valid Google Tag Manager container ID. */
+	private const GTM_REGEX = '/^GTM-[A-Z0-9]{4,}$/';
+
 	public function __construct()
 	{
 		add_action('crawlwp_setup_fields', [$this, 'settings_fields'], 18, 2);
@@ -46,6 +52,7 @@ class CodeSettings
 			'type' => 'text',
 			'name' => __('GA4 measurement ID', 'mihdan-index-now'),
 			'desc' => esc_html__('e.g. G-XXXXXXXXXX. Leave empty to skip the Google tag.', 'mihdan-index-now'),
+			'sanitize_callback' => [$this, 'sanitize_ga4_id'],
 		]);
 
 		$wposa->add_field(self::SECTION, [
@@ -53,6 +60,7 @@ class CodeSettings
 			'type' => 'text',
 			'name' => __('Google Tag Manager ID', 'mihdan-index-now'),
 			'desc' => esc_html__('e.g. GTM-XXXXXXX.', 'mihdan-index-now'),
+			'sanitize_callback' => [$this, 'sanitize_gtm_id'],
 		]);
 
 		$wposa->add_field(self::SECTION, [
@@ -141,6 +149,74 @@ class CodeSettings
 	/**
 	 * @param mixed $value
 	 */
+	public function sanitize_ga4_id($value): string
+	{
+		return $this->sanitize_tracking_id(
+			'ga4_id',
+			$value,
+			self::GA4_REGEX,
+			__('The GA4 measurement ID is invalid. It must look like G-XXXXXXXXXX. The previous value was kept.', 'mihdan-index-now')
+		);
+	}
+
+	/**
+	 * @param mixed $value
+	 */
+	public function sanitize_gtm_id($value): string
+	{
+		return $this->sanitize_tracking_id(
+			'gtm_id',
+			$value,
+			self::GTM_REGEX,
+			__('The Google Tag Manager ID is invalid. It must look like GTM-XXXXXXX. The previous value was kept.', 'mihdan-index-now')
+		);
+	}
+
+	/**
+	 * Normalise a tracking ID to upper case and validate it. An invalid ID is
+	 * rejected with a settings error and the stored value is kept.
+	 *
+	 * @param mixed $value
+	 */
+	private function sanitize_tracking_id(string $field, $value, string $regex, string $error): string
+	{
+		$id = is_scalar($value) ? strtoupper(trim(sanitize_text_field((string) $value))) : '';
+
+		if ($id === '' || preg_match($regex, $id)) {
+			return $id;
+		}
+
+		add_settings_error('crawlwp_' . self::SECTION, 'crawlwp_invalid_' . $field, $error);
+
+		return (string) self::get($field, '');
+	}
+
+	/**
+	 * Whether the GA4 / GTM tags should be skipped for this request.
+	 */
+	private static function skip_tracking(): bool
+	{
+		/**
+		 * Filters whether logged-in users are excluded from the GA4 / GTM tags.
+		 *
+		 * @param bool $exclude Default false.
+		 */
+		return (bool) apply_filters('crawlwp_tracking_exclude_logged_in', false) && is_user_logged_in();
+	}
+
+	/**
+	 * Stored tracking ID, normalised, or '' when missing/invalid.
+	 */
+	private static function tracking_id(string $field, string $regex): string
+	{
+		$id = strtoupper(trim((string) self::get($field, '')));
+
+		return preg_match($regex, $id) ? $id : '';
+	}
+
+	/**
+	 * @param mixed $value
+	 */
 	public function sanitize_head($value): string
 	{
 		return $this->sanitize_code_field('head', $value);
@@ -186,15 +262,16 @@ class CodeSettings
 
 	public function output_head(): void
 	{
-		$gtm = trim((string) self::get('gtm_id', ''));
-		$ga4 = trim((string) self::get('ga4_id', ''));
+		$skip = self::skip_tracking();
+		$gtm  = $skip ? '' : self::tracking_id('gtm_id', self::GTM_REGEX);
+		$ga4  = $skip ? '' : self::tracking_id('ga4_id', self::GA4_REGEX);
 
-		if ($gtm !== '' && preg_match('/^GTM-[A-Z0-9]+$/i', $gtm)) {
+		if ($gtm !== '') {
 			echo "<!-- CrawlWP GTM -->\n";
 			echo "<script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);})(window,document,'script','dataLayer','" . esc_js($gtm) . "');</script>\n";
 		}
 
-		if ($ga4 !== '' && preg_match('/^G-[A-Z0-9]+$/i', $ga4)) {
+		if ($ga4 !== '') {
 			echo "<!-- CrawlWP GA4 -->\n";
 			echo '<script async src="https://www.googletagmanager.com/gtag/js?id=' . esc_attr($ga4) . '"></script>' . "\n";
 			echo "<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','" . esc_js($ga4) . "');</script>\n";
@@ -205,9 +282,9 @@ class CodeSettings
 
 	public function output_body(): void
 	{
-		$gtm = trim((string) self::get('gtm_id', ''));
+		$gtm = self::skip_tracking() ? '' : self::tracking_id('gtm_id', self::GTM_REGEX);
 
-		if ($gtm !== '' && preg_match('/^GTM-[A-Z0-9]+$/i', $gtm)) {
+		if ($gtm !== '') {
 			echo '<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=' . esc_attr($gtm) . '" height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>';
 		}
 
@@ -216,6 +293,11 @@ class CodeSettings
 
 	public function output_footer(): void
 	{
+		/* Themes without wp_body_open(): print the GTM noscript and body code here instead. */
+		if (! did_action('wp_body_open')) {
+			$this->output_body();
+		}
+
 		echo self::get('footer', '');
 	}
 

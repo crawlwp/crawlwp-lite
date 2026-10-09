@@ -3,8 +3,10 @@
 namespace Mihdan\IndexNow\SEOCore\BulkEditor;
 
 use Mihdan\IndexNow\SEOCore\MetaBox\MetaFields;
+use Mihdan\IndexNow\SEOCore\MetaBox\PostListColumn;
 use Mihdan\IndexNow\SEOCore\MetaBox\SeoSignals;
 use Mihdan\IndexNow\SEOCore\TitleMeta\Entities;
+use Mihdan\IndexNow\SEOCore\TitleMeta\Variables;
 use Mihdan\IndexNow\Utils;
 use Mihdan\IndexNow\Views\WPOSA;
 
@@ -21,6 +23,7 @@ use Mihdan\IndexNow\Views\WPOSA;
  * AJAX actions (all require edit_posts + nonce):
  *   crawlwp_bulk_editor_list — fetch table HTML + pagination
  *   crawlwp_bulk_editor_save — persist edited rows
+ *   crawlwp_bulk_editor_preview — length of a value once its variables are resolved
  */
 class BulkEditorSettings
 {
@@ -38,6 +41,7 @@ class BulkEditorSettings
 
 		add_action('wp_ajax_crawlwp_bulk_editor_list', [$this, 'ajax_list']);
 		add_action('wp_ajax_crawlwp_bulk_editor_save', [$this, 'ajax_save']);
+		add_action('wp_ajax_crawlwp_bulk_editor_preview', [$this, 'ajax_preview']);
 	}
 
 	// -------------------------------------------------------------------------
@@ -93,7 +97,7 @@ class BulkEditorSettings
 			'crawlwp-bulk-editor',
 			$assets_url . 'bulk-editor.js',
 			['jquery'],
-			'1.0.0',
+			'1.0.1',
 			true
 		);
 
@@ -113,6 +117,10 @@ class BulkEditorSettings
 				'insertVariable'  => __('Insert variable', 'mihdan-index-now'),
 				'searchVariables' => __('Search variables…', 'mihdan-index-now'),
 				'noVariables'     => __('No matching variables.', 'mihdan-index-now'),
+				'loading'         => __('Loading…', 'mihdan-index-now'),
+				'error'           => __('Something went wrong. Please try again.', 'mihdan-index-now'),
+				'confirmDiscard'  => __('You have unsaved changes in the table. Discard them?', 'mihdan-index-now'),
+				'resolvedLength'  => __('Length once variables are replaced with this post’s values.', 'mihdan-index-now'),
 			],
 		]);
 	}
@@ -190,6 +198,11 @@ class BulkEditorSettings
 		wp_send_json_success([
 			'html'  => $this->render_table_rows($query->posts),
 			'total' => (int) $query->found_posts,
+			'total_label' => sprintf(
+				/* translators: %s: number of items. */
+				_n('Total %s item.', 'Total %s items.', (int) $query->found_posts, 'mihdan-index-now'),
+				number_format_i18n((int) $query->found_posts)
+			),
 			'page'  => $page,
 			'pages' => max(1, (int) $query->max_num_pages),
 		]);
@@ -226,6 +239,9 @@ class BulkEditorSettings
 			$title = isset($row['seo_title']) ? sanitize_text_field(wp_unslash($row['seo_title'])) : '';
 			$desc  = isset($row['seo_description']) ? sanitize_textarea_field(wp_unslash($row['seo_description'])) : '';
 
+			$changed = $title !== (string) get_post_meta($id, MetaFields::SEO_TITLE, true)
+				|| $desc !== (string) get_post_meta($id, MetaFields::SEO_DESCRIPTION, true);
+
 			/* Empty values keep an empty meta row so the "missing" filters above
 			   can use an indexed comparison. */
 			MetaFields::save_optional($id, MetaFields::SEO_TITLE, $title);
@@ -233,6 +249,11 @@ class BulkEditorSettings
 
 			/* The title/description feed the post list SEO signals. */
 			SeoSignals::flush($id);
+
+			/* The stored editor score is now stale; the post list falls back to the estimate. */
+			if ($changed) {
+				PostListColumn::invalidate_score($id);
+			}
 
 			$saved[] = $id;
 		}
@@ -268,6 +289,38 @@ class BulkEditorSettings
 			'saved'   => $saved,
 			'failed'  => $failed,
 		]);
+	}
+
+	/**
+	 * Length of an SEO title/description once its variables are resolved
+	 * against the given post, for the live character counter.
+	 */
+	public function ajax_preview(): void
+	{
+		check_ajax_referer('crawlwp_bulk_editor_nonce', 'nonce');
+
+		$id   = isset($_POST['id']) ? (int) $_POST['id'] : 0;
+		$post = $id > 0 ? get_post($id) : null;
+
+		if (! $post instanceof \WP_Post || ! current_user_can('edit_post', $id)) {
+			wp_send_json_error(['message' => __('Permission denied.', 'mihdan-index-now')]);
+		}
+
+		$text = isset($_POST['text']) ? sanitize_textarea_field(wp_unslash($_POST['text'])) : '';
+
+		wp_send_json_success(['length' => $this->resolved_length($text, $post)]);
+	}
+
+	/**
+	 * Character count of a value as search engines will see it.
+	 */
+	private function resolved_length(string $text, \WP_Post $post): int
+	{
+		if (strpos($text, '{{') === false) {
+			return mb_strlen($text);
+		}
+
+		return mb_strlen(Variables::replace($text, ['post' => $post]));
 	}
 
 	/**
@@ -446,7 +499,7 @@ class BulkEditorSettings
 				. 'data-original="' . esc_attr($title) . '">' . esc_textarea($title) . '</textarea>'
 				. '<button type="button" class="cwp-bulk-vars" aria-haspopup="true" aria-expanded="false" title="' . esc_attr__('Insert variable', 'mihdan-index-now') . '">&hellip;</button>'
 				. '</div>'
-				. '<span class="cwp-bulk-count" data-max="' . self::TITLE_MAX . '"></span>'
+				. '<span class="cwp-bulk-count" data-max="' . self::TITLE_MAX . '" data-length="' . $this->resolved_length($title, $post) . '"></span>'
 				. '</td>';
 
 			$html .= '<td class="cwp-bulk-col-desc">'
@@ -456,7 +509,7 @@ class BulkEditorSettings
 				. 'data-original="' . esc_attr($desc) . '">' . esc_textarea($desc) . '</textarea>'
 				. '<button type="button" class="cwp-bulk-vars" aria-haspopup="true" aria-expanded="false" title="' . esc_attr__('Insert variable', 'mihdan-index-now') . '">&hellip;</button>'
 				. '</div>'
-				. '<span class="cwp-bulk-count" data-max="' . self::DESC_MAX . '"></span>'
+				. '<span class="cwp-bulk-count" data-max="' . self::DESC_MAX . '" data-length="' . $this->resolved_length($desc, $post) . '"></span>'
 				. '</td>';
 
 			$html .= '</tr>';

@@ -36,20 +36,6 @@ abstract class IndexNowAbstract implements SearchEngineInterface
 	private $wposa;
 
 	/**
-	 * Post types.
-	 *
-	 * @var array[]
-	 */
-	private $post_types;
-
-	/**
-	 * Taxonomies.
-	 *
-	 * @var array[]
-	 */
-	private $taxonomies;
-
-	/**
 	 * IndexNowAbstract constructor.
 	 *
 	 * @param Logger $logger Logger instance.
@@ -58,8 +44,6 @@ abstract class IndexNowAbstract implements SearchEngineInterface
 	{
 		$this->logger     = $logger;
 		$this->wposa      = $wposa;
-		$this->post_types = apply_filters('crawlwp/post_types', (array)$this->wposa->get_option('post_types', 'general', []));
-		$this->taxonomies = apply_filters('crawlwp/taxonomies', (array)$this->wposa->get_option('taxonomies', 'general', []));
 		$this->api_key    = $this->get_or_create_api_key();
 	}
 
@@ -76,6 +60,10 @@ abstract class IndexNowAbstract implements SearchEngineInterface
 		if ($api_key === '') {
 			$api_key = Utils::generate_key();
 			$this->wposa->set_option('api_key', $api_key, 'index_now');
+
+			if ($this->wposa->get_option('search_engine', 'index_now', '') === '') {
+				$this->wposa->set_option('search_engine', Indexing::get_default('search_engine', 'index_now'), 'index_now');
+			}
 		}
 
 		return $api_key;
@@ -104,27 +92,27 @@ abstract class IndexNowAbstract implements SearchEngineInterface
 
 	public function is_enabled(): bool
 	{
-		return $this->wposa->get_option('enable', 'index_now', 'on') === 'on';
+		return $this->wposa->get_option('enable', 'index_now', Indexing::get_default('enable', 'index_now')) === 'on';
 	}
 
 	private function is_ping_on_term(): bool
 	{
-		return $this->wposa->get_option('ping_on_term', 'general', 'off') === 'on';
+		return $this->wposa->get_option('ping_on_term', 'general', Indexing::get_default('ping_on_term', 'general')) === 'on';
 	}
 
 	private function is_key_logging_enabled(): bool
 	{
-		return $this->wposa->get_option('key_logging', 'logs', 'on') === 'on';
+		return $this->wposa->get_option('key_logging', 'logs', Indexing::get_default('key_logging', 'logs')) === 'on';
 	}
 
 	private function get_current_search_engine(): string
 	{
-		return $this->wposa->get_option('search_engine', 'index_now', 'yandex-index-now');
+		return (string)$this->wposa->get_option('search_engine', 'index_now', Indexing::get_default('search_engine', 'index_now'));
 	}
 
 	private function rate_limit_db_key()
 	{
-		return sprintf('crawlwp_indexnow_%s_rate_limit_expiration', $this->get_current_search_engine());
+		return Indexing::get_indexnow_pause_option($this->get_current_search_engine());
 	}
 
 	/**
@@ -153,9 +141,10 @@ abstract class IndexNowAbstract implements SearchEngineInterface
 			return;
 		}
 
-		$this->push([$permalink]);
-
-		do_action('crawlwp/index_pinged', 'post', $post_id);
+		// Removals must not move the "last submitted" dates forward, so they get their own action.
+		if ($this->push([$permalink])) {
+			do_action('crawlwp/index_removal_pinged', 'post', $post_id, $permalink);
+		}
 	}
 
 	/**
@@ -170,16 +159,6 @@ abstract class IndexNowAbstract implements SearchEngineInterface
 			return;
 		}
 
-		$post = get_post($post_id);
-
-		if ( ! $post instanceof WP_Post || $post->post_status !== 'publish') {
-			return;
-		}
-
-		if ( ! in_array($post->post_type, $this->get_post_types(), true)) {
-			return;
-		}
-
 		$this->maybe_do_ping_post($post_id);
 	}
 
@@ -190,34 +169,33 @@ abstract class IndexNowAbstract implements SearchEngineInterface
 
 	private function maybe_do_ping_post(int $post_id)
 	{
-		if ($this->get_current_search_engine() === $this->get_slug()) {
-			$this->push([Utils::normalized_get_permalink($post_id)]);
+		if ($this->get_current_search_engine() !== $this->get_slug()) {
+			return;
+		}
 
+		// Post type (filtered), status and effective noindex apply to every submission path.
+		if (Indexing::get_post_skip_reason($post_id) !== '') {
+			return;
+		}
+
+		if ($this->push([Utils::normalized_get_permalink($post_id)])) {
 			do_action('crawlwp/index_pinged', 'post', $post_id);
 		}
 	}
 
 	private function maybe_do_ping_term(int $term_id, string $taxonomy)
 	{
-		if ( ! in_array($taxonomy, $this->get_taxonomies(), true)) {
+		if ($this->get_current_search_engine() !== $this->get_slug()) {
 			return;
 		}
 
-		if ($this->get_current_search_engine() === $this->get_slug()) {
-			$this->push([Utils::normalized_get_term_link($term_id, $taxonomy)]);
+		if (Indexing::get_term_skip_reason($term_id, $taxonomy) !== '') {
+			return;
+		}
 
+		if ($this->push([Utils::normalized_get_term_link($term_id, $taxonomy)])) {
 			do_action('crawlwp/index_pinged', 'taxonomy', $term_id);
 		}
-	}
-
-	private function get_post_types(): array
-	{
-		return $this->post_types;
-	}
-
-	private function get_taxonomies(): array
-	{
-		return $this->taxonomies;
 	}
 
 	/**
@@ -230,9 +208,22 @@ abstract class IndexNowAbstract implements SearchEngineInterface
 		return apply_filters('crawlwp/host', wp_parse_url(Utils::normalized_home_url(), PHP_URL_HOST));
 	}
 
+	/**
+	 * Submit URLs to the IndexNow endpoint.
+	 *
+	 * @param string[] $url_list URLs.
+	 *
+	 * @return bool True only when the engine accepted the URLs.
+	 */
 	public function push(array $url_list): bool
 	{
-		if (time() < (int)get_option($this->rate_limit_db_key(), 0)) return false;
+		$paused_until = Indexing::get_pause_expiry($this->rate_limit_db_key());
+
+		if ($paused_until > 0) {
+			Indexing::log_paused_skip($this->logger, $this->get_current_search_engine(), $url_list, $paused_until);
+
+			return false;
+		}
 
 		$args = [
 			'timeout' => 30,
@@ -251,44 +242,67 @@ abstract class IndexNowAbstract implements SearchEngineInterface
 
 		$response = wp_remote_post($this->get_api_url(), $args);
 
+		$data = [
+			'status_code'   => 0,
+			'search_engine' => $this->get_current_search_engine(),
+		];
+
+		if (is_wp_error($response)) {
+			$this->log_failure($url_list, $response->get_error_message(), $data);
+
+			return false;
+		}
+
 		$body             = wp_remote_retrieve_body($response);
-		$status_code      = wp_remote_retrieve_response_code($response);
+		$status_code      = (int)wp_remote_retrieve_response_code($response);
 		$response_message = wp_remote_retrieve_response_message($response);
 
 		if (Utils::is_json($body)) {
 			$body = json_decode($body, true);
 		}
 
-		$data = [
-			'status_code'   => $status_code,
-			'search_engine' => $this->get_current_search_engine(),
-		];
+		$data['status_code'] = $status_code;
 
-		if ($status_code >= 400 && $status_code < 500) {
-			update_option($this->rate_limit_db_key(), time() + (3 * HOUR_IN_SECONDS));
+		// Only a rate limit pauses submissions; other 4xx (bad key, invalid URL…) are per-request failures.
+		if ($status_code === 429) {
+			Indexing::pause($this->rate_limit_db_key(), 3 * HOUR_IN_SECONDS, $response);
 		}
 
 		if (Utils::is_response_code_success($status_code)) {
 			foreach ($url_list as $url) {
-				$message = sprintf('<a href="%s" target="_blank">%s</a> - OK', $url, $url);
-				$this->logger->info($message, $data);
-			}
-		} else {
-
-			if ( ! empty($body['message'])) {
-				$message = $body['message'];
-			} elseif ( ! empty($body)) {
-				$message = print_r($body, 1); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_print_r
-			} elseif ( ! empty($response_message)) {
-				$message = $response_message;
-			} else {
-				$message = '';
+				$this->logger->info(Indexing::url_link($url) . ' - OK', $data);
 			}
 
-			$this->logger->error($message, $data);
+			return true;
 		}
 
-		return true;
+		if ( ! empty($body['message'])) {
+			$message = $body['message'];
+		} elseif ( ! empty($body) && is_array($body)) {
+			$message = print_r($body, true); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_print_r
+		} elseif ( ! empty($response_message)) {
+			$message = $response_message;
+		} else {
+			$message = is_string($body) ? substr(trim(wp_strip_all_tags($body)), 0, 300) : '';
+		}
+
+		$this->log_failure($url_list, (string)$message, $data);
+
+		return false;
+	}
+
+	/**
+	 * Log a failed submission, naming the URLs it concerned.
+	 *
+	 * @param string[] $url_list URLs.
+	 * @param string   $message  Error message.
+	 * @param array    $data     Log context.
+	 */
+	private function log_failure(array $url_list, string $message, array $data): void
+	{
+		$links = implode(', ', array_map([Indexing::class, 'url_link'], $url_list));
+
+		$this->logger->error(trim($links . ' - ' . $message, ' -'), $data);
 	}
 
 	/**
@@ -308,7 +322,7 @@ abstract class IndexNowAbstract implements SearchEngineInterface
 	 */
 	private function get_api_key_location(): string
 	{
-		return trailingslashit(Utils::normalized_home_url()) . $this->get_api_key() . '.txt';
+		return Indexing::get_key_location($this->get_api_key());
 	}
 
 	/**
@@ -318,13 +332,16 @@ abstract class IndexNowAbstract implements SearchEngineInterface
 	 */
 	public function set_virtual_key_file(WP $wp)
 	{
-		if ( ! get_option('permalink_structure')) {
-			return;
-		}
-
 		$api_key = $this->get_api_key();
 
-		if ($wp->request !== $api_key . '.txt') {
+		if (get_option('permalink_structure')) {
+			$is_key_request = $wp->request === $api_key . '.txt';
+		} else {
+			// Pretty paths never reach WordPress here; the key is served from a query URL instead.
+			$is_key_request = isset($_GET[Indexing::KEY_QUERY_VAR]) && sanitize_text_field(wp_unslash($_GET[Indexing::KEY_QUERY_VAR])) === $api_key; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		}
+
+		if ( ! $is_key_request) {
 			return;
 		}
 

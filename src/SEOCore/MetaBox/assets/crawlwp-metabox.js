@@ -69,23 +69,84 @@
     },
 
     setupTokens: function() {
+      var self = this;
       crawlwpSEO.postTitle = this.decodeEntities(crawlwpSEO.postTitle || '');
-      this.TOKENS = {
+      this.TOKENS = {};
+
+      /* Every variable the server knows, resolved for this post. */
+      if (crawlwpSEO.variables && typeof crawlwpSEO.variables === 'object') {
+        $.each(crawlwpSEO.variables, function(key, val) {
+          self.TOKENS[key] = val != null ? String(val) : '';
+        });
+      }
+
+      $.extend(this.TOKENS, {
         'post.title':            crawlwpSEO.postTitle,
         'site.title':            crawlwpSEO.siteName || '',
         'sep':                   crawlwpSEO.separator || '\u2014',
+        'page':                  '',
         'post.category':         crawlwpSEO.category || '',
         'post.auto_description': crawlwpSEO.excerpt || '',
         'current.year':          crawlwpSEO.currentYear || '',
         'post.author':           crawlwpSEO.author || ''
-      };
+      });
 
       if (crawlwpSEO.product && typeof crawlwpSEO.product === 'object') {
-        var self = this;
         $.each(crawlwpSEO.product, function(key, val) {
           self.TOKENS['product.' + key] = val != null ? String(val) : '';
         });
       }
+
+      this.refreshLiveTokens();
+    },
+
+    /* Tokens whose value changes while the post is edited. */
+    refreshLiveTokens: function() {
+      var keywords = this.parseKeywords($('#cwpKeyword').val());
+      this.TOKENS['post.focus_keyword'] = keywords.length ? keywords[0] : '';
+
+      var slug = this.getSlug();
+      if (slug) this.TOKENS['post.slug'] = this.decodeSlug(slug);
+
+      /* The front end falls back to the first 30 words of the content when there is no excerpt. */
+      var excerpt = '';
+      var sel = this.editorStore();
+      if (sel) excerpt = sel.getEditedPostAttribute('excerpt') || '';
+      else if ($('#excerpt').length) excerpt = $('#excerpt').val() || '';
+      if (!excerpt && !sel && !$('#excerpt').length && crawlwpSEO.hasExcerpt) excerpt = crawlwpSEO.excerpt || '';
+
+      if ($.trim(excerpt)) {
+        this.TOKENS['post.auto_description'] = $.trim(excerpt);
+        this.TOKENS['post.excerpt'] = $.trim(excerpt);
+      } else {
+        var words = $.trim(this.stripTags(this.getEditorContent())).split(/\s+/).filter(function(w) { return w.length > 0; });
+        this.TOKENS['post.auto_description'] = words.slice(0, 30).join(' ') + (words.length > 30 ? '...' : '');
+        this.TOKENS['post.excerpt'] = '';
+      }
+    },
+
+    /* The block editor store, or null in the Classic editor. */
+    editorStore: function() {
+      if (typeof wp !== 'undefined' && wp.data && wp.data.select) {
+        var sel = wp.data.select('core/editor');
+        if (sel && typeof sel.getEditedPostAttribute === 'function') return sel;
+      }
+      return null;
+    },
+
+    parseKeywords: function(raw) {
+      return $.trim(raw || '').split(',').map(function(k) {
+        return $.trim(k);
+      }).filter(Boolean);
+    },
+
+    /* What the front end outputs when the SEO title / description field is empty. */
+    titleTemplate: function() {
+      return this.$title.val() || crawlwpSEO.titleTemplate || '{{ post.title }} {{ sep }} {{ site.title }}';
+    },
+
+    descTemplate: function() {
+      return this.$desc.val() || crawlwpSEO.descTemplate || '';
     },
 
     cacheElements: function() {
@@ -121,14 +182,26 @@
       this.$mb.trigger('crawlwp:' + name);
     },
 
-    /* {{ post.title }} / {{post.title}} -> its value; unknown tokens drop out,
-       matching the PHP resolver used on the frontend. */
+    /* {{ post.title }} / {{post.title}} -> its value, then the separator
+       cleanup of the PHP resolver. Tokens the editor cannot resolve (e.g. a
+       custom field typed after the page loaded) are left as written. */
     resolve: function(str) {
       var tokens = this.TOKENS;
-      return String(str == null ? '' : str).replace(/\{\{\s*([a-z0-9_.]+)\s*\}\}/gi, function(m, token) {
+      var value = String(str == null ? '' : str).replace(/\{\{\s*([a-z0-9_]+(?:\.[a-z0-9_\-]+)*)\s*\}\}/gi, function(m, token) {
         var key = token.toLowerCase();
-        return tokens[key] !== undefined ? tokens[key] : '';
+        return tokens[key] !== undefined ? tokens[key] : m;
       });
+
+      var sep = String(tokens.sep || '');
+      if (sep) {
+        var q = sep.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        value = value
+          .replace(new RegExp('(?:\\s*' + q + '\\s*){2,}', 'g'), ' ' + sep + ' ')
+          .replace(new RegExp('^(?:\\s*' + q + '\\s*)+'), '')
+          .replace(new RegExp('(?:\\s*' + q + '\\s*)+$'), '');
+      }
+
+      return $.trim(value.replace(/\s{2,}/g, ' '));
     },
 
     /* ---------- UI wiring ---------- */
@@ -212,6 +285,9 @@
       var _kwDebounce = null;
       $('#cwpKeyword').on('input', function() {
         var keyword = $(this).val();
+        self.refreshLiveTokens();
+        self.emit('measure');
+        self.emit('sync');
         self.emit('analyze');
         self.emit('renderLinks');
         clearTimeout(_kwDebounce);
@@ -242,6 +318,7 @@
         var $pre = this.$jsonPre;
         $jsonBtn.on('click', function() {
           var open = $pre.prop('hidden');
+          if (open) self.updateSchemaPreview();
           $pre.prop('hidden', !open);
           $jsonBtn.text(open ? crawlwpSEO.i18n.hideJsonLd : crawlwpSEO.i18n.showJsonLd);
         });
@@ -251,6 +328,7 @@
       this.$pageType.add(this.$articleType).on('change', function() { self.updateSchemaPreview(); });
       if (this.$schemaHeadline.length) this.$schemaHeadline.on('input', function() { self.updateSchemaPreview(); });
       if (this.$schemaSection.length) this.$schemaSection.on('input', function() { self.updateSchemaPreview(); });
+      $('#cwpSchemaCustom').on('input', function() { self.updateSchemaPreview(); });
 
       /* image pickers (with dimension validation) */
       this.bindImagePickers();
@@ -263,6 +341,11 @@
         /* Legacy markup only carried the target element id. */
         if (!field) {
           field = $btn.data('aiTarget') === 'cwpTitle' ? 'title' : 'description';
+        }
+
+        if ($btn.hasClass('is-locked')) {
+          self.aiShowNotice($btn, self.aiLockedMessage($btn));
+          return;
         }
 
         self.aiGenerate(field, $btn);
@@ -292,12 +375,13 @@
     measure: function(el) {
       var $el = $(el);
       var raw = $el.val();
-      /* If this is the SEO title field and it is empty, assume the default template */
-      if (!raw && $el.attr('id') === 'cwpTitle') {
-        raw = '{{ post.title }} {{ sep }} {{ site.title }}';
-      }
+      /* An empty SEO title/description outputs the post type template. */
+      if (!raw && $el.attr('id') === 'cwpTitle') raw = this.titleTemplate();
+      if (!raw && $el.attr('id') === 'cwpDesc') raw = this.descTemplate();
       var text  = this.resolve(raw);
       var limit = parseInt($el.data('limit'), 10);
+      /* Same minimum as the Analysis length checks. */
+      var min   = parseInt($el.data('min'), 10) || Math.round(limit * 0.7);
       var px    = this.widthOf(text, $el.data('font'));
       var pct   = Math.min(100, Math.round(px / limit * 100));
       var $fill  = $('#' + $el.data('meter') + 'Fill');
@@ -306,7 +390,7 @@
       $fill.css('width', pct + '%').removeClass('is-good is-over');
       var state = 'short';
       if (px > limit) { $fill.addClass('is-over'); state = 'over'; }
-      else if (pct >= 70) { $fill.addClass('is-good'); state = 'good'; }
+      else if (px >= min) { $fill.addClass('is-good'); state = 'good'; }
 
       var L = crawlwpSEO.i18n;
       var words = { short: L.meterTooShort, good: L.meterGoodLength, over: L.meterWillBeCut }[state];
@@ -321,9 +405,8 @@
     /* ---------- live preview ---------- */
     sync: function() {
       var L = crawlwpSEO.i18n;
-      var titleVal = this.$title.val() || '{{ post.title }} {{ sep }} {{ site.title }}';
-      var t = this.resolve(titleVal) || crawlwpSEO.postTitle || L.enterTitle;
-      var d = this.resolve(this.$desc.val())  || crawlwpSEO.excerpt || L.addMetaDesc;
+      var t = this.resolve(this.titleTemplate()) || crawlwpSEO.postTitle || L.enterTitle;
+      var d = this.resolve(this.descTemplate()) || L.addMetaDesc;
 
       $('#cwpSerpTitle').text(t);
       $('#cwpSerpDesc').text(d);
@@ -349,58 +432,132 @@
       this.$xTitle.prop('disabled', this.$xSync.prop('checked'));
       this.$xDesc.prop('disabled', this.$xSync.prop('checked'));
 
-      /* Nothing to generate into while the field mirrors another value. */
+      /* Nothing to generate into while the field mirrors another value.
+         The button stays focusable so its tooltip can say why. */
       var self = this;
       this.$mb.find('.cwp-ai-btn[data-ai-target]').each(function() {
         var $btn = $(this);
         var $target = $('#' + $btn.data('aiTarget'));
-        if ($target.length) {
-          $btn.prop('disabled', $target.prop('disabled'));
+        if (!$target.length) return;
+
+        var locked = $target.prop('disabled');
+        $btn.toggleClass('is-locked', locked).attr('aria-disabled', locked ? 'true' : 'false');
+
+        if (locked) {
+          $btn.attr('title', self.aiLockedMessage($btn));
+        } else {
+          self.aiClearNotice($btn);
+          self.aiSyncLabel($btn);
         }
       });
 
       this.emit('sync');
     },
 
-    /* Mirrors FrontendOutput::output_schema(): the article type wins over the
-       page type unless it is set to "none". */
+    /* Approximates FrontendOutput::collect_schema() from the editor state:
+       the article type wins over the page type unless it is set to "none",
+       an article gets its own node next to the WebPage node, and the custom
+       JSON-LD is added to the same graph. Site-wide nodes are not shown. */
     updateSchemaPreview: function() {
       if (!this.$jsonPre.length) return;
 
       // An empty value is "Default": use what the post type settings resolve to.
       var pageType    = (this.$pageType.length ? (this.$pageType.val() || this.$pageType.data('default')) : '') || 'WebPage';
       var articleType = (this.$articleType.length ? (this.$articleType.val() || this.$articleType.data('default')) : '') || '';
-      var type        = (articleType && articleType !== 'none') ? articleType : pageType;
+      var isArticle   = !!(articleType && articleType !== 'none');
 
-      if (!type || type === 'none') {
+      if (pageType === 'none') {
         this.$jsonPre.text(crawlwpSEO.i18n.noStructuredData);
         return;
       }
 
-      var headline = (this.$schemaHeadline.length && this.$schemaHeadline.val()) || this.resolve(this.$title.val()) || crawlwpSEO.postTitle;
-      var section  = this.$schemaSection.length ? this.$schemaSection.val() : '';
-      var schema = {
-        '@context': 'https://schema.org',
-        '@type': type,
-        'headline': headline
+      var url       = crawlwpSEO.permalink || '';
+      var base      = url || crawlwpSEO.siteUrl || '';
+      var title     = this.resolve(this.titleTemplate()) || crawlwpSEO.postTitle;
+      var desc      = this.resolve(this.descTemplate());
+      var section   = this.$schemaSection.length ? this.$schemaSection.val() : '';
+      var image     = this.schemaImage();
+      var webpageId = base + '#webpage';
+      var graph     = [];
+
+      var webpage = {
+        '@type': pageType,
+        '@id': webpageId,
+        'url': url,
+        'name': title,
+        'isPartOf': { '@id': crawlwpSEO.websiteId },
+        'inLanguage': crawlwpSEO.language
       };
-      if (crawlwpSEO.permalink) schema.url = crawlwpSEO.permalink;
-      if (section) schema.articleSection = section;
-      if (crawlwpSEO.author) {
-        schema.author = { '@type': 'Person', 'name': crawlwpSEO.author };
+      if (!url) delete webpage.url;
+      if (crawlwpSEO.datePublished) webpage.datePublished = crawlwpSEO.datePublished;
+      if (crawlwpSEO.dateModified)  webpage.dateModified  = crawlwpSEO.dateModified;
+      if (desc) webpage.description = desc;
+      if (image) {
+        webpage.primaryImageOfPage = { '@id': base + '#primaryimage' };
+        graph.push({ '@type': 'ImageObject', '@id': base + '#primaryimage', 'url': image, 'contentUrl': image });
       }
-      if (crawlwpSEO.datePublished) schema.datePublished = crawlwpSEO.datePublished;
-      if (crawlwpSEO.dateModified)  schema.dateModified  = crawlwpSEO.dateModified;
-      this.$jsonPre.text(JSON.stringify(schema, null, 2));
+
+      var main;
+      if (isArticle) {
+        main = {
+          '@type': articleType,
+          '@id': base + '#article',
+          'headline': (this.$schemaHeadline.length && this.$schemaHeadline.val()) || title,
+          'url': url,
+          'isPartOf': { '@id': webpageId },
+          'mainEntityOfPage': { '@id': webpageId },
+          'publisher': { '@id': crawlwpSEO.publisherId }
+        };
+        if (!url) delete main.url;
+        graph.push(webpage);
+      } else {
+        /* Page type only: the WebPage node is the primary entity, no headline. */
+        main = webpage;
+      }
+
+      if (section) main.articleSection = section;
+      if (crawlwpSEO.author) main.author = { '@type': 'Person', 'name': crawlwpSEO.author };
+      if (image) main.image = image;
+      if (isArticle) {
+        if (crawlwpSEO.datePublished) main.datePublished = crawlwpSEO.datePublished;
+        if (crawlwpSEO.dateModified)  main.dateModified  = crawlwpSEO.dateModified;
+      }
+      graph.push(main);
+
+      var custom = $.trim($('#cwpSchemaCustom').val() || '');
+      if (custom) {
+        try {
+          var node = JSON.parse(custom);
+          if (node && typeof node === 'object') graph.push(node);
+        } catch (e) { /* invalid JSON is not output */ }
+      }
+
+      this.$jsonPre.text(JSON.stringify({ '@context': 'https://schema.org', '@graph': graph }, null, 2));
+    },
+
+    /* The social image the front end uses: the Facebook image, else the featured image. */
+    schemaImage: function() {
+      if ($('#cwpOgImage').val()) {
+        var bg = $('#cwpOgImage').closest('.cwp-img-picker').find('.cwp-img-thumb').css('backgroundImage') || '';
+        var m = bg.match(/url\(["']?(.*?)["']?\)/);
+        if (m && m[1]) return m[1];
+      }
+      return crawlwpSEO.featuredImageFull || crawlwpSEO.featuredImageUrl || '';
     },
 
     /* ---------- read the current slug straight from WP (no metabox field) ---------- */
     getSlug: function() {
-      /* Gutenberg */
-      if (typeof wp !== 'undefined' && wp.data && wp.data.select && wp.data.select('core/editor')) {
-        var sel = wp.data.select('core/editor');
-        var slug = sel ? sel.getEditedPostAttribute('slug') : '';
+      /* Gutenberg: drafts have no slug yet, WordPress generates one on publish. */
+      var sel = this.editorStore();
+      if (sel) {
+        var slug = sel.getEditedPostAttribute('slug');
         if (slug) return slug;
+        if (typeof sel.getPermalinkParts === 'function') {
+          var parts = sel.getPermalinkParts();
+          if (parts && parts.postName) return parts.postName;
+        }
+        var generated = sel.getEditedPostAttribute('generated_slug');
+        if (generated && generated !== 'auto-draft') return generated;
       }
       /* Classic editor: #post_name input (permalink editor) */
       var $wpSlug = $('#post_name');
@@ -411,7 +568,28 @@
         var text = $.trim($(editSlug).text());
         if (text) return text;
       }
-      return '';
+      /* Not generated yet: WordPress builds it from the title. */
+      return this.slugify(crawlwpSEO.postTitle || '');
+    },
+
+    /* Rough sanitize_title(): enough to compare keywords against. */
+    slugify: function(str) {
+      if (typeof wp !== 'undefined' && wp.url && typeof wp.url.cleanForSlug === 'function') {
+        return wp.url.cleanForSlug(str);
+      }
+      return $.trim(String(str).toLowerCase())
+        .replace(/<[^>]*>/g, '')
+        .replace(/[\s!-,.\/:-@\[-^`{-~]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+    },
+
+    /* Slugs of non-ASCII titles are stored percent-encoded. */
+    decodeSlug: function(slug) {
+      try {
+        return decodeURIComponent(slug);
+      } catch (e) {
+        return slug;
+      }
     },
 
     /* ---------- watch WP post title -> metabox ---------- */
@@ -422,7 +600,7 @@
       var $wpTitle = $('#title');
       if ($wpTitle.length) {
         $wpTitle.on('input', function() {
-          var val = $wpTitle.val();
+          var val = self.decodeEntities($wpTitle.val());
           self.TOKENS['post.title'] = val;
           crawlwpSEO.postTitle = val;
           $('#cwpBreadcrumb').attr('placeholder', val);
@@ -439,8 +617,10 @@
         wp.data.subscribe(function() {
           var sel = wp.data.select('core/editor');
           if (!sel) return;
-          var newTitle = sel.getEditedPostAttribute('title');
-          if (newTitle !== undefined && newTitle !== lastTitle) {
+          var rawTitle = sel.getEditedPostAttribute('title');
+          if (rawTitle !== undefined) {
+            var newTitle = self.decodeEntities(rawTitle);
+            if (newTitle === lastTitle) return;
             lastTitle = newTitle;
             self.TOKENS['post.title'] = newTitle;
             crawlwpSEO.postTitle = newTitle;
@@ -506,6 +686,10 @@
       function onContentChange() {
         clearTimeout(_contentDebounce);
         _contentDebounce = setTimeout(function() {
+          /* The generated description ({{ post.auto_description }}) follows the content. */
+          self.refreshLiveTokens();
+          self.emit('measure');
+          self.emit('sync');
           self.emit('renderLinks');
           self.emit('analyze');
         }, 500);
@@ -575,6 +759,8 @@
 
     /* The tooltip tells the user whether the value will be written or rewritten. */
     aiSyncLabel: function($btn) {
+      if ($btn.hasClass('is-locked')) return;
+
       var L = crawlwpSEO.i18n;
       var $target = $('#' + $btn.data('aiTarget'));
       var hasValue = $target.length && $.trim($target.val() || '') !== '';
@@ -607,6 +793,10 @@
 
       var content = this.getEditorContent();
       var keyword = $('#cwpKeyword').val() || '';
+      var previous = $.trim($target.val() || '');
+      var template = field === 'title' ? this.aiTitleTemplate(previous) : '';
+
+      this.aiClearNotice($btn);
 
       $.ajax({
         url: crawlwpSEO.ajaxUrl,
@@ -619,22 +809,29 @@
           post_title: postTitle,
           post_content: content,
           focus_keyword: keyword,
-          /* Sent so the model rewrites instead of repeating itself. */
-          previous_value: $target.val() || ''
+          /* Sent resolved, so the model rewrites the text instead of
+             repeating variable tokens back. */
+          previous_value: previous ? self.resolve(previous) : '',
+          /* The template text kept around a generated title, e.g. " – Site". */
+          reserved_length: template ? self.resolve(template.replace(self.aiTitleToken, '')).length : 0
         },
         success: function(resp) {
           if (resp.success && resp.data && resp.data.text) {
-            $target.val(resp.data.text).trigger('input').trigger('change');
+            var text = resp.data.text;
+            if (template) {
+              text = template.replace(self.aiTitleToken, function() { return text; });
+            }
+            $target.val(text).trigger('input').trigger('change');
             self.aiSyncLabel($btn);
             return;
           }
 
           /* No AI provider connected, or the request failed: there is no
              fallback, so tell the user how to fix it. */
-          self.aiShowError(resp.data);
+          self.aiShowError($btn, resp.data);
         },
-        error: function() {
-          self.aiShowError(null);
+        error: function(xhr) {
+          self.aiShowError($btn, xhr && xhr.responseJSON ? xhr.responseJSON.data : null);
         },
         complete: function() {
           $btn.removeClass('is-loading').prop('disabled', false).html(origHtml);
@@ -642,25 +839,58 @@
       });
     },
 
-    aiShowError: function(data) {
+    /* The {{ post.title }} token a generated SEO title is put in place of. */
+    aiTitleToken: /\{\{\s*post\.title\s*\}\}/,
+
+    /* The template a generated SEO title goes into: the field's own value, or
+       the post type template when the field is empty. Only used when it holds
+       {{ post.title }}; otherwise the generated title replaces the field. */
+    aiTitleTemplate: function(previous) {
+      var template = previous || crawlwpSEO.titleTemplate || '';
+      return this.aiTitleToken.test(template) ? template : '';
+    },
+
+    aiLockedMessage: function($btn) {
+      var L = crawlwpSEO.i18n;
+      return String($btn.data('aiTarget')).indexOf('cwpX') === 0 ? L.aiLockedX : L.aiLockedOg;
+    },
+
+    aiShowError: function($btn, data) {
       var L = crawlwpSEO.i18n;
       var msg = (data && data.message) ? data.message : L.aiError;
 
-      window.alert(msg);
+      this.aiShowNotice($btn, msg, data && data.connectUrl ? data.connectUrl : '');
+    },
 
-      /* Offer to open the WordPress Connectors screen in a new tab so the
-         user can connect an AI provider without losing their edits. */
-      if (data && data.connectUrl && window.confirm(L.aiOpenConnectors)) {
-        var win = window.open(data.connectUrl, '_blank');
-        if (win) {
-          win.opener = null;
-          win.focus();
-        } else {
-          /* Popup blocked: fall back to the current tab, the user already
-             agreed to open the page. */
-          window.location.href = data.connectUrl;
-        }
+    /* Inline message under the field, instead of a blocking dialog. The
+       Connectors link opens in a new tab so unsaved edits are kept. */
+    aiShowNotice: function($btn, message, connectUrl) {
+      var L = crawlwpSEO.i18n;
+      var $field = $('#' + $btn.data('aiTarget')).closest('.cwp-field');
+      if (!$field.length) return;
+
+      this.aiClearNotice($btn);
+
+      var $notice = $('<div class="cwp-ai-notice" role="alert"></div>');
+      $notice.append($('<span class="cwp-ai-notice__text"></span>').text(message));
+
+      if (connectUrl) {
+        $notice.append(' ').append(
+          $('<a target="_blank" rel="noopener noreferrer"></a>').attr('href', connectUrl).text(L.aiOpenConnectorsLink)
+        );
       }
+
+      $notice.append(
+        $('<button type="button" class="cwp-ai-notice__close"></button>').attr('aria-label', L.aiDismiss).html('&times;').on('click', function() {
+          $notice.remove();
+        })
+      );
+
+      $field.append($notice);
+    },
+
+    aiClearNotice: function($btn) {
+      $('#' + $btn.data('aiTarget')).closest('.cwp-field').find('.cwp-ai-notice').remove();
     },
 
     /* ---------- IndexNow submit ---------- */
@@ -686,14 +916,16 @@
           post_id: crawlwpSEO.postId
         },
         success: function(resp) {
-          if (resp.success && resp.data) {
-            self.indexNowShowStatus(L.submitSuccess, 'success');
+          var msg = resp && resp.data && resp.data.message ? resp.data.message : '';
+          if (resp && resp.success) {
+            self.indexNowShowStatus(msg || L.submitSuccess, resp.data && resp.data.partial ? 'warn' : 'success');
           } else {
-            self.indexNowShowStatus(L.submitError, 'error');
+            self.indexNowShowStatus(msg || L.submitError, 'error');
           }
         },
-        error: function() {
-          self.indexNowShowStatus(L.submitError, 'error');
+        error: function(xhr) {
+          var json = xhr && xhr.responseJSON;
+          self.indexNowShowStatus(json && json.data && json.data.message ? json.data.message : L.submitError, 'error');
         },
         complete: function() {
           $btn.removeClass('is-loading').prop('disabled', false).text(L.submitIndexNow);
@@ -864,14 +1096,22 @@
     },
 
     /* ---------- helpers ---------- */
-    /* simple sprintf: replaces %s, %d, %1$s, %2$s … with positional args */
+    /* simple sprintf: replaces %s, %d, %1$s, %2$s … with positional args, %% with % */
     fmt: function(str) {
       var args = Array.prototype.slice.call(arguments, 1);
       var i = 0;
-      return str.replace(/%(?:(\d+)\$)?[sd]/g, function(m, num) {
+      return String(str).replace(/%%|%(?:(\d+)\$)?[sd]/g, function(m, num) {
+        if (m === '%%') return '%';
         if (num) { var idx = parseInt(num, 10) - 1; return args[idx] !== undefined ? args[idx] : ''; }
         return args[i] !== undefined ? args[i++] : '';
       });
+    },
+
+    /* fmt() for strings localized as { one, other } plural pairs. */
+    plural: function(forms, n) {
+      var str = forms;
+      if (forms && typeof forms === 'object') str = (n === 1 ? forms.one : forms.other);
+      return this.fmt(str || '', n);
     },
 
     escHtml: function(str) {
@@ -944,7 +1184,7 @@
          The content is never localized into crawlwpSEO — it would add
          hundreds of kilobytes to every editor page load. */
       var $ta = $('#content');
-      if ($ta.length) return $ta.val() || '';
+      if ($ta.length) return this.autop($ta.val() || '');
       if (typeof tinymce !== 'undefined') {
         var fallbackEd = tinymce.get('content');
         if (fallbackEd) return fallbackEd.getContent();
@@ -952,19 +1192,39 @@
       return '';
     },
 
+    /* The Classic editor textarea stores paragraphs as blank lines, without <p>. */
+    autop: function(text) {
+      if (!text || /<p[\s>]/i.test(text)) return text;
+      if (typeof wp !== 'undefined' && wp.editor && typeof wp.editor.autop === 'function') {
+        return wp.editor.autop(text);
+      }
+      if (window.switchEditors && typeof window.switchEditors.wpautop === 'function') {
+        return window.switchEditors.wpautop(text);
+      }
+      return $.map(String(text).split(/\n\s*\n/), function(block) {
+        block = $.trim(block);
+        if (!block) return null;
+        return /^<(?:h[1-6]|ul|ol|div|blockquote|figure|table|pre|hr)/i.test(block) ? block : '<p>' + block + '</p>';
+      }).join('\n');
+    },
+
     parseLinks: function(html) {
       var $tmp = $('<div>').html(html);
-      var siteHost = new URL(crawlwpSEO.siteUrl).hostname;
+      /* www.example.com and example.com are the same site. */
+      var bareHost = function(host) { return String(host || '').toLowerCase().replace(/^www\./, ''); };
+      var siteHost = bareHost(new URL(crawlwpSEO.siteUrl).hostname);
       var internal = [], external = [];
       $tmp.find('a[href]').each(function() {
         var $a = $(this);
-        var href = $a.attr('href');
+        var href = $.trim($a.attr('href') || '');
         if (!href || href.charAt(0) === '#') return;
         var text = $.trim($a.text()) || href;
         try {
           var url = new URL(href, crawlwpSEO.siteUrl);
+          /* mailto:, tel:, javascript: … are not links to a page. */
+          if (url.protocol !== 'http:' && url.protocol !== 'https:') return;
           var item = { href: url.href, text: text };
-          if (url.hostname === siteHost) {
+          if (bareHost(url.hostname) === siteHost) {
             internal.push(item);
           } else {
             external.push(item);
@@ -1002,8 +1262,9 @@
       var outTotal = parsed.internal.length + parsed.external.length;
       var inbound = crawlwpSEO.inboundLinks || [];
 
-      $('#cwpLinksOut').text(outTotal);
-      $('#cwpLinksIn').text(inbound.length);
+      /* The bar reads "internal out · links in · external". */
+      $('#cwpLinksOut').text(parsed.internal.length);
+      $('#cwpLinksIn').text(inbound.length + (crawlwpSEO.inboundLinksMore ? '+' : ''));
       $('#cwpLinksExt').text(parsed.external.length);
 
       /* notice */
@@ -1074,7 +1335,8 @@
       $sugList.find('.cwp-link-item').remove();
       this.removeShowAll($sugList);
       if (suggested.length === 0) {
-        $sugEmpty.prop('hidden', false);
+        var hasKw = this.parseKeywords($('#cwpKeyword').val()).length > 0;
+        $sugEmpty.text(hasKw ? crawlwpSEO.i18n.noSuggestionsForKw : crawlwpSEO.i18n.noSuggestions).prop('hidden', false);
       } else {
         $sugEmpty.prop('hidden', true);
         $.each(suggested, function(idx, link) {
@@ -1209,12 +1471,16 @@
     },
 
     /* ---------- focus keyword duplicate check ---------- */
+    _kwCheckReq: 0,
+
     checkDuplicateKeyword: function() {
       var self = this;
       var raw = $.trim($('#cwpKeyword').val());
       var $warning = $('#cwpKwWarning');
       var $text = $('#cwpKwWarningText');
       var L = crawlwpSEO.i18n;
+      /* Only the reply to the latest request may update the warning. */
+      var token = ++this._kwCheckReq;
 
       if (!raw) {
         $warning.hide();
@@ -1231,6 +1497,7 @@
           post_id: crawlwpSEO.postId
         },
         success: function(resp) {
+          if (token !== self._kwCheckReq) return;
           if (resp.success && resp.data && resp.data.duplicate) {
             var msg;
             if (resp.data.keyword && L.kwDuplicateWarnWithKw) {
@@ -1291,10 +1558,7 @@
     /* ---------- analysis panel ---------- */
     runAnalysis: function() {
       var self = this;
-      var rawKeywords = $.trim($('#cwpKeyword').val());
-      var keywords = rawKeywords.split(',').map(function(k) {
-        return $.trim(k);
-      }).filter(Boolean);
+      var keywords = this.parseKeywords($('#cwpKeyword').val());
 
       var $checklist = $('#cwpChecklist');
       var $noticeText = $('#cwpAnalysisNoticeText');
@@ -1304,6 +1568,7 @@
 
       /* always update readability badge regardless of keyword */
       var html = this.getEditorContent();
+      this.refreshLiveTokens();
       var plainText = this.stripTags(html).toLowerCase();
       var wordCount = this.getWordCount(plainText);
       var sentences = plainText.split(/[.!?]+/).filter(function(s) { return $.trim(s).length > 5; });
@@ -1320,18 +1585,20 @@
         return;
       }
 
-      var seoTitle = this.resolve(this.$title.val() || '{{ post.title }} {{ sep }} {{ site.title }}').toLowerCase();
-      var rawTitleVal = this.$title.val() || '{{ post.title }} {{ sep }} {{ site.title }}';
-      var titleText = this.resolve(rawTitleVal);
+      /* Measure what the front end outputs: empty fields fall back to the post type templates. */
+      var titleText = this.resolve(this.titleTemplate());
+      var seoTitle = titleText.toLowerCase();
       var titlePx = this.widthOf(titleText, 'bold 20px Arial');
-      var seoDesc = this.resolve(this.$desc.val() || '').toLowerCase();
-      var descPx = this.widthOf(this.resolve(this.$desc.val()), '14px Arial');
-      var slugVal = (this.getSlug() || '').toLowerCase();
+      var descText = this.resolve(this.descTemplate());
+      var seoDesc = descText.toLowerCase();
+      var descPx = this.widthOf(descText, '14px Arial');
+      var slugVal = this.decodeSlug(this.getSlug() || '').toLowerCase();
       var parsed = this.parseLinks(html);
 
       var $tmp = $('<div>').html(html);
       var $headings = $tmp.find('h1,h2,h3,h4,h5,h6');
       var $h2s = $tmp.find('h2');
+      var h1Count = $tmp.find('h1').length;
 
       var $images = $tmp.find('img');
       var imagesNoAlt = 0;
@@ -1353,6 +1620,8 @@
         titlePx: titlePx,
         seoDesc: seoDesc,
         descPx: descPx,
+        descGenerated: !$.trim(this.$desc.val() || '') && seoDesc.length > 0,
+        h1Count: h1Count,
         slugVal: slugVal,
         parsed: parsed,
         $headings: $headings,
@@ -1443,7 +1712,8 @@
         }
 
         /* 2. Keyword in URL slug */
-        if (d.slugVal.indexOf(kwLower.replace(/\s+/g, '-')) !== -1 || d.slugVal.indexOf(kwLower.replace(/\s+/g, '')) !== -1) {
+        var kwSlug = this.decodeSlug(this.slugify(kwLower));
+        if (d.slugVal.indexOf(kwLower.replace(/\s+/g, '-')) !== -1 || d.slugVal.indexOf(kwLower.replace(/\s+/g, '')) !== -1 || (kwSlug && d.slugVal.indexOf(kwSlug) !== -1)) {
           addCheck('good', L.kwInSlugGood, '');
         } else {
           addCheck('bad', L.kwInSlugBad, L.kwInSlugFix);
@@ -1451,7 +1721,7 @@
       } else {
         /* Secondary: In Content Body */
         if (kwCount > 0) {
-          addCheck('good', L.kwInContentGood, self.fmt(L.kwInContentGoodD, kwCount));
+          addCheck('good', L.kwInContentGood, self.plural(L.kwInContentGoodD, kwCount));
         } else {
           addCheck('bad', L.kwInContentBad, L.kwInContentBadD);
         }
@@ -1467,7 +1737,13 @@
       }
 
       /* 4. Meta description */
-      if (d.seoDesc.length > 0) {
+      if (d.descGenerated) {
+        if (d.seoDesc.indexOf(kwLower) !== -1) {
+          addCheck('good', L.kwInDescGood, L.descGeneratedD);
+        } else {
+          addCheck('warn', L.descGenerated, L.descGeneratedFix);
+        }
+      } else if (d.seoDesc.length > 0) {
         if (d.seoDesc.indexOf(kwLower) !== -1) {
           addCheck('good', L.kwInDescGood, '');
         } else {
@@ -1504,13 +1780,18 @@
         addCheck(isPrimary ? 'bad' : 'warn', L.kwSubheadBad, L.kwSubheadFix);
       }
 
+      /* Multiple H1 headings in the content */
+      if (d.h1Count > 1) {
+        addCheck('warn', this.fmt(L.h1Multiple, d.h1Count), L.h1MultipleFix);
+      }
+
       /* 8. Images alt text */
       if (d.$images.length === 0) {
         addCheck('warn', L.noImages, L.noImagesFix);
       } else if (d.imagesNoAlt === 0) {
-        addCheck('good', L.allImgAlt, this.fmt(L.imgAltDetail, d.$images.length));
+        addCheck('good', L.allImgAlt, this.plural(L.imgAltDetail, d.$images.length));
       } else {
-        addCheck('bad', this.fmt(L.imgAltMissing, d.imagesNoAlt), L.imgAltFix);
+        addCheck('bad', this.plural(L.imgAltMissing, d.imagesNoAlt), L.imgAltFix);
       }
 
       /* 9. Keyword in image alt */
@@ -1533,7 +1814,7 @@
 
       /* 11. External links */
       if (d.parsed.external.length >= 1) {
-        addCheck('good', this.fmt(L.extLinksGood, d.parsed.external.length), L.extLinksGoodD);
+        addCheck('good', this.plural(L.extLinksGood, d.parsed.external.length), L.extLinksGoodD);
       } else {
         addCheck('warn', L.extLinksNone, L.extLinksNoneFix);
       }
@@ -1645,7 +1926,7 @@
       var issues = active.total - active.passed;
       if ($analysisDot.length) {
         if (issues > 0) {
-          $analysisDot.prop('hidden', false).attr('title', this.fmt(L.issueCount, issues));
+          $analysisDot.prop('hidden', false).attr('title', this.plural(L.issueCount, issues));
         } else {
           $analysisDot.prop('hidden', true);
         }
@@ -1679,12 +1960,11 @@
       if ($num.length) $num.text(total > 0 ? pct : '\u2014');
 
       /* Persist the JS-calculated score so it is submitted with the post form.
-       * Only write when analysis actually ran (total > 0).  When total === 0 the
-       * analysis hasn't executed yet and the hidden input already holds the
-       * previously stored score (pre-populated by PHP), so we leave it alone. */
+       * Without a keyword there is no score: an empty value makes the save
+       * drop the stored one instead of keeping the last keyword's score. */
       var $cache = $('#cwpSeoScoreCache');
-      if ($cache.length && total > 0) {
-        $cache.val(pct);
+      if ($cache.length) {
+        $cache.val(total > 0 ? pct : '');
       }
     }
 

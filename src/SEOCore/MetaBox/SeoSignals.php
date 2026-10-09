@@ -59,7 +59,7 @@ class SeoSignals
 	public const CACHE_META = '_crawlwp_seo_signals';
 
 	/** Bumped whenever the cached payload shape or the signal logic changes. */
-	private const CACHE_VERSION = 2;
+	private const CACHE_VERSION = 3;
 
 	/**
 	 * Every signal for a post, in display order.
@@ -78,7 +78,8 @@ class SeoSignals
 	 *
 	 * A stale cache is detected through a fingerprint of everything the signals
 	 * depend on outside the post meta we write ourselves (locale, modification
-	 * time, the global entity options), so the list table
+	 * time, site title, separator, fallback social image, the global entity
+	 * options), so the list table
 	 * never shows values from before a settings change.
 	 *
 	 * @return array<int, array>
@@ -155,6 +156,10 @@ class SeoSignals
 			(string) $post->post_modified_gmt,
 			(string) $post->post_status,
 			(string) get_option('blog_public', 1),
+			(string) get_option('blogname'),
+			(string) get_option('blogdescription'),
+			Variables::separator(),
+			(string) SocialSettings::get('social_image_fallback', 0),
 			(string) wp_json_encode(Options::all($entity)),
 		];
 
@@ -307,7 +312,7 @@ class SeoSignals
 
 		$needle  = mb_strtolower($primary);
 		$content = mb_strtolower(wp_strip_all_tags(strip_shortcodes((string) $post->post_content)));
-		$slug    = str_replace('-', ' ', (string) $post->post_name);
+		$slug    = str_replace('-', ' ', mb_strtolower(urldecode(self::slug($post))));
 
 		$in_title   = mb_stripos($resolved_title, $needle) !== false;
 		$in_slug    = $slug !== '' && mb_stripos($slug, $needle) !== false;
@@ -353,8 +358,11 @@ class SeoSignals
 		} else {
 			if ($hits === 3 && $sec_found === $sec_total) {
 				$state   = self::GOOD;
-				/* translators: %d: number of secondary keywords */
-				$summary = sprintf(__('Found in title, slug and content. All %d secondary keywords found in content.', 'mihdan-index-now'), $sec_total);
+				$summary = sprintf(
+					/* translators: %d: number of secondary keywords */
+					_n('Found in title, slug and content. %d secondary keyword found in content.', 'Found in title, slug and content. All %d secondary keywords found in content.', $sec_total, 'mihdan-index-now'),
+					$sec_total
+				);
 			} elseif ($hits === 3) {
 				$state   = self::WARN;
 				/* translators: 1: number of found secondary keywords, 2: total secondary keywords */
@@ -367,8 +375,12 @@ class SeoSignals
 				$summary .= ' ' . sprintf(__('%1$d of %2$d secondary keywords found in content.', 'mihdan-index-now'), $sec_found, $sec_total);
 			}
 
-			/* translators: 1: primary keyword, 2: number of secondary keywords */
-			$detail = sprintf(__('%1$s (plus %2$d secondary keywords)', 'mihdan-index-now'), self::quote($primary), $sec_total);
+			$detail = sprintf(
+				/* translators: 1: primary keyword, 2: number of secondary keywords */
+				_n('%1$s (plus %2$d secondary keyword)', '%1$s (plus %2$d secondary keywords)', $sec_total, 'mihdan-index-now'),
+				self::quote($primary),
+				$sec_total
+			);
 		}
 
 		return self::signal('keyword', 'K', __('Keyword', 'mihdan-index-now'), $state, $summary, $detail);
@@ -607,6 +619,19 @@ class SeoSignals
 		}
 
 		return Entities::default_value($entity, 'noindex', 'off') === 'on';
+	}
+
+	/**
+	 * The URL slug of a post. Drafts have no post_name yet, so fall back to
+	 * the slug WordPress will generate from the title on publish.
+	 */
+	private static function slug(\WP_Post $post): string
+	{
+		if ((string) $post->post_name !== '') {
+			return (string) $post->post_name;
+		}
+
+		return sanitize_title((string) $post->post_title);
 	}
 
 	private static function post_type_label(\WP_Post $post): string

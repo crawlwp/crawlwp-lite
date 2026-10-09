@@ -252,6 +252,25 @@ class SiteInfoSettings
 			return $graph;
 		}
 
+		$home_url = home_url('/');
+		$logo_id  = $home_url . '#/schema/logo/image/';
+
+		foreach ($graph['@graph'] as $graph_node) {
+			if (! is_array($graph_node)) {
+				continue;
+			}
+
+			/* The business belongs to the site's Organization. */
+			if (($graph_node['@id'] ?? '') === $home_url . '#organization') {
+				$node['parentOrganization'] = ['@id' => $home_url . '#organization'];
+			}
+
+			/* Reuse the site logo, emitted on the Organization or Person node. */
+			if (($graph_node['logo']['@id'] ?? '') === $logo_id || ($graph_node['image']['@id'] ?? '') === $logo_id) {
+				$node['image'] = ['@id' => $logo_id];
+			}
+		}
+
 		$graph['@graph'][] = $node;
 
 		return $graph;

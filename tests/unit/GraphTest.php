@@ -15,7 +15,9 @@ class GraphTest extends TestCase
 		// Reset static $nodes via reflection for isolated unit tests
 		$ref = new \ReflectionClass(Graph::class);
 		$prop = $ref->getProperty('nodes');
-		$prop->setAccessible(true);
+		if (PHP_VERSION_ID < 80100) {
+			$prop->setAccessible(true);
+		}
 		$prop->setValue(null, []);
 	}
 

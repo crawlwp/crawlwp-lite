@@ -73,7 +73,7 @@ class SiteVerificationSettings
 						'id'       => $id,
 						'type'     => 'text',
 						'name'     => $provider['name'],
-						'desc'     => '<code>' . sprintf(esc_html($provider['meta_tag']), '<span style="color:#a11">', '</strong>') . '</code>',
+						'desc'     => '<code>' . sprintf(esc_html($provider['meta_tag']), '<span style="color:#a11">', '</span>') . '</code>',
 						'help_tab' => $provider['help_tab'],
 					]
 				);

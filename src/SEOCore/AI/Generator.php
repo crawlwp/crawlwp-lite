@@ -71,6 +71,14 @@ class Generator
 		'x_description'  => 155,
 	];
 
+	private const READY_CACHE_KEY = 'crawlwp_ai_ready';
+
+	/**
+	 * Characters of a title already taken by the template around the
+	 * generated text, e.g. " – Site name".
+	 */
+	private int $reserved = 0;
+
 	/**
 	 * The list of supported field keys.
 	 *
@@ -89,6 +97,49 @@ class Generator
 		return function_exists('wp_ai_client_prompt')
 			&& function_exists('wp_supports_ai')
 			&& wp_supports_ai();
+	}
+
+	/**
+	 * Whether the editor should offer AI buttons: a provider is connected and
+	 * has a text model, or something hooks `crawlwp_ai_generate_seo`.
+	 *
+	 * Checking the providers lists their models over the network, so the
+	 * answer is cached briefly; a newly connected provider shows up within
+	 * a few minutes.
+	 */
+	public static function is_ready(): bool
+	{
+		if (has_filter('crawlwp_ai_generate_seo')) {
+			return true;
+		}
+
+		if (! (new self())->is_available()) {
+			return false;
+		}
+
+		$cached = get_transient(self::READY_CACHE_KEY);
+
+		if ($cached === 'yes' || $cached === 'no') {
+			return $cached === 'yes';
+		}
+
+		try {
+			$ready = true === wp_ai_client_prompt('ping')->is_supported_for_text_generation();
+		} catch (\Throwable $e) {
+			$ready = false;
+		}
+
+		set_transient(self::READY_CACHE_KEY, $ready ? 'yes' : 'no', $ready ? HOUR_IN_SECONDS : 5 * MINUTE_IN_SECONDS);
+
+		return $ready;
+	}
+
+	/**
+	 * Drop the cached provider check, e.g. after a provider stopped working.
+	 */
+	public static function forget_ready(): void
+	{
+		delete_transient(self::READY_CACHE_KEY);
 	}
 
 	/**
@@ -119,6 +170,8 @@ class Generator
 		$title    = isset($context['title']) ? (string) $context['title'] : '';
 		$keyword  = isset($context['keyword']) ? (string) $context['keyword'] : '';
 		$previous = isset($context['previous']) ? (string) $context['previous'] : '';
+
+		$this->reserved = isset($context['reserved']) ? max(0, (int) $context['reserved']) : 0;
 		$content  = $this->prepare_content($post_id, isset($context['content']) ? (string) $context['content'] : '');
 
 		if ($title === '' && $post_id) {
@@ -130,7 +183,7 @@ class Generator
 		if ($content === '' && $this->is_description($field)) {
 			return new \WP_Error(
 				'crawlwp_ai_no_content',
-				__('Add some content to the post first — a meta description is written from the page content.', 'mihdan-index-now')
+				__('Add some content to the post first. A meta description is written from the page content.', 'mihdan-index-now')
 			);
 		}
 
@@ -300,7 +353,7 @@ class Generator
 	private function system_instruction(string $field, string $language, bool $rewriting): string
 	{
 		$is_description = $this->is_description($field);
-		$max            = self::LIMITS[$field];
+		$max            = $this->limit($field);
 
 		$role = __('You are a professional SEO copywriter working on a WordPress website.', 'mihdan-index-now');
 
@@ -327,7 +380,7 @@ class Generator
 			sprintf(
 				/* translators: 1: minimum characters, 2: maximum characters */
 				__('- Length: between %1$d and %2$d characters.', 'mihdan-index-now'),
-				$is_description ? (int) round($max * 0.75) : 40,
+				$is_description ? (int) round($max * 0.75) : min(40, $max - 10),
 				$max
 			),
 			__('- Accurately reflect the content; never invent facts, numbers, prices or dates.', 'mihdan-index-now'),
@@ -410,22 +463,23 @@ class Generator
 	/**
 	 * Clean the post content before it is sent to the provider.
 	 *
-	 * Falls back to the content the editor sent along with the request when
-	 * the stored post content is empty (new, unsaved posts).
+	 * Prefers the content the editor sent with the request, so unsaved edits
+	 * are described along with the unsaved title. Falls back to the stored
+	 * post content when the editor sent none (page builders, AJAX callers).
 	 */
-	private function prepare_content(int $post_id, string $fallback): string
+	private function prepare_content(int $post_id, string $editor_content): string
 	{
-		$content = '';
+		$content = $editor_content;
 
 		if ($post_id) {
-			$content = (string) get_post_field('post_content', $post_id);
 			$content = $this->extract_builder_content($post_id, $content);
 		}
 
 		$content = wp_strip_all_tags(strip_shortcodes($content));
 
-		if (trim($content) === '') {
-			$content = wp_strip_all_tags(strip_shortcodes($fallback));
+		if (trim($content) === '' && $post_id) {
+			$stored  = $this->extract_builder_content($post_id, (string) get_post_field('post_content', $post_id));
+			$content = wp_strip_all_tags(strip_shortcodes($stored));
 		}
 
 		$content = str_replace(['&nbsp;', "\xc2\xa0"], ' ', $content);
@@ -567,6 +621,18 @@ class Generator
 			}
 		}
 
+		// TranslatePress posts are written in its default language and
+		// translated on the fly, so the source text uses that language.
+		if (! defined('ICL_SITEPRESS_VERSION') && ! function_exists('pll_get_post_language') && class_exists('TRP_Translate_Press')) {
+			$trp          = \TRP_Translate_Press::get_trp_instance();
+			$trp_settings = is_object($trp) && method_exists($trp, 'get_component') ? $trp->get_component('settings') : null;
+			$trp_settings = is_object($trp_settings) && method_exists($trp_settings, 'get_settings') ? $trp_settings->get_settings() : [];
+
+			if (is_array($trp_settings) && ! empty($trp_settings['default-language']) && is_string($trp_settings['default-language'])) {
+				$locale = $trp_settings['default-language'];
+			}
+		}
+
 		$language = $locale;
 
 		// Send a human-readable name ("Brazilian Portuguese") rather than a
@@ -623,7 +689,7 @@ class Generator
 			return '';
 		}
 
-		$max = self::LIMITS[$field];
+		$max = $this->limit($field);
 
 		if (mb_strlen($text) > $max) {
 			$text = $this->truncate($text, $max);
@@ -650,6 +716,17 @@ class Generator
 		$cut = (string) preg_replace('/[\s\p{P}]+$/u', '', $cut);
 
 		return $cut . '…';
+	}
+
+	/**
+	 * Maximum characters for a field. A title shares its limit with the
+	 * template text around it, but never drops below 30 characters.
+	 */
+	private function limit(string $field): int
+	{
+		$max = self::LIMITS[$field];
+
+		return $this->is_description($field) ? $max : max(30, $max - $this->reserved);
 	}
 
 	private function is_description(string $field): bool

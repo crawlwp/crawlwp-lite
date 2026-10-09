@@ -584,6 +584,43 @@ class RedirectsManager
 	}
 
 	/**
+	 * Point every redirect currently aimed at one destination to another.
+	 *
+	 * Used to collapse permalink chains: after A→B exists, a B→C change
+	 * rewrites A→B to A→C so visitors never take two hops.
+	 *
+	 * @param string $old_to Destination to replace (any accepted form).
+	 * @param string $new_to New destination.
+	 * @return int Number of rows updated.
+	 */
+	public function retarget_destination(string $old_to, string $new_to): int
+	{
+		global $wpdb;
+
+		$old_to = $this->normalize_to_url($old_to);
+		$new_to = $this->normalize_to_url($new_to);
+
+		if ($old_to === '' || $new_to === '' || $old_to === $new_to) {
+			return 0;
+		}
+
+		$variants = array_unique([$old_to, untrailingslashit($old_to), trailingslashit($old_to)]);
+		$in       = implode(', ', array_fill(0, count($variants), '%s'));
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$updated = $wpdb->query($wpdb->prepare(
+			"UPDATE {$this->table} SET to_url = %s WHERE to_url IN ({$in})",
+			array_merge([$new_to], $variants)
+		));
+
+		if ($updated) {
+			$this->flush_cache();
+		}
+
+		return (int) $updated;
+	}
+
+	/**
 	 * Find an enabled exact rule whose from_url matches a home-relative key.
 	 *
 	 * Used by the chain/loop detector. Stored values are bare path segments,
@@ -957,8 +994,10 @@ class RedirectsManager
 	{
 		$parsed = wp_parse_url(untrailingslashit(home_url()));
 
+		// Keep the port (e.g. "localhost:8080") so stripping the origin never
+		// leaves a stray ":8080/path" behind.
 		return isset($parsed['scheme'], $parsed['host'])
-			? $parsed['scheme'] . '://' . $parsed['host']
+			? $parsed['scheme'] . '://' . $parsed['host'] . (! empty($parsed['port']) ? ':' . $parsed['port'] : '')
 			: '';
 	}
 
@@ -992,6 +1031,20 @@ class RedirectsManager
 
 		if ($origin !== '' && stripos($url, $origin) === 0) {
 			$url = substr($url, strlen($origin));
+		} elseif (preg_match('#^https?://#i', $url)) {
+			// Same host but a different scheme/port spelling: strip scheme,
+			// host and port via wp_parse_url() rather than string offsets.
+			$parsed    = wp_parse_url($url);
+			$home      = wp_parse_url(home_url());
+			$same_host = is_array($parsed) && is_array($home) && isset($parsed['host'], $home['host'])
+				&& strcasecmp($parsed['host'], $home['host']) === 0
+				&& (int) ($parsed['port'] ?? 0) === (int) ($home['port'] ?? 0);
+
+			if ($same_host) {
+				$url = ($parsed['path'] ?? '')
+					. (isset($parsed['query']) ? '?' . $parsed['query'] : '')
+					. (isset($parsed['fragment']) ? '#' . $parsed['fragment'] : '');
+			}
 		}
 
 		if ($url === '') {
@@ -1109,6 +1162,13 @@ class RedirectsManager
 			return '';
 		}
 
+		// Scheme-less external destination ("example.com/page"): when the first
+		// segment looks like a domain, treat it as an absolute https URL instead
+		// of silently turning it into the on-site path "/example.com/page/".
+		if ($this->looks_like_schemeless_domain($url)) {
+			$url = 'https://' . $url;
+		}
+
 		// Check for non-http(s) scheme (e.g. javascript:, data:, etc.).
 		$scheme = (string) wp_parse_url($url, PHP_URL_SCHEME);
 		if ($scheme !== '' && !in_array(strtolower($scheme), ['http', 'https'], true)) {
@@ -1147,11 +1207,14 @@ class RedirectsManager
 			$path = '/' . $path;
 		}
 
-		// Add trailing slash for non-root paths unless an extension is present (e.g. .pdf, .jpg).
+		// Add trailing slash for non-root paths unless an extension is present (e.g. .pdf, .jpg)
+		// or the path carries regex back-references ("$1") — the substituted
+		// capture may already end in "/" and the slash would double up.
 		$basename = basename($path);
 		$has_ext  = (strpos($basename, '.') !== false && !str_ends_with($path, '/'));
+		$has_ref  = (bool) preg_match('/\$\d/', $path);
 
-		if ($path !== '/' && !$has_ext) {
+		if ($path !== '/' && !$has_ext && !$has_ref) {
 			$path = trailingslashit($path);
 		}
 
@@ -1164,6 +1227,32 @@ class RedirectsManager
 		}
 
 		return home_url($path);
+	}
+
+	/**
+	 * Whether a scheme-less destination starts with a domain name
+	 * (e.g. "example.com/page" or "www.example.org"), as opposed to a
+	 * relative path such as "hello-post" or "file.pdf".
+	 *
+	 * @param string $url Trimmed destination input.
+	 * @return bool
+	 */
+	private function looks_like_schemeless_domain(string $url): bool
+	{
+		if ($url === '' || $url[0] === '/' || preg_match('#^[a-z][a-z0-9+.\-]*://#i', $url)) {
+			return false;
+		}
+
+		$segment = (string) preg_split('#[/?\#]#', $url, 2)[0];
+
+		if (!preg_match('/^(?:[a-z0-9](?:[a-z0-9\-]*[a-z0-9])?\.)+([a-z]{2,63})(?::\d+)?$/i', $segment, $m)) {
+			return false;
+		}
+
+		// A lone "file.pdf" is a relative file path, not a domain.
+		$file_exts = ['html', 'htm', 'php', 'asp', 'aspx', 'pdf', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'txt', 'xml', 'json', 'csv', 'zip', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'mp3', 'mp4', 'css', 'js'];
+
+		return !in_array(strtolower($m[1]), $file_exts, true);
 	}
 
 	/**

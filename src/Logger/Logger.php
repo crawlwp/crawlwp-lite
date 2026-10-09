@@ -37,6 +37,15 @@ class Logger extends AbstractLogger {
 
 		$context = (array) wp_parse_args( $context, $defaults );
 
+		// "Outgoing requests" off: skip routine outgoing entries; failures and skips are still logged.
+		if (
+			$context['direction'] === 'outgoing' &&
+			in_array( $level, [ 'info', 'notice', 'debug' ], true ) &&
+			Utils::wposa_get_option( 'outgoing_requests', 'logs', 'on' ) !== 'on'
+		) {
+			return;
+		}
+
 		$data = wp_kses_post_deep( $context );
 
 		$wpdb->insert( $this->get_logger_table_name(), $data );

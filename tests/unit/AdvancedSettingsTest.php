@@ -35,7 +35,9 @@ class AdvancedSettingsTest extends TestCase
 		$settings->setup_fields();
 
 		$refProperty = new \ReflectionProperty(WPOSA::class, 'header_menu_array');
-		$refProperty->setAccessible(true);
+		if (PHP_VERSION_ID < 80100) {
+			$refProperty->setAccessible(true);
+		}
 		$menus = $refProperty->getValue($wposa);
 
 		$this->assertNotEmpty($menus);
@@ -59,7 +61,9 @@ class AdvancedSettingsTest extends TestCase
 		$settings->setup_fields();
 
 		$refProperty = new \ReflectionProperty(WPOSA::class, 'header_menu_array');
-		$refProperty->setAccessible(true);
+		if (PHP_VERSION_ID < 80100) {
+			$refProperty->setAccessible(true);
+		}
 		$menus = $refProperty->getValue($wposa);
 
 		$this->assertNotEmpty($menus);
@@ -80,7 +84,9 @@ class AdvancedSettingsTest extends TestCase
 		$advanced_settings->settings_fields($wposa, null);
 
 		$refSections = new \ReflectionProperty(WPOSA::class, 'sections_array');
-		$refSections->setAccessible(true);
+		if (PHP_VERSION_ID < 80100) {
+			$refSections->setAccessible(true);
+		}
 		/** @var array<int, array<string, mixed>> $sections */
 		$sections = $refSections->getValue($wposa);
 
@@ -97,7 +103,9 @@ class AdvancedSettingsTest extends TestCase
 		$this->assertSame('crawlwp_advanced_settings', $found_section['header_menu_id']);
 
 		$refFields = new \ReflectionProperty(WPOSA::class, 'fields_array');
-		$refFields->setAccessible(true);
+		if (PHP_VERSION_ID < 80100) {
+			$refFields->setAccessible(true);
+		}
 		/** @var array<string, list<array<string, mixed>>> $fields */
 		$fields = $refFields->getValue($wposa);
 

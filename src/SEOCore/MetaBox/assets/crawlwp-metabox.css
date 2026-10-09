@@ -173,6 +173,13 @@
 .cwp-ai-btn:active{transform:scale(.97);}
 .cwp-ai-btn.is-loading{opacity:.7;cursor:wait;}
 .cwp-ai-btn svg{flex-shrink:0;}
+.cwp-ai-btn.is-locked{opacity:.45;cursor:not-allowed;box-shadow:none;}
+.cwp-ai-btn.is-locked:hover{background:linear-gradient(135deg,#7c3aed 0%,#6d28d9 100%);border-color:#6d28d9;box-shadow:none;}
+.cwp-ai-notice{display:flex;align-items:flex-start;gap:8px;margin-top:6px;padding:8px 10px;border:1px solid #f5c2c0;border-left-width:3px;border-left-color:#d63638;border-radius:4px;background:#fcf0f1;color:#1d2327;font-size:12px;line-height:1.5;white-space:pre-line;}
+.cwp-ai-notice__text{flex:1;}
+.cwp-ai-notice a{white-space:nowrap;}
+.cwp-ai-notice__close{flex-shrink:0;border:0;background:none;padding:0 2px;color:#50575e;font-size:16px;line-height:1;cursor:pointer;}
+.cwp-ai-notice__close:hover{color:#1d2327;}
 .cwp-ai-spinner{
   display:inline-block;width:12px;height:12px;
   border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;

@@ -6,18 +6,217 @@ use Mihdan\IndexNow\SEOCore\MetaBox\Assets;
 use Mihdan\IndexNow\SEOCore\MetaBox\FieldProcessor;
 use Mihdan\IndexNow\SEOCore\MetaBox\MetaFields;
 use Mihdan\IndexNow\SEOCore\MetaBox\SeoSignals;
+use Mihdan\IndexNow\SEOCore\TitleMeta\Entities;
 
 /**
  * CrawlWP SEO fields and interactive diagnostic bridge inside Elementor.
  */
 class Elementor
 {
+	/** Elementor's page-settings post meta key. */
+	private const PAGE_SETTINGS_META = '_elementor_page_settings';
+
+	/** Re-entrancy guard for the page-settings overlay filter. */
+	private static bool $reading_raw = false;
+
 	public function __construct()
 	{
 		add_action('elementor/documents/register_controls', [$this, 'register_controls']);
 		add_action('elementor/document/after_save', [$this, 'save'], 10, 2);
 		add_action('elementor/editor/after_enqueue_scripts', [$this, 'enqueue_editor_scripts']);
 		add_action('elementor/editor/after_enqueue_styles', [$this, 'enqueue_editor_styles']);
+		add_filter('get_post_metadata', [$this, 'overlay_page_settings'], 10, 4);
+	}
+
+	/**
+	 * Static control defaults. Elementor drops values equal to a control's
+	 * default when saving, so defaults must be fixed (not the current meta)
+	 * for an omitted key to have a known meaning.
+	 *
+	 * @return array<string, mixed>
+	 */
+	private static function control_defaults(): array
+	{
+		return [
+			MetaFields::SEO_TITLE           => '',
+			MetaFields::SEO_DESCRIPTION     => '',
+			MetaFields::FOCUS_KEYWORD       => '',
+			MetaFields::CANONICAL_URL       => ['url' => ''],
+			MetaFields::PRIMARY_CATEGORY    => '0',
+			MetaFields::OG_SYNC             => 'yes',
+			MetaFields::OG_TITLE            => '',
+			MetaFields::OG_DESCRIPTION      => '',
+			MetaFields::OG_IMAGE            => ['id' => '', 'url' => ''],
+			MetaFields::OG_IMAGE_ALT        => '',
+			MetaFields::X_SYNC              => 'yes',
+			MetaFields::X_TITLE             => '',
+			MetaFields::X_DESCRIPTION       => '',
+			MetaFields::X_IMAGE             => ['id' => '', 'url' => ''],
+			MetaFields::X_CARD_TYPE         => '',
+			MetaFields::X_CREATOR           => '',
+			MetaFields::SCHEMA_PAGE_TYPE    => '',
+			MetaFields::SCHEMA_ARTICLE_TYPE => '',
+			MetaFields::SCHEMA_HEADLINE     => '',
+			MetaFields::SCHEMA_SECTION      => '',
+			MetaFields::SCHEMA_BREADCRUMB   => '',
+			MetaFields::SCHEMA_CUSTOM       => '',
+			MetaFields::ROBOTS_INDEX        => '',
+			MetaFields::ROBOTS_FOLLOW       => '',
+			MetaFields::ROBOTS_ADVANCED     => [],
+			MetaFields::MAX_SNIPPET         => '',
+			MetaFields::MAX_IMAGE           => 'large',
+			MetaFields::REDIRECT_URL        => ['url' => ''],
+			MetaFields::REDIRECT_TYPE       => '301',
+		];
+	}
+
+	/**
+	 * @param string $key Control / meta key.
+	 * @return mixed
+	 */
+	private static function control_default(string $key)
+	{
+		return self::control_defaults()[$key] ?? '';
+	}
+
+	/**
+	 * Current post meta value, shaped as the Elementor control expects it.
+	 *
+	 * @param int    $post_id Post ID.
+	 * @param string $key     Control / meta key.
+	 * @return mixed
+	 */
+	private static function control_value(int $post_id, string $key)
+	{
+		switch ($key) {
+			case MetaFields::CANONICAL_URL:
+			case MetaFields::REDIRECT_URL:
+				return [
+					'url'               => (string) MetaFields::get($post_id, $key),
+					'is_external'       => '',
+					'nofollow'          => '',
+					'custom_attributes' => '',
+				];
+
+			case MetaFields::OG_IMAGE:
+			case MetaFields::X_IMAGE:
+				$image_id = (int) MetaFields::get($post_id, $key, 0);
+
+				return [
+					'id'  => $image_id > 0 ? $image_id : '',
+					'url' => $image_id > 0 ? (string) wp_get_attachment_image_url($image_id, 'full') : '',
+				];
+
+			case MetaFields::OG_SYNC:
+			case MetaFields::X_SYNC:
+				return (string) MetaFields::get($post_id, $key, '1') === '1' ? 'yes' : '';
+
+			case MetaFields::ROBOTS_ADVANCED:
+				$value = MetaFields::get($post_id, $key, []);
+
+				return is_array($value) ? array_values(array_map('strval', $value)) : [];
+
+			default:
+				$default = self::control_default($key);
+
+				return (string) MetaFields::get($post_id, $key, is_string($default) ? $default : '');
+		}
+	}
+
+	/**
+	 * Whether CrawlWP SEO controls apply to this post (same post types the
+	 * SEO metabox / Title & Meta settings cover; never Elementor templates).
+	 *
+	 * @param int $post_id Post ID.
+	 * @return bool
+	 */
+	private static function is_supported_post(int $post_id): bool
+	{
+		$post_type = get_post_type($post_id);
+
+		if (! $post_type || $post_type === 'elementor_library') {
+			return false;
+		}
+
+		foreach (Entities::post_types() as $post_type_object) {
+			if ($post_type_object->name === $post_type) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Whether this is the Elementor editor (page load or its AJAX endpoint).
+	 *
+	 * @return bool
+	 */
+	private static function is_editor_request(): bool
+	{
+		if (! is_admin()) {
+			return false;
+		}
+
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only routing check.
+		$action = isset($_REQUEST['action']) ? sanitize_key(wp_unslash($_REQUEST['action'])) : '';
+
+		return $action === 'elementor' || (wp_doing_ajax() && $action === 'elementor_ajax');
+	}
+
+	/**
+	 * Read Elementor's stored page settings without the overlay.
+	 *
+	 * @param int $post_id Post ID.
+	 * @return array
+	 */
+	private static function raw_page_settings(int $post_id): array
+	{
+		self::$reading_raw = true;
+		$settings          = get_post_meta($post_id, self::PAGE_SETTINGS_META, true);
+		self::$reading_raw = false;
+
+		return is_array($settings) ? $settings : [];
+	}
+
+	/**
+	 * Feed Elementor's page-settings model the *current* CrawlWP post meta
+	 * instead of whatever was saved in _elementor_page_settings last time, so
+	 * edits made in the SEO metabox, bulk editor or importers show up (and are
+	 * not written back stale) in the Elementor panel.
+	 *
+	 * @param mixed  $value     Short-circuit value.
+	 * @param int    $object_id Post ID.
+	 * @param string $meta_key  Meta key.
+	 * @param bool   $single    Single value requested.
+	 * @return mixed
+	 */
+	public function overlay_page_settings($value, $object_id, $meta_key, $single)
+	{
+		if ($meta_key !== self::PAGE_SETTINGS_META || self::$reading_raw || $value !== null || ! self::is_editor_request()) {
+			return $value;
+		}
+
+		$post_id = (int) $object_id;
+
+		// Elementor autosaves are revisions — read the SEO meta of the parent.
+		$meta_post_id = $post_id;
+		if (get_post_type($post_id) === 'revision') {
+			$meta_post_id = (int) wp_get_post_parent_id($post_id);
+		}
+
+		if ($meta_post_id <= 0 || ! self::is_supported_post($meta_post_id)) {
+			return $value;
+		}
+
+		$settings = self::raw_page_settings($post_id);
+
+		foreach (array_keys(self::control_defaults()) as $key) {
+			$settings[$key] = self::control_value($meta_post_id, $key);
+		}
+
+		// get_metadata() returns $check[0] for single lookups.
+		return [$settings];
 	}
 
 	/**
@@ -87,7 +286,7 @@ class Elementor
 			return;
 		}
 
-		if (! current_user_can('edit_post', $post_id)) {
+		if (! current_user_can('edit_post', $post_id) || ! self::is_supported_post($post_id)) {
 			return;
 		}
 
@@ -104,9 +303,8 @@ class Elementor
 			'type'        => \Elementor\Controls_Manager::TEXT,
 			'label_block' => true,
 			'ai'          => ['active' => false],
-			'dynamic'     => ['active' => true],
 			'placeholder' => '{{ post.title }} {{ sep }} {{ site.title }}',
-			'default'     => (string) MetaFields::get($post_id, MetaFields::SEO_TITLE),
+			'default'     => self::control_default(MetaFields::SEO_TITLE),
 		]);
 
 		$document->add_control(MetaFields::SEO_DESCRIPTION, [
@@ -114,26 +312,23 @@ class Elementor
 			'type'        => \Elementor\Controls_Manager::TEXTAREA,
 			'label_block' => true,
 			'ai'          => ['active' => false],
-			'dynamic'     => ['active' => true],
-			'default'     => (string) MetaFields::get($post_id, MetaFields::SEO_DESCRIPTION),
+			'default'     => self::control_default(MetaFields::SEO_DESCRIPTION),
 		]);
 
 		$document->add_control(MetaFields::FOCUS_KEYWORD, [
 			'label'       => __('Focus keyword', 'mihdan-index-now'),
 			'type'        => \Elementor\Controls_Manager::TEXT,
 			'ai'          => ['active' => false],
-			'dynamic'     => ['active' => true],
 			'description' => __('Comma-separated list; first keyword is primary for scoring.', 'mihdan-index-now'),
-			'default'     => (string) MetaFields::get($post_id, MetaFields::FOCUS_KEYWORD),
+			'default'     => self::control_default(MetaFields::FOCUS_KEYWORD),
 		]);
 
 		$document->add_control(MetaFields::CANONICAL_URL, [
 			'label'       => __('Canonical URL', 'mihdan-index-now'),
 			'type'        => \Elementor\Controls_Manager::URL,
 			'ai'          => ['active' => false],
-			'dynamic'     => ['active' => true],
 			'placeholder' => 'https://...',
-			'default'     => ['url' => (string) MetaFields::get($post_id, MetaFields::CANONICAL_URL)],
+			'default'     => self::control_default(MetaFields::CANONICAL_URL),
 		]);
 
 		$category_options = [
@@ -151,7 +346,7 @@ class Elementor
 			'type'        => \Elementor\Controls_Manager::SELECT,
 			'options'     => $category_options,
 			'description' => __('Used for breadcrumbs and category permalink tags.', 'mihdan-index-now'),
-			'default'     => (string) MetaFields::get($post_id, MetaFields::PRIMARY_CATEGORY, '0'),
+			'default'     => self::control_default(MetaFields::PRIMARY_CATEGORY),
 		]);
 
 		$document->end_controls_section();
@@ -176,7 +371,7 @@ class Elementor
 			'label_on'     => __('Yes', 'mihdan-index-now'),
 			'label_off'    => __('No', 'mihdan-index-now'),
 			'return_value' => 'yes',
-			'default'      => (string) MetaFields::get($post_id, MetaFields::OG_SYNC, '1') === '1' ? 'yes' : '',
+			'default'      => self::control_default(MetaFields::OG_SYNC),
 		]);
 
 		$document->add_control(MetaFields::OG_TITLE, [
@@ -184,8 +379,7 @@ class Elementor
 			'type'        => \Elementor\Controls_Manager::TEXT,
 			'label_block' => true,
 			'ai'          => ['active' => false],
-			'dynamic'     => ['active' => true],
-			'default'     => (string) MetaFields::get($post_id, MetaFields::OG_TITLE),
+			'default'     => self::control_default(MetaFields::OG_TITLE),
 			'condition'   => [
 				MetaFields::OG_SYNC => '',
 			],
@@ -196,31 +390,24 @@ class Elementor
 			'type'        => \Elementor\Controls_Manager::TEXTAREA,
 			'label_block' => true,
 			'ai'          => ['active' => false],
-			'dynamic'     => ['active' => true],
-			'default'     => (string) MetaFields::get($post_id, MetaFields::OG_DESCRIPTION),
+			'default'     => self::control_default(MetaFields::OG_DESCRIPTION),
 			'condition'   => [
 				MetaFields::OG_SYNC => '',
 			],
 		]);
 
-		$og_img_id  = (int) MetaFields::get($post_id, MetaFields::OG_IMAGE, 0);
-		$og_img_url = $og_img_id > 0 ? (string) wp_get_attachment_image_url($og_img_id, 'full') : '';
-
 		$document->add_control(MetaFields::OG_IMAGE, [
 			'label'   => __('Open Graph image', 'mihdan-index-now'),
 			'type'    => \Elementor\Controls_Manager::MEDIA,
 			'ai'      => ['active' => false],
-			'default' => [
-				'id'  => $og_img_id > 0 ? $og_img_id : '',
-				'url' => $og_img_url,
-			],
+			'default' => self::control_default(MetaFields::OG_IMAGE),
 		]);
 
 		$document->add_control(MetaFields::OG_IMAGE_ALT, [
 			'label'   => __('Social image alt text', 'mihdan-index-now'),
 			'type'    => \Elementor\Controls_Manager::TEXT,
 			'ai'      => ['active' => false],
-			'default' => (string) MetaFields::get($post_id, MetaFields::OG_IMAGE_ALT),
+			'default' => self::control_default(MetaFields::OG_IMAGE_ALT),
 		]);
 
 		$document->add_control('crawlwp_x_heading', [
@@ -235,7 +422,7 @@ class Elementor
 			'label_on'     => __('Yes', 'mihdan-index-now'),
 			'label_off'    => __('No', 'mihdan-index-now'),
 			'return_value' => 'yes',
-			'default'      => (string) MetaFields::get($post_id, MetaFields::X_SYNC, '1') === '1' ? 'yes' : '',
+			'default'      => self::control_default(MetaFields::X_SYNC),
 		]);
 
 		$document->add_control(MetaFields::X_TITLE, [
@@ -243,8 +430,7 @@ class Elementor
 			'type'        => \Elementor\Controls_Manager::TEXT,
 			'label_block' => true,
 			'ai'          => ['active' => false],
-			'dynamic'     => ['active' => true],
-			'default'     => (string) MetaFields::get($post_id, MetaFields::X_TITLE),
+			'default'     => self::control_default(MetaFields::X_TITLE),
 			'condition'   => [
 				MetaFields::X_SYNC => '',
 			],
@@ -255,24 +441,17 @@ class Elementor
 			'type'        => \Elementor\Controls_Manager::TEXTAREA,
 			'label_block' => true,
 			'ai'          => ['active' => false],
-			'dynamic'     => ['active' => true],
-			'default'     => (string) MetaFields::get($post_id, MetaFields::X_DESCRIPTION),
+			'default'     => self::control_default(MetaFields::X_DESCRIPTION),
 			'condition'   => [
 				MetaFields::X_SYNC => '',
 			],
 		]);
 
-		$x_img_id  = (int) MetaFields::get($post_id, MetaFields::X_IMAGE, 0);
-		$x_img_url = $x_img_id > 0 ? (string) wp_get_attachment_image_url($x_img_id, 'full') : '';
-
 		$document->add_control(MetaFields::X_IMAGE, [
 			'label'     => __('X image', 'mihdan-index-now'),
 			'type'      => \Elementor\Controls_Manager::MEDIA,
 			'ai'        => ['active' => false],
-			'default'   => [
-				'id'  => $x_img_id > 0 ? $x_img_id : '',
-				'url' => $x_img_url,
-			],
+			'default'   => self::control_default(MetaFields::X_IMAGE),
 			'condition' => [
 				MetaFields::X_SYNC => '',
 			],
@@ -282,10 +461,11 @@ class Elementor
 			'label'   => __('Card type', 'mihdan-index-now'),
 			'type'    => \Elementor\Controls_Manager::SELECT,
 			'options' => [
+				''                    => __('Default', 'mihdan-index-now'),
 				'summary_large_image' => __('Large image summary', 'mihdan-index-now'),
 				'summary'             => __('Summary', 'mihdan-index-now'),
 			],
-			'default' => (string) MetaFields::get($post_id, MetaFields::X_CARD_TYPE, 'summary_large_image'),
+			'default' => self::control_default(MetaFields::X_CARD_TYPE),
 		]);
 
 		$document->add_control(MetaFields::X_CREATOR, [
@@ -293,7 +473,7 @@ class Elementor
 			'type'        => \Elementor\Controls_Manager::TEXT,
 			'ai'          => ['active' => false],
 			'placeholder' => '@username',
-			'default'     => (string) MetaFields::get($post_id, MetaFields::X_CREATOR),
+			'default'     => self::control_default(MetaFields::X_CREATOR),
 		]);
 
 		$document->end_controls_section();
@@ -337,14 +517,14 @@ class Elementor
 			'label'   => __('Page type', 'mihdan-index-now'),
 			'type'    => \Elementor\Controls_Manager::SELECT,
 			'options' => ['' => __('Default', 'mihdan-index-now')] + $page_types,
-			'default' => (string) MetaFields::get($post_id, MetaFields::SCHEMA_PAGE_TYPE),
+			'default' => self::control_default(MetaFields::SCHEMA_PAGE_TYPE),
 		]);
 
 		$document->add_control(MetaFields::SCHEMA_ARTICLE_TYPE, [
 			'label'   => __('Article type', 'mihdan-index-now'),
 			'type'    => \Elementor\Controls_Manager::SELECT,
 			'options' => ['' => __('Default', 'mihdan-index-now')] + $article_types,
-			'default' => (string) MetaFields::get($post_id, MetaFields::SCHEMA_ARTICLE_TYPE),
+			'default' => self::control_default(MetaFields::SCHEMA_ARTICLE_TYPE),
 		]);
 
 		$document->add_control(MetaFields::SCHEMA_HEADLINE, [
@@ -352,25 +532,22 @@ class Elementor
 			'type'        => \Elementor\Controls_Manager::TEXT,
 			'label_block' => true,
 			'ai'          => ['active' => false],
-			'dynamic'     => ['active' => true],
 			'placeholder' => __('Leave empty to use SEO title', 'mihdan-index-now'),
-			'default'     => (string) MetaFields::get($post_id, MetaFields::SCHEMA_HEADLINE),
+			'default'     => self::control_default(MetaFields::SCHEMA_HEADLINE),
 		]);
 
 		$document->add_control(MetaFields::SCHEMA_SECTION, [
 			'label'   => __('Article section', 'mihdan-index-now'),
 			'type'    => \Elementor\Controls_Manager::TEXT,
 			'ai'      => ['active' => false],
-			'dynamic' => ['active' => true],
-			'default' => (string) MetaFields::get($post_id, MetaFields::SCHEMA_SECTION),
+			'default' => self::control_default(MetaFields::SCHEMA_SECTION),
 		]);
 
 		$document->add_control(MetaFields::SCHEMA_BREADCRUMB, [
 			'label'   => __('Breadcrumb title', 'mihdan-index-now'),
 			'type'    => \Elementor\Controls_Manager::TEXT,
 			'ai'      => ['active' => false],
-			'dynamic' => ['active' => true],
-			'default' => (string) MetaFields::get($post_id, MetaFields::SCHEMA_BREADCRUMB),
+			'default' => self::control_default(MetaFields::SCHEMA_BREADCRUMB),
 		]);
 
 		$document->add_control(MetaFields::SCHEMA_CUSTOM, [
@@ -379,7 +556,7 @@ class Elementor
 			'label_block' => true,
 			'ai'          => ['active' => false],
 			'description' => __('Valid JSON-LD block to merge into page schema.', 'mihdan-index-now'),
-			'default'     => (string) MetaFields::get($post_id, MetaFields::SCHEMA_CUSTOM),
+			'default'     => self::control_default(MetaFields::SCHEMA_CUSTOM),
 		]);
 
 		$document->end_controls_section();
@@ -400,7 +577,7 @@ class Elementor
 				'index'   => __('Yes — index this post', 'mihdan-index-now'),
 				'noindex' => __('No — keep it out of search results', 'mihdan-index-now'),
 			],
-			'default' => (string) MetaFields::get($post_id, MetaFields::ROBOTS_INDEX),
+			'default' => self::control_default(MetaFields::ROBOTS_INDEX),
 		]);
 
 		$document->add_control(MetaFields::ROBOTS_FOLLOW, [
@@ -411,13 +588,8 @@ class Elementor
 				'follow'   => __('Yes — follow links on this page', 'mihdan-index-now'),
 				'nofollow' => __('No — do not follow links on this page', 'mihdan-index-now'),
 			],
-			'default' => (string) MetaFields::get($post_id, MetaFields::ROBOTS_FOLLOW),
+			'default' => self::control_default(MetaFields::ROBOTS_FOLLOW),
 		]);
-
-		$saved_robots_adv = MetaFields::get($post_id, MetaFields::ROBOTS_ADVANCED, []);
-		if (! is_array($saved_robots_adv)) {
-			$saved_robots_adv = [];
-		}
 
 		$document->add_control(MetaFields::ROBOTS_ADVANCED, [
 			'label'       => __('Crawler directives', 'mihdan-index-now'),
@@ -430,7 +602,7 @@ class Elementor
 				'nosnippet'    => __('No snippet (nosnippet)', 'mihdan-index-now'),
 				'notranslate'  => __('No translated results (notranslate)', 'mihdan-index-now'),
 			],
-			'default'     => $saved_robots_adv,
+			'default'     => self::control_default(MetaFields::ROBOTS_ADVANCED),
 		]);
 
 		$document->add_control(MetaFields::MAX_SNIPPET, [
@@ -441,7 +613,7 @@ class Elementor
 				'none' => __('None — no snippet', 'mihdan-index-now'),
 				'160'  => __('160 characters', 'mihdan-index-now'),
 			],
-			'default' => (string) MetaFields::get($post_id, MetaFields::MAX_SNIPPET, ''),
+			'default' => self::control_default(MetaFields::MAX_SNIPPET),
 		]);
 
 		$document->add_control(MetaFields::MAX_IMAGE, [
@@ -452,7 +624,7 @@ class Elementor
 				'standard' => __('Standard', 'mihdan-index-now'),
 				'none'     => __('None', 'mihdan-index-now'),
 			],
-			'default' => (string) MetaFields::get($post_id, MetaFields::MAX_IMAGE, 'large'),
+			'default' => self::control_default(MetaFields::MAX_IMAGE),
 		]);
 
 		$document->add_control(MetaFields::REDIRECT_URL, [
@@ -460,8 +632,7 @@ class Elementor
 			'type'        => \Elementor\Controls_Manager::URL,
 			'placeholder' => 'https://...',
 			'ai'          => ['active' => false],
-			'dynamic'     => ['active' => true],
-			'default'     => ['url' => (string) MetaFields::get($post_id, MetaFields::REDIRECT_URL)],
+			'default'     => self::control_default(MetaFields::REDIRECT_URL),
 		]);
 
 		$document->add_control(MetaFields::REDIRECT_TYPE, [
@@ -474,14 +645,18 @@ class Elementor
 				'410' => __('410 Content Deleted', 'mihdan-index-now'),
 				'451' => __('451 Unavailable For Legal Reasons', 'mihdan-index-now'),
 			],
-			'default' => (string) MetaFields::get($post_id, MetaFields::REDIRECT_TYPE, '301'),
+			'default' => self::control_default(MetaFields::REDIRECT_TYPE),
 		]);
 
 		$document->end_controls_section();
 	}
 
 	/**
-	 * Persist all CrawlWP SEO settings through the central FieldProcessor pipeline.
+	 * Persist CrawlWP SEO settings through the central FieldProcessor pipeline.
+	 *
+	 * Elementor omits settings equal to their control default, so only keys
+	 * present in the payload are written — except on a full editor save,
+	 * where an omitted key means "set back to the (static) default".
 	 *
 	 * @param \Elementor\Core\DocumentTypes\Document|object $document
 	 * @param array $data
@@ -492,6 +667,11 @@ class Elementor
 			return;
 		}
 
+		// Autosaves must never change the live post's SEO meta.
+		if (method_exists($document, 'is_autosave') && $document->is_autosave()) {
+			return;
+		}
+
 		$post_id  = (int) $document->get_main_id();
 		$settings = is_array($data['settings'] ?? null) ? $data['settings'] : [];
 
@@ -499,20 +679,38 @@ class Elementor
 			return;
 		}
 
-		if (! current_user_can('edit_post', $post_id)) {
+		if (! current_user_can('edit_post', $post_id) || ! self::is_supported_post($post_id)) {
+			return;
+		}
+
+		$defaults = self::control_defaults();
+
+		// The editor's own save request sends the whole page-settings model
+		// minus default-valued keys. Any other caller (programmatic saves)
+		// may send a partial array, so only its present keys are touched.
+		$is_editor_save = wp_doing_ajax() && self::is_editor_request();
+
+		$submitted = array_intersect_key($settings, $defaults);
+
+		if ($is_editor_save) {
+			$submitted += $defaults;
+		}
+
+		if ($submitted === []) {
 			return;
 		}
 
 		$normalized = [];
 
 		// Unpack URL and media picker arrays to plain values expected by FieldProcessor
-		foreach ($settings as $key => $value) {
+		foreach ($submitted as $key => $value) {
 			if ($key === MetaFields::CANONICAL_URL || $key === MetaFields::REDIRECT_URL) {
 				$normalized[$key] = is_array($value) ? (string) ($value['url'] ?? '') : (string) $value;
 			} elseif ($key === MetaFields::OG_IMAGE || $key === MetaFields::X_IMAGE) {
 				$normalized[$key] = is_array($value) ? (string) ($value['id'] ?? '') : (string) $value;
 			} elseif ($key === MetaFields::OG_SYNC || $key === MetaFields::X_SYNC) {
-				// Switcher in Elementor: 'yes' or '1' is on (present). Falsy/empty is off (absent in HTML checkbox terms).
+				// Switcher: 'yes'/'1' is on (present key); anything else is off,
+				// which the checkbox definition records as '0'.
 				if ($value === 'yes' || $value === '1') {
 					$normalized[$key] = '1';
 				}
@@ -521,8 +719,12 @@ class Elementor
 			}
 		}
 
-		// Process via central field definitions
-		$values = FieldProcessor::process(MetaFields::field_definitions(true), $normalized);
+		// Restrict the "always write" checkbox/multi-select definitions to the
+		// keys actually submitted, so omitted controls are never reset.
+		$definitions = array_intersect_key(MetaFields::field_definitions(true), $submitted);
+		// FieldProcessor expects slashed request data; Elementor's payload is
+		// already unslashed (JSON-decoded), so re-slash to keep backslashes.
+		$values      = FieldProcessor::process($definitions, wp_slash($normalized));
 
 		// External redirect authorization check
 		if (
@@ -542,7 +744,38 @@ class Elementor
 		// Ensure default values are written for empty keys
 		MetaFields::store_defaults($post_id);
 
+		// Post meta is the single source of truth: drop the copies Elementor
+		// just stored in its page settings so they can never go stale.
+		$this->strip_page_settings_copy($document);
+
 		// Refresh signals cache
 		SeoSignals::persist($post_id);
+	}
+
+	/**
+	 * Remove CrawlWP keys from the document's stored Elementor page settings.
+	 *
+	 * @param object $document Elementor document.
+	 */
+	private function strip_page_settings_copy($document): void
+	{
+		$post = method_exists($document, 'get_post') ? $document->get_post() : null;
+
+		if (! $post instanceof \WP_Post) {
+			return;
+		}
+
+		$stored   = self::raw_page_settings($post->ID);
+		$stripped = array_diff_key($stored, self::control_defaults());
+
+		if ($stripped === $stored) {
+			return;
+		}
+
+		if ($stripped === []) {
+			delete_metadata('post', $post->ID, self::PAGE_SETTINGS_META);
+		} else {
+			update_metadata('post', $post->ID, self::PAGE_SETTINGS_META, wp_slash($stripped));
+		}
 	}
 }

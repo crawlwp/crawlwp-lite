@@ -468,7 +468,7 @@ class Variables
 
 		switch ($key) {
 			case 'price':
-				return method_exists($product, 'get_price') ? $product->get_price() : '';
+				return method_exists($product, 'get_price') ? self::format_price($product->get_price()) : '';
 
 			case 'price_with_tax':
 				if (! method_exists($product, 'get_price')) {
@@ -479,9 +479,9 @@ class Variables
 					return '';
 				}
 				if (function_exists('wc_get_price_including_tax')) {
-					return (string) wc_get_price_including_tax($product, ['price' => $price]);
+					$price = wc_get_price_including_tax($product, ['price' => $price]);
 				}
-				return $price;
+				return self::format_price($price);
 
 			case 'sale_from':
 				if (method_exists($product, 'get_date_on_sale_from') && $product->get_date_on_sale_from()) {
@@ -490,32 +490,11 @@ class Variables
 				return '';
 
 			case 'sale_to':
-				$today     = gmdate('Y-m-d');
-				$timestamp = function_exists('wc_string_to_timestamp')
-					? (int) wc_string_to_timestamp('+1 month')
-					: (int) strtotime('+1 month');
-				$sale_to   = gmdate('Y-m-d', $timestamp);
-				$sale_from = '';
-				if (method_exists($product, 'get_date_on_sale_from') && $product->get_date_on_sale_from()) {
-					$sale_from = gmdate('Y-m-d', $product->get_date_on_sale_from()->getTimestamp());
+				/* Empty when the sale has no end date — never an invented one. */
+				if (method_exists($product, 'get_date_on_sale_to') && $product->get_date_on_sale_to()) {
+					return gmdate('Y-m-d', $product->get_date_on_sale_to()->getTimestamp());
 				}
-
-				if (method_exists($product, 'is_on_sale') && $product->is_on_sale()) {
-					if (method_exists($product, 'get_date_on_sale_to') && $product->get_date_on_sale_to()) {
-						$sale_to = gmdate('Y-m-d', $product->get_date_on_sale_to()->getTimestamp());
-					}
-				} else {
-					if ($sale_from !== '' && $sale_from > $today) {
-						$from_ts = function_exists('wc_string_to_timestamp')
-							? (int) wc_string_to_timestamp($sale_from)
-							: (int) strtotime($sale_from);
-						$day_sec = defined('DAY_IN_SECONDS') ? DAY_IN_SECONDS : 86400;
-						$sale_to = gmdate('Y-m-d', $from_ts - $day_sec);
-					} elseif ($sale_from === $today) {
-						$sale_to = $today;
-					}
-				}
-				return $sale_to;
+				return '';
 
 			case 'sku':
 				return method_exists($product, 'get_sku') ? $product->get_sku() : '';
@@ -547,38 +526,69 @@ class Variables
 				return $count > 0 ? (string) $count : '0';
 
 			case 'low_price':
-				if (method_exists($product, 'is_type') && $product->is_type('variable')) {
-					$min_price = method_exists($product, 'get_variation_price')
-						? $product->get_variation_price('min', false)
-						: '';
-					if ($min_price !== '' && $min_price !== null && function_exists('wc_get_price_including_tax')) {
-						return (string) wc_get_price_including_tax($product, ['price' => $min_price]);
-					}
-					return (string) $min_price;
-				}
-				return '';
-
 			case 'high_price':
-				if (method_exists($product, 'is_type') && $product->is_type('variable')) {
-					$max_price = method_exists($product, 'get_variation_price')
-						? $product->get_variation_price('max', false)
-						: '';
-					if ($max_price !== '' && $max_price !== null && function_exists('wc_get_price_including_tax')) {
-						return (string) wc_get_price_including_tax($product, ['price' => $max_price]);
-					}
-					return (string) $max_price;
+				if (method_exists($product, 'is_type') && $product->is_type('variable') && method_exists($product, 'get_variation_price')) {
+					return self::display_price($product, $product->get_variation_price($key === 'low_price' ? 'min' : 'max', false));
 				}
 				return '';
 
 			case 'offer_count':
 				if (method_exists($product, 'is_type') && $product->is_type('variable')) {
-					$children = method_exists($product, 'get_children') ? $product->get_children() : [];
-					return (string) count($children);
+					$children = method_exists($product, 'get_children') ? (array) $product->get_children() : [];
+
+					/* Only variations that can be bought, matching the Product schema. */
+					$purchasable = array_filter($children, static function ($child_id) {
+						$child = function_exists('wc_get_product') ? wc_get_product($child_id) : null;
+
+						return $child && (! method_exists($child, 'is_purchasable') || $child->is_purchasable());
+					});
+
+					return (string) count($purchasable);
 				}
 				return '';
 		}
 
 		return '';
+	}
+
+	/**
+	 * A price as the shop displays it, honouring the "Display prices in the
+	 * shop" tax setting (`woocommerce_tax_display_shop`).
+	 *
+	 * @param object $product WooCommerce product.
+	 * @param mixed  $price   Raw price.
+	 */
+	private static function display_price($product, $price): string
+	{
+		if ($price === '' || $price === null) {
+			return '';
+		}
+
+		$fn = get_option('woocommerce_tax_display_shop') === 'incl' ? 'wc_get_price_including_tax' : 'wc_get_price_excluding_tax';
+
+		if (function_exists($fn)) {
+			$price = $fn($product, ['price' => $price]);
+		}
+
+		return self::format_price($price);
+	}
+
+	/**
+	 * A plain decimal price using the store's number of decimals, e.g. `49.90`.
+	 *
+	 * @param mixed $price Raw price.
+	 */
+	private static function format_price($price): string
+	{
+		if ($price === '' || $price === null) {
+			return '';
+		}
+
+		if (function_exists('wc_format_decimal') && function_exists('wc_get_price_decimals')) {
+			return (string) wc_format_decimal($price, wc_get_price_decimals());
+		}
+
+		return (string) $price;
 	}
 
 	public static function product_stock_statuses(): array

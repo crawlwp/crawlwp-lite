@@ -959,3 +959,12 @@ body:not(.cwpWP7higher) .cwp-premium-sidebar-upsell-cta .button-primary {
 	color: #4c6577;
 	padding: 6px 0;
 }
+
+/* Site Verification: keep the long example <meta> tags inside the settings box. */
+#crawlwp_site_verification .description code {
+	display: inline-block;
+	max-width: 100%;
+	white-space: normal;
+	overflow-wrap: anywhere;
+	word-break: break-all;
+}
