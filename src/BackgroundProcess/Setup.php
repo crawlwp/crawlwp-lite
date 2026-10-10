@@ -13,6 +13,13 @@ class Setup extends WP_Background_Process
 
 	protected $is_alternate_cron_runner = true;
 
+	/**
+	 * True while a batch is being handled in the current request.
+	 *
+	 * @var bool
+	 */
+	protected $is_handling = false;
+
 	public function __construct()
 	{
 		// Uses unique prefix per blog so each blog has separate queue.
@@ -52,6 +59,15 @@ class Setup extends WP_Background_Process
 	public function dispatch()
 	{
 		if (apply_filters('crawlwp_alternate_cron_runner', $this->is_alternate_cron_runner)) {
+
+			// handle() calls dispatch() when the queue isn't empty. Running the next batch in the same
+			// request recurses until max_execution_time is hit, so leave it to the healthcheck cron.
+			if ($this->is_handling) {
+				$this->schedule_event();
+
+				return false;
+			}
+
 			return $this->maybe_handle();
 		}
 
@@ -92,7 +108,13 @@ class Setup extends WP_Background_Process
 			check_ajax_referer($this->identifier, 'nonce');
 		}
 
-		$this->handle();
+		$this->is_handling = true;
+
+		try {
+			$this->handle();
+		} finally {
+			$this->is_handling = false;
+		}
 
 		return $this->maybe_wp_die();
 	}
