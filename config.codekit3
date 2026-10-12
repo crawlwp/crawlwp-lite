@@ -384,6 +384,14 @@
       "oAP" : "\/src\/Hooks.php",
       "oF" : 0
     },
+    "\/src\/Indexing.php" : {
+      "cB" : 0,
+      "ft" : 8192,
+      "hM" : 0,
+      "oA" : 0,
+      "oAP" : "\/src\/Indexing.php",
+      "oF" : 0
+    },
     "\/src\/IndexNowAbstract.php" : {
       "cB" : 0,
       "ft" : 8192,
@@ -1056,14 +1064,6 @@
       "oAP" : "\/src\/SEOCore\/Sitemap.php",
       "oF" : 0
     },
-    "\/src\/SEOCore\/SitemapSettings\/NewsSitemapProvider.php" : {
-      "cB" : 0,
-      "ft" : 8192,
-      "hM" : 0,
-      "oA" : 0,
-      "oAP" : "\/src\/SEOCore\/SitemapSettings\/NewsSitemapProvider.php",
-      "oF" : 0
-    },
     "\/src\/SEOCore\/SitemapSettings\/SitemapSettings.php" : {
       "cB" : 0,
       "ft" : 8192,
@@ -1294,6 +1294,14 @@
       "oAP" : "\/tests\/TokenMapperTest.php",
       "oF" : 0
     },
+    "\/tests\/unit\/AdvancedSettingsTest.php" : {
+      "cB" : 0,
+      "ft" : 8192,
+      "hM" : 0,
+      "oA" : 0,
+      "oAP" : "\/tests\/unit\/AdvancedSettingsTest.php",
+      "oF" : 0
+    },
     "\/tests\/unit\/CodeSettingsTest.php" : {
       "cB" : 0,
       "ft" : 8192,
@@ -1404,6 +1412,14 @@
       "hM" : 0,
       "oA" : 0,
       "oAP" : "\/tests\/unit\/TokenMapperTest.php",
+      "oF" : 0
+    },
+    "\/tests\/unit\/UninstallTest.php" : {
+      "cB" : 0,
+      "ft" : 8192,
+      "hM" : 0,
+      "oA" : 0,
+      "oAP" : "\/tests\/unit\/UninstallTest.php",
       "oF" : 0
     },
     "\/tests\/unit\/WooCommerceVariablesTest.php" : {
@@ -48843,6 +48859,14 @@
       "hM" : 0,
       "oA" : 0,
       "oAP" : "\/vendor\/writecrow\/country_code_converter\/test\/bootstrap.php",
+      "oF" : 0
+    },
+    "\/wpml-config.xml" : {
+      "cB" : 0,
+      "ft" : 8192,
+      "hM" : 0,
+      "oA" : 0,
+      "oAP" : "\/wpml-config.xml",
       "oF" : 0
     }
   },

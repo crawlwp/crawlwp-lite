@@ -2,7 +2,7 @@
 /**
  * Plugin Name: CrawlWP SEO - WordPress SEO, Instant Indexing & Search Performance
  * Description: Complete WordPress SEO: meta titles, schema, redirects and sitemaps, plus instant indexing.
- * Version: 3.1.1
+ * Version: 3.1.2
  * Author: CrawlWP SEO Team
  * Author URI: https://crawlwp.com/
  * Plugin URI: https://crawlwp.com/
@@ -20,7 +20,7 @@ if ( ! defined('ABSPATH')) {
 
 require_once __DIR__ . '/vendor-prefixed/autoload.php';
 
-define('CRAWLWP_VERSION', '3.1.1');
+define('CRAWLWP_VERSION', '3.1.2');
 define('CRAWLWP_SLUG', 'crawlwp');
 define('CRAWLWP_PREFIX', 'crawlwp');
 define('CRAWLWP_NAME', 'CrawlWP');

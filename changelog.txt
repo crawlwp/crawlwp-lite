@@ -1,5 +1,14 @@
 ﻿== Changelog ==
 
+= 3.1.2 =
+* Added setting to disable SEO features.
+* Fixed background process recursion hitting max_execution_time.
+* Fixed several bugs in SEO importers.
+* Moved focus keyword in seo metabox to General tab from Analysis.
+* Improved Breadcrumb preview to start with the Home label like the frontend.
+* Fixed bug where the block editor Preferences list show raw HTML for CrawlWP.
+* Sitemap: wrap the noindex meta clause so WP_Query applies it.
+
 = 3.1.1 =
 * Re-arranged settings menus.
 * Added setting to enable complete uninstallation.

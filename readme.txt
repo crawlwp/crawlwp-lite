@@ -4,7 +4,7 @@ Donate link: https://crawlwp.com/
 Tags: seo, ai seo, redirection, schema, xml sitemap
 Requires at least: 6.9
 Tested up to: 7.1
-Stable tag: 3.1.1
+Stable tag: 3.1.2
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -266,6 +266,15 @@ No. Indexing and data collection run in the background on a schedule, not when v
 No. All your data is stored on your own WordPress server, and your site connects to Google Search Console directly, without going through us.
 
 == Changelog ==
+
+= 3.1.2 =
+* Added setting to disable SEO features.
+* Fixed background process recursion hitting max_execution_time.
+* Fixed several bugs in SEO importers.
+* Moved focus keyword in seo metabox to General tab from Analysis.
+* Improved Breadcrumb preview to start with the Home label like the frontend.
+* Fixed bug where the block editor Preferences list show raw HTML for CrawlWP.
+* Sitemap: wrap the noindex meta clause so WP_Query applies it.
 
 = 3.1.1 =
 * Re-arranged settings menus.
