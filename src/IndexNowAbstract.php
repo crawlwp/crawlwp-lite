@@ -59,11 +59,10 @@ abstract class IndexNowAbstract implements SearchEngineInterface
 
 		if ($api_key === '') {
 			$api_key = Utils::generate_key();
+			// Only the key is stored: FeatureGate::is_fresh_install() treats any other
+			// crawlwp_index_now value as an upgrade, and this runs before activation.
+			// The search engine falls back to Indexing's default when unsaved.
 			$this->wposa->set_option('api_key', $api_key, 'index_now');
-
-			if ($this->wposa->get_option('search_engine', 'index_now', '') === '') {
-				$this->wposa->set_option('search_engine', Indexing::get_default('search_engine', 'index_now'), 'index_now');
-			}
 		}
 
 		return $api_key;
