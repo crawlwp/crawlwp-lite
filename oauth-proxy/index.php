@@ -74,7 +74,7 @@ function authorize(array $providers, array $config): void
 	$nonce = bin2hex(random_bytes(16));
 
 	// Bing does not document echoing `state`, so the flow is tied to the browser with a cookie instead.
-	setcookie(COOKIE, sign(['p' => $provider, 'r' => $return_url, 's' => $site_state, 'n' => $nonce, 't' => time()], $config), [
+	setcookie(COOKIE . '_' . $provider, sign(['p' => $provider, 'r' => $return_url, 's' => $site_state, 'n' => $nonce, 't' => time()], $config), [
 		'expires'  => time() + FLOW_TTL,
 		'path'     => '/',
 		'secure'   => true,
@@ -95,17 +95,24 @@ function authorize(array $providers, array $config): void
 
 function callback(array $providers, array $config): void
 {
-	$flow = verify((string)($_COOKIE[COOKIE] ?? ''), $config);
+	// One cookie per provider so Google and Bing can be connected in parallel tabs.
+	// Google always returns `state`; a callback without it can only be Bing's.
+	$flow = null;
 
-	setcookie(COOKIE, '', ['expires' => 1, 'path' => '/', 'secure' => true, 'httponly' => true, 'samesite' => 'Lax']);
+	foreach (array_keys($providers) as $name) {
+		$candidate = verify((string)($_COOKIE[COOKIE . '_' . $name] ?? ''), $config);
+
+		if ($candidate && (isset($_GET['state']) ? hash_equals($candidate['n'], (string)$_GET['state']) : $name === 'bing')) {
+			$flow = $candidate;
+			break;
+		}
+	}
 
 	if ( ! $flow || time() - (int)$flow['t'] > FLOW_TTL) {
 		fail(400, 'This connection request has expired. Go back to your WordPress dashboard and click Connect again.');
 	}
 
-	if (isset($_GET['state']) && ! hash_equals($flow['n'], (string)$_GET['state'])) {
-		fail(400, 'State mismatch.');
-	}
+	setcookie(COOKIE . '_' . $flow['p'], '', ['expires' => 1, 'path' => '/', 'secure' => true, 'httponly' => true, 'samesite' => 'Lax']);
 
 	$back = static function (array $args) use ($flow) {
 		redirect($flow['r'] . (str_contains($flow['r'], '?') ? '&' : '?') . http_build_query($args + ['provider' => $flow['p']]));
