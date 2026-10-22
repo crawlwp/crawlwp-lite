@@ -9,6 +9,13 @@ A single PHP file that lets CrawlWP sites "Connect with Google" and "Connect wit
 3. Google Cloud: create an OAuth client (Web application), enable the **Google Search Console API**, add the proxy URL as an authorised redirect URI. Scopes requested: `openid email https://www.googleapis.com/auth/webmasters.readonly`. The `webmasters.readonly` scope is sensitive, so the consent screen needs Google verification before public release.
 4. Bing Webmaster Tools > Settings > API Access > OAuth client: register the same proxy URL as the redirect URI.
 
+5. Route every path to `index.php` (the included `.htaccess` does this on Apache; on Nginx use `try_files $uri /index.php?$query_string;`). Bing documents its error redirect with an extra path segment.
+
+## Limits to know
+
+- Google keeps at most 100 refresh tokens per Google account for one OAuth client. An agency connecting more than 100 sites with the same Google account silently loses the oldest connections (those sites must reconnect or use a service account key).
+- Disconnecting in WordPress only deletes the site's tokens. It does not revoke them at Google/Bing, because a revoke cancels the account's grant for the whole CrawlWP app and would disconnect every other site using that account.
+
 ## Flow
 
 1. WordPress (`admin-post.php?action=crawlwp_oauth_connect`) creates a random state and sends the admin to `?action=authorize`.

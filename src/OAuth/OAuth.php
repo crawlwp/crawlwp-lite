@@ -213,7 +213,7 @@ final class OAuth
 		check_admin_referer('crawlwp_oauth_' . $provider);
 
 		$state = wp_generate_password(32, false);
-		set_transient(self::state_key(), ['state' => $state, 'provider' => $provider], 15 * MINUTE_IN_SECONDS);
+		set_transient(self::state_key($provider), ['state' => $state, 'provider' => $provider], 15 * MINUTE_IN_SECONDS);
 
 		// Not wp_safe_redirect(): the proxy is an external host by design.
 		wp_redirect(add_query_arg([
@@ -228,8 +228,8 @@ final class OAuth
 	public static function handle_return(): void
 	{
 		$provider = self::request_provider();
-		$pending  = get_transient(self::state_key());
-		delete_transient(self::state_key());
+		$pending  = get_transient(self::state_key($provider));
+		delete_transient(self::state_key($provider));
 
 		$error = sanitize_key(wp_unslash($_GET['crawlwp_oauth_error'] ?? ''));
 		$label = self::label($provider);
@@ -281,12 +281,8 @@ final class OAuth
 		$provider = self::request_provider();
 		check_admin_referer('crawlwp_oauth_' . $provider);
 
-		$conn = self::get_connection($provider);
-
-		if ($provider === 'google' && $conn) {
-			wp_remote_post('https://oauth2.googleapis.com/revoke', ['blocking' => false, 'body' => ['token' => $conn['refresh_token']]]);
-		}
-
+		// Tokens are not revoked at Google/Bing: a revoke cancels the whole grant for the shared CrawlWP app,
+		// which would also disconnect every other site connected with the same account.
 		self::save_connection($provider, null);
 		do_action('crawlwp_oauth_disconnected', $provider);
 
@@ -357,9 +353,9 @@ final class OAuth
 		return $provider === 'google' ? 'Google' : 'Bing';
 	}
 
-	private static function state_key(): string
+	private static function state_key(string $provider): string
 	{
-		return 'crawlwp_oauth_state_' . get_current_user_id();
+		return 'crawlwp_oauth_state_' . $provider . '_' . get_current_user_id();
 	}
 
 	private static function notice_key(): string
