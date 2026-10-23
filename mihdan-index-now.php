@@ -38,6 +38,8 @@ define('CRAWLWP_PRO_SEO_STAT_SLUG', 'crawlwp-seo-stats');
 define('CRAWLWP_PRO_AUTO_INDEX_PAGE', admin_url('admin.php?page=' . CRAWLWP_PRO_SEO_INDEX_SLUG));
 define('CRAWLWP_PRO_AUTO_INDEX_PAGE_RECENT_MOVEMENT', add_query_arg(['section' => 'recent-movement'], CRAWLWP_PRO_AUTO_INDEX_PAGE));
 define('CRAWLWP_PRO_SEO_STAT_PAGE', admin_url('admin.php?page=' . CRAWLWP_PRO_SEO_STAT_SLUG));
+define('CRAWLWP_PRO_SITE_AUDIT_SLUG', 'crawlwp-site-audit');
+define('CRAWLWP_PRO_SITE_AUDIT_PAGE', admin_url('admin.php?page=' . CRAWLWP_PRO_SITE_AUDIT_SLUG));
 
 do_action('crawlwp_lite_before_init');
 

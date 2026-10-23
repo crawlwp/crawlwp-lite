@@ -41,6 +41,11 @@ if (!defined('CRAWLWP_PRO_SYSTEM_FILE_PATH')) {
 if (!defined('CRAWLWP_PRO_LIBSODIUM_ASSETS_URL')) {
 	define('CRAWLWP_PRO_LIBSODIUM_ASSETS_URL', 'https://example.test/wp-content/plugins/mihdan-index-now-pro/Libsodium/assets');
 }
+foreach (['CRAWLWP_PRO_SEO_INDEX_SLUG' => 'crawlwp-seo-index', 'CRAWLWP_PRO_SEO_STAT_SLUG' => 'crawlwp-seo-stats', 'CRAWLWP_PRO_SITE_AUDIT_SLUG' => 'crawlwp-site-audit'] as $crawlwp_const => $crawlwp_value) {
+	if (!defined($crawlwp_const)) {
+		define($crawlwp_const, $crawlwp_value);
+	}
+}
 if (!defined('CRAWLWP_SETTINGS_URL')) {
 	define('CRAWLWP_SETTINGS_URL', 'https://example.test/wp-admin/admin.php?page=crawlwp');
 }

@@ -67,6 +67,8 @@ function crawlwp_lite_pro_owned_options()
 		'prefixes' => [
 			'crawlwp_pro_',
 			'crawlwp_license',
+			// Site Audit: results, ignore list, email setting, queue and lock.
+			'crawlwp_site_audit',
 		],
 	];
 }
@@ -98,6 +100,8 @@ function crawlwp_lite_mo_uninstall_function($force = false)
 
 	if ( ! $keep_pro) {
 		$cron_hooks[] = 'crawlwp_video_sitemap_backfill';
+		$cron_hooks[] = 'crawlwp_site_audit_step';
+		$cron_hooks[] = 'crawlwp_site_audit_weekly';
 	}
 
 	foreach ($cron_hooks as $cron_hook) {
@@ -118,8 +122,12 @@ function crawlwp_lite_mo_uninstall_function($force = false)
 	];
 
 	if ( ! $keep_pro) {
-		// Orphaned Premium table (Premium is no longer installed to remove it).
+		// Orphaned Premium tables (Premium is no longer installed to remove them).
 		$drop_tables[] = "DROP TABLE IF EXISTS {$wpdb->prefix}crawlwp_autoindex";
+
+		foreach (['pages', 'links', 'issues', 'ignored'] as $audit_table) {
+			$drop_tables[] = "DROP TABLE IF EXISTS {$wpdb->prefix}crawlwp_audit_{$audit_table}";
+		}
 	}
 
 	foreach ($drop_tables as $sql) {
