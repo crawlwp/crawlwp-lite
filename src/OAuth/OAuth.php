@@ -456,15 +456,23 @@ final class OAuth
 		}
 
 		if ( ! $conn) {
-			return $key_note . sprintf(
-				'<p><a class="button button-primary" href="%s">%s</a></p><p class="description">%s</p>',
+			// With a key already in use, connecting is optional: a secondary button and no "no key needed" pitch.
+			$button = sprintf(
+				'<p><a class="button %s" href="%s">%s</a></p>',
+				$has_key ? '' : 'button-primary',
 				esc_url(self::connect_url($provider)),
 				/* translators: %s: Google or Bing */
-				esc_html(sprintf(__('Connect with %s', 'mihdan-index-now'), $label)),
-				$provider === 'google'
+				esc_html(sprintf(__('Connect with %s', 'mihdan-index-now'), $label))
+			);
+
+			if ($has_key) {
+				return $button . $key_note;
+			}
+
+			return $button . '<p class="description">' . ($provider === 'google'
 					? esc_html__('Sign in with the Google account that has access to this site in Google Search Console. No Google Cloud project is needed.', 'mihdan-index-now')
 					: esc_html__('Sign in with the Microsoft account that has this site in Bing Webmaster Tools. No API key is needed.', 'mihdan-index-now')
-			);
+				) . '</p>';
 		}
 
 		$who = $conn['email'] !== ''
