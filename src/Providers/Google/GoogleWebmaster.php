@@ -83,7 +83,12 @@ class GoogleWebmaster extends WebmasterAbstract
 	}
 
 	/**
-	 * Tell Google a post's URL was removed (unpublished, trashed or deleted).
+	 * Tell Google a post's URL was removed: the post is in the trash or deleted.
+	 *
+	 * Unpublished posts (draft, pending, private) are not reported: switching a post
+	 * to draft to edit it is common, and Google would drop the page until it is
+	 * crawled again. Checked when the submission is sent, so a post restored from
+	 * the trash in the meantime is not reported either.
 	 *
 	 * @param int    $post_id   Post ID.
 	 * @param string $permalink Permalink captured before the post was removed.
@@ -91,6 +96,11 @@ class GoogleWebmaster extends WebmasterAbstract
 	public function ping_deleted(int $post_id, string $permalink)
 	{
 		if ($permalink === '' || empty($this->get_token())) return;
+
+		$post = get_post($post_id);
+
+		// A post still being deleted (before_delete_post, when sent straight away) counts as removed.
+		if ($post instanceof \WP_Post && $post->post_status !== 'trash' && ! doing_action('before_delete_post')) return;
 
 		if ($this->is_paused(self::RATE_LIMIT_OPTION, $permalink)) return;
 

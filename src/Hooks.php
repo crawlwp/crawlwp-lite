@@ -468,11 +468,18 @@ class Hooks {
 	 * seconds. spawn_cron() does not wait for it. When the loopback request is
 	 * blocked, the next WP-Cron run (any page view, or the server cron) sends them.
 	 *
+	 * Skipped with ALTERNATE_WP_CRON: there spawn_cron() redirects and runs cron in
+	 * the current request, which can't be done once the response has been sent.
+	 *
 	 * @return void
 	 */
 	public function maybe_spawn_cron(): void {
 
-		if ( $this->spawn_cron && ! ( defined( 'DISABLE_WP_CRON' ) && DISABLE_WP_CRON ) ) {
+		if (
+			$this->spawn_cron
+			&& ! ( defined( 'DISABLE_WP_CRON' ) && DISABLE_WP_CRON )
+			&& ! ( defined( 'ALTERNATE_WP_CRON' ) && ALTERNATE_WP_CRON )
+		) {
 			$this->spawn_cron = false;
 			spawn_cron();
 		}
