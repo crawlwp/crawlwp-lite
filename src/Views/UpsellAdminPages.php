@@ -168,7 +168,7 @@ class UpsellAdminPages
 
 		$checks = [
 			__('Broken internal and outbound links', 'mihdan-index-now'),
-			__('Duplicate and missing titles and meta descriptions', 'mihdan-index-now'),
+			__('Duplicate titles, and missing or duplicate meta descriptions', 'mihdan-index-now'),
 			__('Orphan pages no other page links to', 'mihdan-index-now'),
 			__('Canonical URLs that point to a redirect or a missing page', 'mihdan-index-now'),
 			__('404 errors without a redirect, and redirect chains', 'mihdan-index-now'),
@@ -198,7 +198,7 @@ class UpsellAdminPages
 		$html .= '<img src="' . esc_url(Utils::get_plugin_asset_url('images/crawlwp-site-audit-issue.png')) . '" alt="' . esc_attr__('Fixing missing meta descriptions directly from the Site Audit', 'mihdan-index-now') . '">';
 		$html .= '</div>';
 		$html .= sprintf('<h3>%s</h3>', esc_html__('Fix Problems Where You Find Them', 'mihdan-index-now'));
-		$html .= sprintf('<p>%s</p>', esc_html__('Write a missing meta description or shorten a long title right in the list, or generate it with AI, without opening each post. Pages that get the most search traffic come first, and you get an email when new errors appear.', 'mihdan-index-now'));
+		$html .= sprintf('<p>%s</p>', esc_html__('Write a missing meta description or shorten a long title right in the list, or generate it with AI, without opening each post. Ignore what doesn\'t apply, watch your health score rise as you fix things, and get an email when new errors appear.', 'mihdan-index-now'));
 		$html .= $button;
 		$html .= '</div>';
 		$html .= '</div>';
