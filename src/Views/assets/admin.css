@@ -960,6 +960,37 @@ body:not(.cwpWP7higher) .cwp-premium-sidebar-upsell-cta .button-primary {
 	padding: 6px 0;
 }
 
+/* Site Audit upsell: what gets checked. */
+.crawlwp-upsell-checklist {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 8px 24px;
+	max-width: 720px;
+	margin: 16px auto 28px;
+	padding: 0;
+	list-style: none;
+	text-align: left;
+}
+
+.crawlwp-upsell-checklist li {
+	display: flex;
+	gap: 6px;
+	margin: 0;
+	font-size: 14px;
+	color: #3c434a;
+}
+
+.crawlwp-upsell-checklist .dashicons {
+	color: #00a32a;
+	flex: 0 0 auto;
+}
+
+@media (max-width: 782px) {
+	.crawlwp-upsell-checklist {
+		grid-template-columns: 1fr;
+	}
+}
+
 /* Site Verification: keep the long example <meta> tags inside the settings box. */
 #crawlwp_site_verification .description code {
 	display: inline-block;
