@@ -128,7 +128,8 @@ class Hooks {
 			return;
 		}
 
-		$this->submit( 'crawlwp/comment_updated', [ $post->ID, (int) $comment->comment_ID ] );
+		// queued per post, not per comment: many comments before the queue runs still mean one ping.
+		$this->submit( 'crawlwp/comment_updated', [ $post->ID ] );
 	}
 
 	/**
@@ -518,10 +519,11 @@ class Hooks {
 				break;
 
 			case 'crawlwp/comment_updated':
-				$comment = get_comment( (int) ( $args[1] ?? 0 ) );
+				$post = get_post( (int) ( $args[0] ?? 0 ) );
 
-				if ( $comment instanceof WP_Comment ) {
-					do_action( $action, (int) ( $args[0] ?? 0 ), $comment );
+				// the comment was approved when queued; the post is re-checked as it may have changed since.
+				if ( $post instanceof WP_Post && Indexing::get_post_skip_reason( $post ) === '' ) {
+					do_action( $action, $post->ID, null );
 				}
 				break;
 
