@@ -28,6 +28,14 @@ class OAuthProxyTest extends TestCase
 		$this->assertFalse(\is_valid_return_url('javascript:alert(1)//wp-admin/admin-post.php'));
 		$this->assertFalse(\is_valid_return_url('https://user:pass@site.test/wp-admin/admin-post.php'));
 		$this->assertFalse(\is_valid_return_url('//site.test/wp-admin/admin-post.php'));
+		// hosts and paths that would make the confirmation page show a different site than the browser visits
+		$this->assertFalse(\is_valid_return_url('https://evil.test\\victim.test/wp-admin/admin-post.php'));
+		$this->assertFalse(\is_valid_return_url('https://evil.test/https://victim.test/wp-admin/admin-post.php'));
+		$this->assertFalse(\is_valid_return_url('https://evil.test//victim.test/wp-admin/admin-post.php'));
+		$this->assertFalse(\is_valid_return_url('https://evil.test/a\\b/wp-admin/admin-post.php'));
+		$this->assertFalse(\is_valid_return_url('https://-bad.test/wp-admin/admin-post.php'));
+		$this->assertTrue(\is_valid_return_url('https://xn--bcher-kva.test/wp-admin/admin-post.php'));
+		$this->assertTrue(\is_valid_return_url('https://site.test:8443/wp-admin/admin-post.php'));
 	}
 
 	public function test_signed_flow_cookie_round_trips(): void
@@ -85,5 +93,34 @@ class OAuthProxyTest extends TestCase
 	{
 		$this->assertSame('https://site.test', \site_label('https://site.test/wp-admin/admin-post.php?action=crawlwp_oauth_return'));
 		$this->assertSame('http://site.test:8080/blog', \site_label('http://site.test:8080/blog/wp-admin/admin-post.php'));
+	}
+
+	public function test_revoked_refresh_tokens_are_remembered_by_keyed_hash(): void
+	{
+		$dir    = sys_get_temp_dir() . '/cwp-revoke-' . bin2hex(random_bytes(4));
+		mkdir($dir);
+		$config = ['storage_dir' => $dir, 'secret' => str_repeat('s', 32)];
+
+		$this->assertFalse(\is_revoked($config, 'google', 'token-a'));
+
+		file_put_contents(\revoked_path($config, 'google', 'token-a'), '1');
+
+		$this->assertTrue(\is_revoked($config, 'google', 'token-a'));
+		$this->assertFalse(\is_revoked($config, 'google', 'token-b'));
+		$this->assertFalse(\is_revoked($config, 'bing', 'token-a'));
+		$this->assertStringNotContainsString('token-a', \revoked_path($config, 'google', 'token-a'));
+
+		array_map('unlink', glob($dir . '/*'));
+		rmdir($dir);
+	}
+
+	public function test_flow_cookies_use_the_host_prefix(): void
+	{
+		// __Host- cookies can't be set by sibling subdomains or over plain HTTP.
+		$this->assertStringStartsWith('__Host-', \COOKIE);
+		$this->assertStringStartsWith('__Host-', \CONFIRM);
+		$this->assertSame('/', \cookie_options(1)['path']);
+		$this->assertTrue(\cookie_options(1)['secure']);
+		$this->assertArrayNotHasKey('domain', \cookie_options(1));
 	}
 }

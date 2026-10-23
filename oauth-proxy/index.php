@@ -12,6 +12,7 @@
  *   GET  ?code=…  /  ?error=…                                            Provider callback (the registered redirect URI).
  *   POST ?action=fetch    handle, state                                  Site collects its tokens (server to server).
  *   POST ?action=refresh  provider, refresh_token                        Exchange a refresh token for a new access token.
+ *   POST ?action=revoke   provider, refresh_token                        Disconnect: refuse this refresh token from now on.
  *   GET  ?action=health                                                  For uptime monitors: 200 when ready, 503 otherwise.
  */
 
@@ -19,8 +20,10 @@ declare(strict_types=1);
 
 const HANDOFF_TTL = 300;
 const FLOW_TTL    = 900;
-const COOKIE      = 'cwp_oauth_flow';
-const CONFIRM     = 'cwp_oauth_confirm';
+// __Host- cookies can only be set over HTTPS with Path=/ and no Domain, so neither a sibling
+// *.crawlwp.com site nor an injected plain-HTTP response can plant a flow or confirm cookie.
+const COOKIE      = '__Host-cwp_oauth_flow';
+const CONFIRM     = '__Host-cwp_oauth_confirm';
 
 $providers = [
 	'google' => [
@@ -40,6 +43,12 @@ $providers = [
 // Tests define CRAWLWP_OAUTH_PROXY_LIB_ONLY to load the functions below without handling a request.
 if ( ! defined('CRAWLWP_OAUTH_PROXY_LIB_ONLY')) {
 	$config = require __DIR__ . '/config.php';
+
+	// Hand-off files hold tokens: create every file private to this account.
+	umask(0077);
+
+	// HTTPS only from the first visit on (also stops cookies being planted over plain HTTP).
+	header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
 
 	gc_handoffs($config['storage_dir']);
 
@@ -62,6 +71,8 @@ if ( ! defined('CRAWLWP_OAUTH_PROXY_LIB_ONLY')) {
 		fetch_handoff($config);
 	} elseif ($action === 'refresh') {
 		refresh($providers, $config);
+	} elseif ($action === 'revoke') {
+		revoke($providers, $config);
 	} elseif (isset($_GET['code']) || isset($_GET['error'])) {
 		callback($providers, $config);
 	} else {
@@ -86,7 +97,9 @@ function authorize(array $providers, array $config): void
 		fail(400, 'Invalid return URL.');
 	}
 
-	if ( ! preg_match('/^[A-Za-z0-9]{16,64}$/', $site_state)) {
+	// The site sends sha256(state) here and the state itself only in the server-to-server fetch,
+	// so seeing this URL (or the handle on the way back) isn't enough to collect the tokens.
+	if ( ! preg_match('/^[a-f0-9]{64}$/', $site_state)) {
 		fail(400, 'Invalid state.');
 	}
 
@@ -140,12 +153,12 @@ function confirm_page(string $provider, string $return_url, string $site_state):
 		. '<title>Connect ' . $e($service) . ' – CrawlWP</title><style>'
 		. 'body{font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#f0f0f1;color:#1d2327;margin:0;padding:48px 16px}'
 		. '.box{max-width:480px;margin:0 auto;background:#fff;border:1px solid #dcdcde;border-radius:8px;padding:28px}'
-		. 'h1{font-size:20px;margin:0 0 12px}.site{font-weight:600;word-break:break-all;background:#f6f7f7;border-radius:4px;padding:8px 10px;display:block;margin:12px 0}'
+		. 'h1{font-size:20px;margin:0 0 12px}.host{display:block;font-size:22px;word-break:break-all}.site{font-weight:600;word-break:break-all;background:#f6f7f7;border-radius:4px;padding:8px 10px;display:block;margin:12px 0}'
 		. 'p{margin:0 0 12px}.warn{font-size:14px;color:#50575e}button{font:inherit;background:#2271b1;color:#fff;border:0;border-radius:4px;padding:10px 18px;cursor:pointer}'
 		. 'a{color:#2271b1;margin-left:14px}</style></head><body><div class="box">'
 		. '<h1>Connect ' . $e($service) . ' to CrawlWP</h1>'
 		. '<p>This gives the following WordPress site access to your ' . $e($service) . ' data:</p>'
-		. '<span class="site">' . $e($site) . '</span>'
+		. '<span class="site"><span class="host">' . $e(strtolower((string)parse_url($return_url, PHP_URL_HOST))) . '</span>' . $e($site) . '</span>'
 		. '<p class="warn">Only continue if this is your site and you just clicked “Connect” in its dashboard. If someone sent you this link, close this page.</p>'
 		. '<form method="post" action="?action=authorize">'
 		. '<input type="hidden" name="provider" value="' . $e($provider) . '">'
@@ -304,7 +317,7 @@ function fetch_handoff(array $config): void
 
 	@unlink($path); // One attempt only.
 
-	if ( ! $handoff || time() - (int)$handoff['created'] > HANDOFF_TTL || ! hash_equals((string)$handoff['state'], $state)) {
+	if ( ! $handoff || time() - (int)$handoff['created'] > HANDOFF_TTL || ! hash_equals((string)$handoff['state'], hash('sha256', $state))) {
 		json(400, ['error' => 'invalid_handle']);
 	}
 
@@ -318,6 +331,10 @@ function refresh(array $providers, array $config): void
 
 	if ($_SERVER['REQUEST_METHOD'] !== 'POST' || ! isset($providers[$provider]) || $token === '') {
 		json(400, ['error' => 'invalid_request']);
+	}
+
+	if (is_revoked($config, $provider, $token)) {
+		json(400, ['error' => 'invalid_grant']);
 	}
 
 	$tokens = post_form($providers[$provider]['token'], [
@@ -339,6 +356,38 @@ function refresh(array $providers, array $config): void
 	]);
 }
 
+/**
+ * Disconnect: remember the refresh token as revoked so the proxy never refreshes it again, even
+ * if a copy survives in an old database backup. Not revoked at Google/Bing, because that cancels
+ * the user's grant for every site connected with the same account.
+ */
+function revoke(array $providers, array $config): void
+{
+	$provider = (string)($_POST['provider'] ?? '');
+	$token    = (string)($_POST['refresh_token'] ?? '');
+
+	if ($_SERVER['REQUEST_METHOD'] !== 'POST' || ! isset($providers[$provider]) || $token === '') {
+		json(400, ['error' => 'invalid_request']);
+	}
+
+	file_put_contents(revoked_path($config, $provider, $token), (string)time(), LOCK_EX);
+
+	json(200, ['revoked' => true]);
+}
+
+function is_revoked(array $config, string $provider, string $token): bool
+{
+	return is_file(revoked_path($config, $provider, $token));
+}
+
+/**
+ * Only a keyed hash of the token is kept, so the deny list itself leaks nothing.
+ */
+function revoked_path(array $config, string $provider, string $token): string
+{
+	return rtrim($config['storage_dir'], '/') . '/revoked-' . hash_hmac('sha256', $provider . '|' . $token, (string)$config['secret']) . '.txt';
+}
+
 /* ---------- helpers ---------- */
 
 function is_valid_return_url(string $url): bool
@@ -348,7 +397,13 @@ function is_valid_return_url(string $url): bool
 	return $parts
 		&& in_array($parts['scheme'] ?? '', ['http', 'https'], true)
 		&& ! empty($parts['host'])
+		// letters, digits, dots and hyphens only (IDNs arrive as punycode): no "\" or other tricks that
+		// make the shown name differ from where the browser goes.
+		&& preg_match('/^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/i', $parts['host'])
 		&& ! isset($parts['user'])
+		&& ! isset($parts['pass'])
+		&& str_starts_with($parts['path'] ?? '', '/')
+		&& ! preg_match('#//|\\\\|:#', $parts['path'] ?? '')
 		&& str_ends_with($parts['path'] ?? '', '/wp-admin/admin-post.php');
 }
 

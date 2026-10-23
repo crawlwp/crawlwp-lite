@@ -342,7 +342,8 @@ final class OAuth
 		wp_redirect(add_query_arg([
 			'action'     => 'authorize',
 			'provider'   => $provider,
-			'state'      => $state,
+			// only a hash travels through the browser; the state itself is sent server to server at fetch.
+			'state'      => hash('sha256', $state),
 			'return_url' => rawurlencode(admin_url('admin-post.php?action=crawlwp_oauth_return')),
 		], self::proxy_url()));
 		exit;
@@ -352,14 +353,23 @@ final class OAuth
 	{
 		$provider = self::request_provider();
 		$pending  = get_transient(self::state_key($provider));
-		delete_transient(self::state_key($provider));
+		$handle   = sanitize_text_field(wp_unslash($_GET['crawlwp_oauth_handle'] ?? ''));
+		$error    = sanitize_key(wp_unslash($_GET['crawlwp_oauth_error'] ?? ''));
 
-		$error = sanitize_key(wp_unslash($_GET['crawlwp_oauth_error'] ?? ''));
+		// A bare visit (e.g. a link someone sent) must not cancel a connection in progress.
+		if ($handle !== '' || $error !== '') {
+			delete_transient(self::state_key($provider));
+		}
+
 		$label = self::label($provider);
 
 		$back = is_array($pending) ? (string)($pending['return'] ?? '') : '';
 
 		if ( ! is_array($pending) || $pending['provider'] !== $provider) {
+			self::finish('error', __('The connection request expired. Please click Connect again.', 'mihdan-index-now'), $back);
+		}
+
+		if ($handle === '' && $error === '') {
 			self::finish('error', __('The connection request expired. Please click Connect again.', 'mihdan-index-now'), $back);
 		}
 
@@ -374,7 +384,7 @@ final class OAuth
 		$response = wp_remote_post(add_query_arg('action', 'fetch', self::proxy_url()), [
 			'timeout' => 20,
 			'body'    => [
-				'handle' => sanitize_text_field(wp_unslash($_GET['crawlwp_oauth_handle'] ?? '')),
+				'handle' => $handle,
 				'state'  => $pending['state'],
 			],
 		]);
@@ -420,7 +430,17 @@ final class OAuth
 		check_admin_referer('crawlwp_oauth_disconnect_' . $provider);
 
 		// Tokens are not revoked at Google/Bing: a revoke cancels the whole grant for the shared CrawlWP app,
-		// which would also disconnect every other site connected with the same account.
+		// which would also disconnect every other site connected with the same account. Instead the proxy is
+		// told to refuse this refresh token, so a copy left in a database backup stops working.
+		$conn = self::get_connection($provider, true);
+
+		if ( ! empty($conn['refresh_token'])) {
+			wp_remote_post(add_query_arg('action', 'revoke', self::proxy_url()), [
+				'timeout' => 5,
+				'body'    => ['provider' => $provider, 'refresh_token' => $conn['refresh_token']],
+			]);
+		}
+
 		self::save_connection($provider, null);
 		self::set_dropped($provider, false);
 		do_action('crawlwp_oauth_disconnected', $provider);

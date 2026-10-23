@@ -18,6 +18,13 @@ Every OAuth-connected site depends on this app: if it is down for more than an h
 - Point an uptime monitor (UptimeRobot, Better Stack, etc.) at `https://auth.crawlwp.com/?action=health`. It returns 200 with `{"ok":true,...}` when the Google and Bing credentials, signing secret, storage folder and curl are all in place, and 503 naming what is missing.
 - Requests are limited per IP address per minute (`rate_limit` in `config.php`, default 120; extra requests get 429). Behind Cloudflare or a load balancer, set `client_ip_header` so the limit applies to visitors, not to the CDN.
 
+## Security notes
+
+- **HTTPS only.** The proxy sends `Strict-Transport-Security`. Add `auth.crawlwp.com` to the HSTS preload list once it's live, and never serve it over plain HTTP. Its flow cookies use the `__Host-` prefix, so other `*.crawlwp.com` sites and plain-HTTP responses can't set them. Hosting it on its own domain is better still.
+- **`state` never travels in clear.** Sites send `sha256(state)` in the authorize link and the state itself only in the server-to-server fetch, so seeing the URLs isn't enough to collect tokens.
+- **Disconnect revokes at the proxy.** Sites call `?action=revoke` with their refresh token; the proxy stores a keyed hash of it (`revoked-*.txt` in `storage_dir`, keep these files) and refuses to refresh it again. Tokens aren't revoked at Google/Bing, because that would disconnect every site using the same account.
+- Files in `storage_dir` are created private to the proxy's account (`umask 0077`). Keep `storage_dir` outside the web root.
+
 ## Limits to know
 
 - Google keeps at most 100 refresh tokens per Google account for one OAuth client. An agency connecting more than 100 sites with the same Google account silently loses the oldest connections (those sites must reconnect or use a service account key).
@@ -37,7 +44,7 @@ Every OAuth-connected site depends on this app: if it is down for more than an h
 3. On confirm, the proxy stores the flow in a signed cookie (Bing does not document returning `state`) and redirects to Google/Bing.
 4. The provider redirects back here with `code`. The proxy exchanges it, saves the tokens in a one-time hand-off file (deleted on first read, expires after 5 minutes) and redirects to the site with only a random handle.
 5. The site POSTs the handle and its state to `?action=fetch` (server to server) and stores the tokens.
-6. Later, the site POSTs its refresh token to `?action=refresh` for a new access token.
+6. Later, the site POSTs its refresh token to `?action=refresh` for a new access token, and to `?action=revoke` when the admin clicks Disconnect.
 
 Tokens never appear in a URL, and the proxy keeps nothing after the hand-off.
 
