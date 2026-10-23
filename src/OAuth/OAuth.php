@@ -21,6 +21,7 @@ use Mihdan\IndexNow\Utils;
 final class OAuth
 {
 	public const OPTION    = 'crawlwp_oauth';
+	public const DROPPED   = 'crawlwp_oauth_dropped';
 	public const PROVIDERS = ['google', 'bing'];
 
 	private const BING_KEY_API   = 'https://ssl.bing.com/webmaster/api.svc/json/';
@@ -31,6 +32,8 @@ final class OAuth
 		add_action('admin_post_crawlwp_oauth_connect', [__CLASS__, 'handle_connect']);
 		add_action('admin_post_crawlwp_oauth_return', [__CLASS__, 'handle_return']);
 		add_action('admin_post_crawlwp_oauth_disconnect', [__CLASS__, 'handle_disconnect']);
+		add_action('admin_post_crawlwp_oauth_dismiss', [__CLASS__, 'handle_dismiss']);
+		add_action('admin_notices', [__CLASS__, 'dropped_notice']);
 		add_action('admin_notices', [__CLASS__, 'admin_notice']);
 	}
 
@@ -80,10 +83,34 @@ final class OAuth
 			return '';
 		}
 
+		$current = (int)$conn['expires_at'] > time() ? (string)$conn['access_token'] : '';
+
 		if ((int)$conn['expires_at'] > time() + 60) {
-			return (string)$conn['access_token'];
+			return $current;
 		}
 
+		// After a failed refresh, wait before asking the proxy again so one page load can't hammer it.
+		if (get_transient('crawlwp_oauth_backoff_' . $provider)) {
+			return $current;
+		}
+
+		// Only one request refreshes at a time; the others keep using the token while it is still valid.
+		if ( ! self::lock($provider)) {
+			return $current;
+		}
+
+		try {
+			return self::refresh($provider, $conn) ?? $current;
+		} finally {
+			delete_option('crawlwp_oauth_lock_' . $provider);
+		}
+	}
+
+	/**
+	 * @return string|null The new access token, '' when the connection was revoked, null on a temporary failure.
+	 */
+	private static function refresh(string $provider, array $conn): ?string
+	{
 		$response = wp_remote_post(add_query_arg('action', 'refresh', self::proxy_url()), [
 			'timeout' => 20,
 			'body'    => ['provider' => $provider, 'refresh_token' => $conn['refresh_token']],
@@ -91,25 +118,64 @@ final class OAuth
 
 		$body = json_decode((string)wp_remote_retrieve_body($response), true);
 
-		if (is_wp_error($response) || empty($body['access_token'])) {
-			// The user revoked access (or the app was removed): drop the dead connection.
-			if (in_array($body['error'] ?? '', ['invalid_grant', 'unauthorized_client'], true)) {
-				self::save_connection($provider, null);
+		if ( ! is_wp_error($response) && ! empty($body['access_token'])) {
+			$conn['access_token'] = (string)$body['access_token'];
+			$conn['expires_at']   = time() + (int)$body['expires_in'];
+
+			if ( ! empty($body['refresh_token'])) {
+				$conn['refresh_token'] = (string)$body['refresh_token'];
 			}
+
+			self::save_connection($provider, $conn);
+
+			return $conn['access_token'];
+		}
+
+		// The user removed CrawlWP's access (or the app was removed): drop the dead connection and tell them.
+		if (in_array($body['error'] ?? '', ['invalid_grant', 'unauthorized_client'], true)) {
+			self::save_connection($provider, null);
+			self::set_dropped($provider, true);
+			do_action('crawlwp_oauth_disconnected', $provider);
 
 			return '';
 		}
 
-		$conn['access_token'] = (string)$body['access_token'];
-		$conn['expires_at']   = time() + (int)$body['expires_in'];
+		set_transient('crawlwp_oauth_backoff_' . $provider, 1, 5 * MINUTE_IN_SECONDS);
 
-		if ( ! empty($body['refresh_token'])) {
-			$conn['refresh_token'] = (string)$body['refresh_token'];
+		return null;
+	}
+
+	/**
+	 * Atomic lock: add_option() fails when the row already exists. A lock older than 30 seconds is stale.
+	 */
+	private static function lock(string $provider): bool
+	{
+		$name = 'crawlwp_oauth_lock_' . $provider;
+
+		if (add_option($name, time(), '', false)) {
+			return true;
 		}
 
-		self::save_connection($provider, $conn);
+		if ((int)get_option($name) < time() - 30) {
+			delete_option($name);
 
-		return $conn['access_token'];
+			return add_option($name, time(), '', false);
+		}
+
+		return false;
+	}
+
+	private static function set_dropped(string $provider, bool $dropped): void
+	{
+		$all = (array)get_option(self::DROPPED, []);
+
+		if ($dropped) {
+			$all[$provider] = time();
+		} else {
+			unset($all[$provider]);
+		}
+
+		$all ? update_option(self::DROPPED, $all, false) : delete_option(self::DROPPED);
 	}
 
 	/* ---------- helpers for API callers (free and Premium) ---------- */
@@ -261,6 +327,9 @@ final class OAuth
 			self::finish('error', sprintf(__('%s connection failed: no access was granted. Please try again.', 'mihdan-index-now'), $label));
 		}
 
+		self::set_dropped($provider, false);
+		delete_transient('crawlwp_oauth_backoff_' . $provider);
+
 		self::save_connection($provider, [
 			'access_token'  => (string)$data['access_token'],
 			'refresh_token' => (string)$data['refresh_token'],
@@ -284,10 +353,51 @@ final class OAuth
 		// Tokens are not revoked at Google/Bing: a revoke cancels the whole grant for the shared CrawlWP app,
 		// which would also disconnect every other site connected with the same account.
 		self::save_connection($provider, null);
+		self::set_dropped($provider, false);
 		do_action('crawlwp_oauth_disconnected', $provider);
 
 		/* translators: %s: Google or Bing */
 		self::finish('success', sprintf(__('Disconnected from %s.', 'mihdan-index-now'), self::label($provider)));
+	}
+
+	public static function handle_dismiss(): void
+	{
+		$provider = self::request_provider();
+		check_admin_referer('crawlwp_oauth_' . $provider);
+
+		self::set_dropped($provider, false);
+		wp_safe_redirect(wp_get_referer() ?: admin_url());
+		exit;
+	}
+
+	/**
+	 * Tells admins that a connection stopped working because access was removed in the Google/Microsoft account.
+	 */
+	public static function dropped_notice(): void
+	{
+		if ( ! current_user_can('manage_options')) {
+			return;
+		}
+
+		foreach (array_keys((array)get_option(self::DROPPED, [])) as $provider) {
+			// Nothing stopped working when a key is set: the key was in use, not the connection.
+			$has_key = $provider === 'google' ? self::google_json_key() !== '' : self::bing_api_key() !== '';
+
+			if ( ! in_array($provider, self::PROVIDERS, true) || $has_key) {
+				continue;
+			}
+
+			printf(
+				'<div class="notice notice-error"><p>%s</p><p><a class="button button-primary" href="%s">%s</a> <a href="%s" style="margin-left:8px">%s</a></p></div>',
+				/* translators: %s: Google or Bing */
+				esc_html(sprintf(__('CrawlWP: your %1$s connection has stopped working because access was removed in your %1$s account. Reconnect to keep getting %1$s data.', 'mihdan-index-now'), self::label($provider))),
+				esc_url(self::connect_url($provider)),
+				/* translators: %s: Google or Bing */
+				esc_html(sprintf(__('Reconnect %s', 'mihdan-index-now'), self::label($provider))),
+				esc_url(wp_nonce_url(admin_url('admin-post.php?action=crawlwp_oauth_dismiss&provider=' . $provider), 'crawlwp_oauth_' . $provider)),
+				esc_html__('Dismiss', 'mihdan-index-now')
+			);
+		}
 	}
 
 	/**
@@ -319,11 +429,21 @@ final class OAuth
 	 */
 	public static function render_status(string $provider): string
 	{
-		$label = self::label($provider);
-		$conn  = self::get_connection($provider);
+		$label   = self::label($provider);
+		$conn    = self::get_connection($provider);
+		$has_key = $provider === 'google' ? self::google_json_key() !== '' : self::bing_api_key() !== '';
+
+		if ($has_key) {
+			$key_note = '<p class="description"><strong>' . esc_html($provider === 'google'
+					? __('In use: your service account JSON key. It takes priority over a Google account connection, so connecting is optional.', 'mihdan-index-now')
+					: __('In use: your API key. It takes priority over a Bing account connection, so connecting is optional.', 'mihdan-index-now')
+				) . '</strong></p>';
+		} else {
+			$key_note = '';
+		}
 
 		if ( ! $conn) {
-			return sprintf(
+			return $key_note . sprintf(
 				'<p><a class="button button-primary" href="%s">%s</a></p><p class="description">%s</p>',
 				esc_url(self::connect_url($provider)),
 				/* translators: %s: Google or Bing */
@@ -345,7 +465,7 @@ final class OAuth
 			$who,
 			esc_url(self::disconnect_url($provider)),
 			esc_html__('Disconnect', 'mihdan-index-now')
-		);
+		) . $key_note;
 	}
 
 	private static function label(string $provider): string
