@@ -20,9 +20,10 @@ use Mihdan\IndexNow\Utils;
 
 final class OAuth
 {
-	public const OPTION    = 'crawlwp_oauth';
-	public const DROPPED   = 'crawlwp_oauth_dropped';
-	public const PROVIDERS = ['google', 'bing'];
+	/** Each provider has its own option (crawlwp_oauth_google, crawlwp_oauth_bing) so saving one never overwrites the other. */
+	public const OPTION_PREFIX = 'crawlwp_oauth_';
+	public const DROPPED       = 'crawlwp_oauth_dropped';
+	public const PROVIDERS     = ['google', 'bing'];
 
 	private const BING_KEY_API   = 'https://ssl.bing.com/webmaster/api.svc/json/';
 	private const BING_OAUTH_API = 'https://www.bing.com/webmaster/api.svc/json/';
@@ -46,11 +47,18 @@ final class OAuth
 
 	/* ---------- connection state ---------- */
 
-	public static function get_connection(string $provider): array
+	/**
+	 * @param bool $fresh Skip the object cache, e.g. after waiting for another request that may have changed it.
+	 */
+	public static function get_connection(string $provider, bool $fresh = false): array
 	{
-		$all = get_option(self::OPTION, []);
+		if ($fresh) {
+			wp_cache_delete(self::OPTION_PREFIX . $provider, 'options');
+		}
 
-		return is_array($all) && ! empty($all[$provider]['refresh_token']) ? $all[$provider] : [];
+		$conn = get_option(self::OPTION_PREFIX . $provider, []);
+
+		return is_array($conn) && ! empty($conn['refresh_token']) ? $conn : [];
 	}
 
 	public static function is_connected(string $provider): bool
@@ -60,20 +68,12 @@ final class OAuth
 
 	private static function save_connection(string $provider, ?array $data): void
 	{
-		$all = get_option(self::OPTION, []);
-		$all = is_array($all) ? $all : [];
-
-		if ($data === null) {
-			unset($all[$provider]);
-		} else {
-			$all[$provider] = $data;
-		}
-
-		update_option(self::OPTION, $all, false);
+		$data === null ? delete_option(self::OPTION_PREFIX . $provider) : update_option(self::OPTION_PREFIX . $provider, $data, false);
 	}
 
 	/**
-	 * A valid access token, refreshed through the proxy when it is about to expire. Empty when not connected.
+	 * A valid access token, refreshed through the proxy when it is about to expire. Empty when not connected
+	 * or when the token has expired and can't be refreshed right now (see unavailable_reason()).
 	 */
 	public static function get_access_token(string $provider): string
 	{
@@ -100,9 +100,20 @@ final class OAuth
 		}
 
 		try {
+			// Another request may have refreshed, disconnected or reconnected while we waited for the lock.
+			$conn = self::get_connection($provider, true);
+
+			if ( ! $conn) {
+				return '';
+			}
+
+			if ((int)$conn['expires_at'] > time() + 60) {
+				return (string)$conn['access_token'];
+			}
+
 			return self::refresh($provider, $conn) ?? $current;
 		} finally {
-			delete_option('crawlwp_oauth_lock_' . $provider);
+			self::unlock($provider);
 		}
 	}
 
@@ -112,13 +123,21 @@ final class OAuth
 	private static function refresh(string $provider, array $conn): ?string
 	{
 		$response = wp_remote_post(add_query_arg('action', 'refresh', self::proxy_url()), [
-			'timeout' => 20,
+			'timeout' => 10,
 			'body'    => ['provider' => $provider, 'refresh_token' => $conn['refresh_token']],
 		]);
 
-		$body = json_decode((string)wp_remote_retrieve_body($response), true);
+		$body  = json_decode((string)wp_remote_retrieve_body($response), true);
+		$error = is_array($body) ? (string)($body['error'] ?? '') : '';
 
 		if ( ! is_wp_error($response) && ! empty($body['access_token'])) {
+			// Don't resurrect a connection that was disconnected (or replaced by a reconnect) during the request.
+			$latest = self::get_connection($provider, true);
+
+			if ( ! $latest || $latest['refresh_token'] !== $conn['refresh_token']) {
+				return $latest ? (string)$latest['access_token'] : '';
+			}
+
 			$conn['access_token'] = (string)$body['access_token'];
 			$conn['expires_at']   = time() + (int)$body['expires_in'];
 
@@ -131,8 +150,8 @@ final class OAuth
 			return $conn['access_token'];
 		}
 
-		// The user removed CrawlWP's access (or the app was removed): drop the dead connection and tell them.
-		if (in_array($body['error'] ?? '', ['invalid_grant', 'unauthorized_client'], true)) {
+		// invalid_grant: the user removed CrawlWP's access (or the token expired). Drop it and tell them.
+		if ($error === 'invalid_grant') {
 			self::save_connection($provider, null);
 			self::set_dropped($provider, true);
 			do_action('crawlwp_oauth_disconnected', $provider);
@@ -140,29 +159,54 @@ final class OAuth
 			return '';
 		}
 
-		set_transient('crawlwp_oauth_backoff_' . $provider, 1, 5 * MINUTE_IN_SECONDS);
+		// Anything else is temporary or a problem on CrawlWP's side (e.g. a misconfigured proxy returning
+		// unauthorized_client/invalid_client): keep the connection and retry later, longer for config errors.
+		$wait = in_array($error, ['unauthorized_client', 'invalid_client'], true) ? HOUR_IN_SECONDS : 5 * MINUTE_IN_SECONDS;
+		set_transient('crawlwp_oauth_backoff_' . $provider, 1, $wait);
 
 		return null;
 	}
 
 	/**
-	 * Atomic lock: add_option() fails when the row already exists. A lock older than 30 seconds is stale.
+	 * Why no access token is available, for logs and error messages.
+	 */
+	public static function unavailable_reason(string $provider): string
+	{
+		$label = self::label($provider);
+
+		return self::is_connected($provider)
+			/* translators: %s: Google or Bing */
+			? sprintf(__('Could not refresh the %s connection right now. CrawlWP will retry in a few minutes.', 'mihdan-index-now'), $label)
+			/* translators: %s: Google or Bing */
+			: sprintf(__('%1$s is not connected. Connect %1$s under API Settings.', 'mihdan-index-now'), $label);
+	}
+
+	/**
+	 * Truly atomic lock (INSERT IGNORE, as WP_Upgrader::create_lock does): add_option() checks then upserts,
+	 * so two requests could both "win". A lock older than 30 seconds belongs to a request that died.
 	 */
 	private static function lock(string $provider): bool
 	{
+		global $wpdb;
+
 		$name = 'crawlwp_oauth_lock_' . $provider;
 
-		if (add_option($name, time(), '', false)) {
+		if ((int)$wpdb->query($wpdb->prepare("INSERT IGNORE INTO `$wpdb->options` (`option_name`, `option_value`, `autoload`) VALUES (%s, %s, 'no')", $name, time())) === 1) {
 			return true;
 		}
 
-		if ((int)get_option($name) < time() - 30) {
-			delete_option($name);
+		$held = (int)$wpdb->get_var($wpdb->prepare("SELECT option_value FROM `$wpdb->options` WHERE option_name = %s", $name));
 
-			return add_option($name, time(), '', false);
-		}
+		// Compare-and-swap so only one request can take over a stale lock.
+		return $held < time() - 30
+			&& (int)$wpdb->query($wpdb->prepare("UPDATE `$wpdb->options` SET option_value = %s WHERE option_name = %s AND option_value = %s", time(), $name, $held)) === 1;
+	}
 
-		return false;
+	private static function unlock(string $provider): void
+	{
+		global $wpdb;
+
+		$wpdb->query($wpdb->prepare("DELETE FROM `$wpdb->options` WHERE option_name = %s", 'crawlwp_oauth_lock_' . $provider));
 	}
 
 	private static function set_dropped(string $provider, bool $dropped): void
@@ -182,9 +226,8 @@ final class OAuth
 
 	public static function google_json_key(): string
 	{
-		$options = get_option(Utils::get_plugin_prefix() . '_google_webmaster', []);
-
-		return is_array($options) ? trim((string)($options['json_key'] ?? '')) : '';
+		// Same filtered read as the rest of the plugin (wposa/get_option), so a key supplied by a filter still counts.
+		return trim((string)Utils::wposa_get_option('json_key', 'google_webmaster'));
 	}
 
 	/**
@@ -224,9 +267,7 @@ final class OAuth
 
 	public static function bing_api_key(): string
 	{
-		$options = get_option(Utils::get_plugin_prefix() . '_bing_webmaster', []);
-
-		return is_array($options) ? trim((string)($options['api_key'] ?? '')) : '';
+		return trim((string)Utils::wposa_get_option('api_key', 'bing_webmaster'));
 	}
 
 	/**
@@ -263,12 +304,17 @@ final class OAuth
 			$url = add_query_arg('return', rawurlencode($return), $url);
 		}
 
-		return wp_nonce_url($url, 'crawlwp_oauth_' . $provider);
+		return wp_nonce_url($url, 'crawlwp_oauth_connect_' . $provider);
 	}
 
 	public static function disconnect_url(string $provider): string
 	{
-		return wp_nonce_url(admin_url('admin-post.php?action=crawlwp_oauth_disconnect&provider=' . $provider), 'crawlwp_oauth_' . $provider);
+		return wp_nonce_url(admin_url('admin-post.php?action=crawlwp_oauth_disconnect&provider=' . $provider), 'crawlwp_oauth_disconnect_' . $provider);
+	}
+
+	public static function dismiss_url(string $provider): string
+	{
+		return wp_nonce_url(admin_url('admin-post.php?action=crawlwp_oauth_dismiss&provider=' . $provider), 'crawlwp_oauth_dismiss_' . $provider);
 	}
 
 	private static function request_provider(): string
@@ -285,7 +331,7 @@ final class OAuth
 	public static function handle_connect(): void
 	{
 		$provider = self::request_provider();
-		check_admin_referer('crawlwp_oauth_' . $provider);
+		check_admin_referer('crawlwp_oauth_connect_' . $provider);
 
 		$state  = wp_generate_password(32, false);
 		$return = wp_validate_redirect(esc_url_raw(wp_unslash($_GET['return'] ?? '')), '');
@@ -340,6 +386,16 @@ final class OAuth
 			self::finish('error', sprintf(__('%s connection failed: no access was granted. Please try again.', 'mihdan-index-now'), $label), $back);
 		}
 
+		// Google's consent screen lets people untick individual permissions: without Search Console access
+		// the connection would look fine but every request would fail.
+		$required = $provider === 'google' ? 'webmasters.readonly' : 'webmaster.manage';
+
+		if ( ! str_contains((string)($data['scope'] ?? ''), $required)) {
+			self::finish('error', $provider === 'google'
+				? __('Google was connected without access to Search Console. Please connect again and allow CrawlWP to view your Search Console data.', 'mihdan-index-now')
+				: __('Bing was connected without access to Bing Webmaster Tools. Please connect again and allow all requested permissions.', 'mihdan-index-now'), $back);
+		}
+
 		self::set_dropped($provider, false);
 		delete_transient('crawlwp_oauth_backoff_' . $provider);
 
@@ -361,7 +417,7 @@ final class OAuth
 	public static function handle_disconnect(): void
 	{
 		$provider = self::request_provider();
-		check_admin_referer('crawlwp_oauth_' . $provider);
+		check_admin_referer('crawlwp_oauth_disconnect_' . $provider);
 
 		// Tokens are not revoked at Google/Bing: a revoke cancels the whole grant for the shared CrawlWP app,
 		// which would also disconnect every other site connected with the same account.
@@ -376,7 +432,7 @@ final class OAuth
 	public static function handle_dismiss(): void
 	{
 		$provider = self::request_provider();
-		check_admin_referer('crawlwp_oauth_' . $provider);
+		check_admin_referer('crawlwp_oauth_dismiss_' . $provider);
 
 		self::set_dropped($provider, false);
 		wp_safe_redirect(wp_get_referer() ?: admin_url());
@@ -407,15 +463,12 @@ final class OAuth
 				esc_url(self::connect_url($provider)),
 				/* translators: %s: Google or Bing */
 				esc_html(sprintf(__('Reconnect %s', 'mihdan-index-now'), self::label($provider))),
-				esc_url(wp_nonce_url(admin_url('admin-post.php?action=crawlwp_oauth_dismiss&provider=' . $provider), 'crawlwp_oauth_' . $provider)),
+				esc_url(self::dismiss_url($provider)),
 				esc_html__('Dismiss', 'mihdan-index-now')
 			);
 		}
 	}
 
-	/**
-	 * @return never
-	 */
 	private static function finish(string $type, string $message, string $return = ''): void
 	{
 		set_transient(self::notice_key(), [$type, $message], MINUTE_IN_SECONDS * 5);

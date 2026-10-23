@@ -5,7 +5,7 @@ A single PHP file that lets CrawlWP sites "Connect with Google" and "Connect wit
 ## Setup
 
 1. Host `index.php` on its own HTTPS domain (default the plugin uses: `https://auth.crawlwp.com/`; override with the `CRAWLWP_OAUTH_PROXY_URL` constant or the `crawlwp_oauth_proxy_url` filter). PHP 8.0+ with curl.
-2. Copy `config.sample.php` to `config.php` and fill it in. `storage_dir` must be writable and outside the web root.
+2. Copy `config.sample.php` to `config.php` and fill it in. The proxy refuses to run (503) until `secret` is at least 32 characters. `storage_dir` must be writable and outside the web root.
 3. Google Cloud: create an OAuth client (Web application), enable the **Google Search Console API**, add the proxy URL as an authorised redirect URI. Scopes requested: `openid email https://www.googleapis.com/auth/webmasters.readonly`. The `webmasters.readonly` scope is sensitive, so the consent screen needs Google verification before public release.
 4. Bing Webmaster Tools > Settings > API Access > OAuth client: register the same proxy URL as the redirect URI.
 
@@ -21,15 +21,23 @@ Every OAuth-connected site depends on this app: if it is down for more than an h
 ## Limits to know
 
 - Google keeps at most 100 refresh tokens per Google account for one OAuth client. An agency connecting more than 100 sites with the same Google account silently loses the oldest connections (those sites must reconnect or use a service account key).
+- While the Google consent screen is in **Testing** mode, Google expires refresh tokens after 7 days: test sites will see the "connection stopped working" notice weekly until the app is published and verified.
 - Disconnecting in WordPress only deletes the site's tokens. It does not revoke them at Google/Bing, because a revoke cancels the account's grant for the whole CrawlWP app and would disconnect every other site using that account.
+
+## Things to confirm during live testing
+
+- **Bing returns `state` on its callback.** The proxy requires it (it stops someone slipping their own sign-in into a user's connect flow). Microsoft's docs don't mention `state`; if Bing drops it, connecting Bing fails with "connection request has expired", and you can set `bing_state_optional` in `config.php` (this re-opens that risk).
+- **Bing's token response includes the granted scope**, or none at all. The plugin rejects a connection whose scope lacks `webmaster.manage` (Google: `webmasters.readonly`), so a user who unticks Search Console access gets a clear error instead of a connection that silently fails.
+- **Bing's refresh request** works with `grant_type=refresh_token` (Microsoft's docs contradict themselves).
 
 ## Flow
 
 1. WordPress (`admin-post.php?action=crawlwp_oauth_connect`) creates a random state and sends the admin to `?action=authorize`.
-2. The proxy stores the flow in a signed cookie (Bing does not document returning `state`) and redirects to Google/Bing.
-3. The provider redirects back here with `code`. The proxy exchanges it, saves the tokens in a one-time hand-off file (deleted on first read, expires after 5 minutes) and redirects to the site with only a random handle.
-4. The site POSTs the handle and its state to `?action=fetch` (server to server) and stores the tokens.
-5. Later, the site POSTs its refresh token to `?action=refresh` for a new access token.
+2. The proxy shows a confirmation page naming the WordPress site that will get access. Anyone can build an authorize link pointing at their own site, so this stops a phishing link from silently sending a victim's tokens elsewhere. The form only works with a same-site cookie, so it can't be submitted from another site, and the page can't be framed.
+3. On confirm, the proxy stores the flow in a signed cookie (Bing does not document returning `state`) and redirects to Google/Bing.
+4. The provider redirects back here with `code`. The proxy exchanges it, saves the tokens in a one-time hand-off file (deleted on first read, expires after 5 minutes) and redirects to the site with only a random handle.
+5. The site POSTs the handle and its state to `?action=fetch` (server to server) and stores the tokens.
+6. Later, the site POSTs its refresh token to `?action=refresh` for a new access token.
 
 Tokens never appear in a URL, and the proxy keeps nothing after the hand-off.
 

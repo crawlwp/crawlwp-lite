@@ -59,7 +59,8 @@ class OAuthProxyTest extends TestCase
 
 	public function test_rate_limit_counts_requests_per_ip(): void
 	{
-		$dir = sys_get_temp_dir() . '/crawlwp-oauth-test-' . bin2hex(random_bytes(4));
+		$dir     = sys_get_temp_dir() . '/crawlwp-oauth-test-' . bin2hex(random_bytes(4));
+		$old_ip  = $_SERVER['REMOTE_ADDR'] ?? null;
 		mkdir($dir);
 		$_SERVER['REMOTE_ADDR'] = '203.0.113.9';
 
@@ -72,5 +73,17 @@ class OAuthProxyTest extends TestCase
 
 		array_map('unlink', $files);
 		rmdir($dir);
+
+		if ($old_ip === null) {
+			unset($_SERVER['REMOTE_ADDR']);
+		} else {
+			$_SERVER['REMOTE_ADDR'] = $old_ip;
+		}
+	}
+
+	public function test_confirmation_page_names_the_site_that_gets_access(): void
+	{
+		$this->assertSame('https://site.test', \site_label('https://site.test/wp-admin/admin-post.php?action=crawlwp_oauth_return'));
+		$this->assertSame('http://site.test:8080/blog', \site_label('http://site.test:8080/blog/wp-admin/admin-post.php'));
 	}
 }

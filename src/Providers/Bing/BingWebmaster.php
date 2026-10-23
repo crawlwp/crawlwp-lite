@@ -74,7 +74,7 @@ class BingWebmaster extends WebmasterAbstract
 		$request = OAuth::bing_request('SubmitUrlbatch');
 
 		if ($request === null) {
-			$this->log_submission($post_url, get_the_title($post_id), 0, __('The Bing connection has expired. Reconnect Bing under API Settings.', 'mihdan-index-now'));
+			$this->log_submission($post_url, get_the_title($post_id), 0, OAuth::unavailable_reason('bing'));
 
 			return;
 		}

@@ -7,7 +7,8 @@
  * five-minute hand-off.
  *
  * Routes (all on this one file):
- *   GET  ?action=authorize&provider=google|bing&return_url=…&state=…  Start the consent flow.
+ *   GET  ?action=authorize&provider=google|bing&return_url=…&state=…  Show "Connect <site>?" confirmation.
+ *   POST ?action=authorize  (the confirmation form)                       Start the consent flow at Google/Bing.
  *   GET  ?code=…  /  ?error=…                                            Provider callback (the registered redirect URI).
  *   POST ?action=fetch    handle, state                                  Site collects its tokens (server to server).
  *   POST ?action=refresh  provider, refresh_token                        Exchange a refresh token for a new access token.
@@ -19,6 +20,7 @@ declare(strict_types=1);
 const HANDOFF_TTL = 300;
 const FLOW_TTL    = 900;
 const COOKIE      = 'cwp_oauth_flow';
+const CONFIRM     = 'cwp_oauth_confirm';
 
 $providers = [
 	'google' => [
@@ -47,6 +49,11 @@ if ( ! defined('CRAWLWP_OAUTH_PROXY_LIB_ONLY')) {
 		health($config);
 	}
 
+	// Fail closed: without a strong secret the flow cookies could be forged.
+	if (strlen((string)($config['secret'] ?? '')) < 32) {
+		fail(503, 'The CrawlWP connection service is not configured.');
+	}
+
 	rate_limit($config);
 
 	if ($action === 'authorize') {
@@ -65,9 +72,11 @@ if ( ! defined('CRAWLWP_OAUTH_PROXY_LIB_ONLY')) {
 
 function authorize(array $providers, array $config): void
 {
-	$provider   = (string)($_GET['provider'] ?? '');
-	$return_url = (string)($_GET['return_url'] ?? '');
-	$site_state = (string)($_GET['state'] ?? '');
+	$post       = $_SERVER['REQUEST_METHOD'] === 'POST';
+	$input      = $post ? $_POST : $_GET;
+	$provider   = (string)($input['provider'] ?? '');
+	$return_url = (string)($input['return_url'] ?? '');
+	$site_state = (string)($input['state'] ?? '');
 
 	if ( ! isset($providers[$provider]) || empty($config[$provider]['client_id'])) {
 		fail(400, 'Unknown provider.');
@@ -81,16 +90,21 @@ function authorize(array $providers, array $config): void
 		fail(400, 'Invalid state.');
 	}
 
+	// Anyone can build an authorize link pointing at their own site, so the user must confirm which
+	// site gets access before we send them to Google/Bing. The confirm cookie is SameSite=Lax, so a
+	// cross-site POST can't carry it and the form can't be submitted on the user's behalf.
+	if ( ! $post) {
+		confirm_page($provider, $return_url, $site_state);
+	}
+
+	if ( ! hash_equals((string)($_COOKIE[CONFIRM] ?? ''), (string)($_POST['confirm'] ?? '')) || empty($_POST['confirm'])) {
+		fail(400, 'This confirmation has expired. Go back to your WordPress dashboard and click Connect again.');
+	}
+
 	$nonce = bin2hex(random_bytes(16));
 
-	// Bing does not document echoing `state`, so the flow is tied to the browser with a cookie instead.
-	setcookie(COOKIE . '_' . $provider, sign(['p' => $provider, 'r' => $return_url, 's' => $site_state, 'n' => $nonce, 't' => time()], $config), [
-		'expires'  => time() + FLOW_TTL,
-		'path'     => '/',
-		'secure'   => true,
-		'httponly' => true,
-		'samesite' => 'Lax',
-	]);
+	setcookie(CONFIRM, '', cookie_options(1));
+	setcookie(COOKIE . '_' . $provider, sign(['p' => $provider, 'r' => $return_url, 's' => $site_state, 'n' => $nonce, 't' => time()], $config), cookie_options(time() + FLOW_TTL));
 
 	$p = $providers[$provider];
 
@@ -103,16 +117,80 @@ function authorize(array $providers, array $config): void
 		] + $p['extra']));
 }
 
+/**
+ * "Connect <site> to Google Search Console?" page. Exits.
+ */
+function confirm_page(string $provider, string $return_url, string $site_state): void
+{
+	$token = bin2hex(random_bytes(16));
+	setcookie(CONFIRM, $token, cookie_options(time() + FLOW_TTL));
+
+	$site    = site_label($return_url);
+	$service = $provider === 'google' ? 'Google Search Console' : 'Bing Webmaster Tools';
+	$e       = static fn(string $v): string => htmlspecialchars($v, ENT_QUOTES, 'UTF-8');
+
+	http_response_code(200);
+	header('Content-Type: text/html; charset=utf-8');
+	header('Cache-Control: no-store');
+	header('X-Frame-Options: DENY');
+	header("Content-Security-Policy: frame-ancestors 'none'");
+	header('Referrer-Policy: no-referrer');
+
+	echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+		. '<title>Connect ' . $e($service) . ' – CrawlWP</title><style>'
+		. 'body{font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#f0f0f1;color:#1d2327;margin:0;padding:48px 16px}'
+		. '.box{max-width:480px;margin:0 auto;background:#fff;border:1px solid #dcdcde;border-radius:8px;padding:28px}'
+		. 'h1{font-size:20px;margin:0 0 12px}.site{font-weight:600;word-break:break-all;background:#f6f7f7;border-radius:4px;padding:8px 10px;display:block;margin:12px 0}'
+		. 'p{margin:0 0 12px}.warn{font-size:14px;color:#50575e}button{font:inherit;background:#2271b1;color:#fff;border:0;border-radius:4px;padding:10px 18px;cursor:pointer}'
+		. 'a{color:#2271b1;margin-left:14px}</style></head><body><div class="box">'
+		. '<h1>Connect ' . $e($service) . ' to CrawlWP</h1>'
+		. '<p>This gives the following WordPress site access to your ' . $e($service) . ' data:</p>'
+		. '<span class="site">' . $e($site) . '</span>'
+		. '<p class="warn">Only continue if this is your site and you just clicked “Connect” in its dashboard. If someone sent you this link, close this page.</p>'
+		. '<form method="post" action="?action=authorize">'
+		. '<input type="hidden" name="provider" value="' . $e($provider) . '">'
+		. '<input type="hidden" name="return_url" value="' . $e($return_url) . '">'
+		. '<input type="hidden" name="state" value="' . $e($site_state) . '">'
+		. '<input type="hidden" name="confirm" value="' . $e($token) . '">'
+		. '<button type="submit">Continue to ' . $e($provider === 'google' ? 'Google' : 'Microsoft') . '</button>'
+		. '<a href="' . $e(substr($return_url, 0, (int)strpos($return_url, '/wp-admin/')) . '/wp-admin/') . '">Cancel</a>'
+		. '</form></div></body></html>';
+	exit;
+}
+
+/**
+ * The site's address as the user would recognise it: scheme + host (+ port) + any sub-folder WordPress lives in.
+ */
+function site_label(string $return_url): string
+{
+	$parts = parse_url($return_url);
+	$path  = substr((string)($parts['path'] ?? ''), 0, -strlen('/wp-admin/admin-post.php'));
+
+	return $parts['scheme'] . '://' . $parts['host'] . (isset($parts['port']) ? ':' . $parts['port'] : '') . $path;
+}
+
+function cookie_options(int $expires): array
+{
+	return ['expires' => $expires, 'path' => '/', 'secure' => true, 'httponly' => true, 'samesite' => 'Lax'];
+}
+
 function callback(array $providers, array $config): void
 {
-	// One cookie per provider so Google and Bing can be connected in parallel tabs.
-	// Google always returns `state`; a callback without it can only be Bing's.
-	$flow = null;
+	// One cookie per provider so Google and Bing can be connected in parallel tabs. `state` must match
+	// the cookie's nonce, so a code from someone else's sign-in can't be slipped into this browser's flow.
+	// Microsoft's docs don't mention `state`; if live testing shows Bing drops it, set
+	// `bing_state_optional` in config.php (that re-opens the login-CSRF risk, see README).
+	$flow  = null;
+	$state = isset($_GET['state']) ? (string)$_GET['state'] : null;
 
 	foreach (array_keys($providers) as $name) {
 		$candidate = verify((string)($_COOKIE[COOKIE . '_' . $name] ?? ''), $config);
 
-		if ($candidate && (isset($_GET['state']) ? hash_equals($candidate['n'], (string)$_GET['state']) : $name === 'bing')) {
+		if ( ! $candidate) {
+			continue;
+		}
+
+		if ($state !== null ? hash_equals((string)$candidate['n'], $state) : ($name === 'bing' && ! empty($config['bing_state_optional']))) {
 			$flow = $candidate;
 			break;
 		}
@@ -122,7 +200,7 @@ function callback(array $providers, array $config): void
 		fail(400, 'This connection request has expired. Go back to your WordPress dashboard and click Connect again.');
 	}
 
-	setcookie(COOKIE . '_' . $flow['p'], '', ['expires' => 1, 'path' => '/', 'secure' => true, 'httponly' => true, 'samesite' => 'Lax']);
+	setcookie(COOKIE . '_' . $flow['p'], '', cookie_options(1));
 
 	$back = static function (array $args) use ($flow) {
 		redirect($flow['r'] . (str_contains($flow['r'], '?') ? '&' : '?') . http_build_query($args + ['provider' => $flow['p']]));

@@ -29,4 +29,8 @@ return [
 	// Only if a CDN/load balancer sits in front of the proxy: the $_SERVER key holding the real visitor IP,
 	// e.g. 'HTTP_CF_CONNECTING_IP' for Cloudflare. Leave empty otherwise (other headers can be faked).
 	'client_ip_header' => '',
+
+	// Leave false. Set true only if live testing shows Bing does not return `state` on its callback.
+	// Without `state`, someone could trick a user mid-connect into linking their site to the wrong Bing account.
+	'bing_state_optional' => false,
 ];
