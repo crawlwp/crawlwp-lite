@@ -1149,7 +1149,7 @@
 
     /* Non-breaking spaces, line breaks and curly apostrophes would stop a keyword from matching. */
     normalizeText: function(text) {
-      return $.trim(String(text || '').replace(/[‘’]/g, "'").replace(/[\s ]+/g, ' '));
+      return $.trim(String(text || '').replace(/[\u2018\u2019]/g, "'").replace(/[\s\u00a0]+/g, ' '));
     },
 
     /* Text of the opening paragraph: skips empty paragraph blocks and paragraphs
@@ -1162,24 +1162,31 @@
       return ($intro.length ? $intro : $filled.first()).text() || '';
     },
 
-    /* Same rule as SeoSignals::keyword_in_slug(): small words may be missing, the
-       other words may be in any order, and each must start a slug word. */
+    /* Mirrors SeoSignals::keyword_in_slug(); keep the two in step. Words may be in
+       any order; small words may be left out when two other words remain; words of
+       3+ letters may start a longer slug word, shorter ones must match a whole word. */
     keywordInSlug: function(keyword, slug) {
       var split = function(s) { return $.grep(String(s || '').toLowerCase().split('-'), function(w) { return w.length > 0; }); };
       var slugWords = split(slug);
-      var kwWords = split(this.decodeSlug(this.slugify(keyword)));
+      var kwWords = split(this.decodeSlug(this.slugify(String(keyword || '').replace(/['\u2018\u2019]/g, ''))));
       if (!slugWords.length || !kwWords.length) return false;
-      var joined = '-' + slugWords.join('-');
-      if (joined.indexOf('-' + kwWords.join('-')) !== -1 || joined.indexOf('-' + kwWords.join('')) !== -1) return true;
+
+      var joined = '-' + slugWords.join('-') + '-';
+      var phrases = [[kwWords.join('-'), kwWords[kwWords.length - 1]]];
+      if (kwWords.length > 1) phrases.push([kwWords.join(''), kwWords.join('')]);
+      for (var p = 0; p < phrases.length; p++) {
+        var tail = phrases[p][1].length >= 3 ? '' : '-';
+        if (joined.indexOf('-' + phrases[p][0] + tail) !== -1) return true;
+      }
 
       var stop = crawlwpSEO.slugStopWords || [];
       var meaningful = $.grep(kwWords, function(w) { return $.inArray(w, stop) === -1; });
-      if (!meaningful.length) meaningful = kwWords;
+      if (meaningful.length < 2) meaningful = kwWords;
 
       for (var i = 0; i < meaningful.length; i++) {
-        var found = false;
+        var word = meaningful[i], long = word.length >= 3, found = false;
         for (var j = 0; j < slugWords.length; j++) {
-          if (slugWords[j].indexOf(meaningful[i]) === 0) { found = true; break; }
+          if (slugWords[j] === word || (long && slugWords[j].indexOf(word) === 0)) { found = true; break; }
         }
         if (!found) return false;
       }

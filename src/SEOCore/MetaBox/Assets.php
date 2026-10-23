@@ -46,7 +46,7 @@ class Assets
 		wp_enqueue_script(
 			'crawlwp-seo-metabox',
 			$assets_url . 'crawlwp-metabox.js',
-			['jquery'],
+			['jquery', 'wp-url'],
 			$version,
 			true
 		);

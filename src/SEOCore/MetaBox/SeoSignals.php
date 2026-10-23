@@ -621,10 +621,6 @@ class SeoSignals
 	}
 
 	/**
-	 * The URL slug of a post. Drafts have no post_name yet, so fall back to
-	 * the slug WordPress will generate from the title on publish.
-	 */
-	/**
 	 * Lowercase text with entities decoded, curly apostrophes made straight and
 	 * runs of spaces, non-breaking spaces and line breaks made single spaces.
 	 */
@@ -654,11 +650,17 @@ class SeoSignals
 	}
 
 	/**
-	 * Whether a keyword is in a slug. Small words may be missing and the other
-	 * words may be in any order; each must start a slug word ("plugin" matches "plugins").
+	 * Whether a keyword is in a slug. Words may be in any order, and small words
+	 * may be left out when at least two other words remain ("best plugin for seo"
+	 * matches "best-plugin-seo", but "vitamin a" needs the "a"). A word of three
+	 * or more letters may start a longer slug word ("plugin" matches "plugins");
+	 * shorter words must match a whole slug word.
+	 *
+	 * Mirrored by keywordInSlug() in crawlwp-metabox.js; keep the two in step.
 	 */
 	public static function keyword_in_slug(string $keyword, string $slug): bool
 	{
+		$keyword    = str_replace(["'", "\u{2018}", "\u{2019}"], '', $keyword);
 		$slug_words = array_values(array_filter(explode('-', mb_strtolower(urldecode($slug))), 'strlen'));
 		$kw_words   = array_values(array_filter(explode('-', mb_strtolower(urldecode(sanitize_title($keyword)))), 'strlen'));
 
@@ -666,19 +668,34 @@ class SeoSignals
 			return false;
 		}
 
-		$joined = '-' . implode('-', $slug_words);
+		// The whole keyword as a run of slug words, or written as one word ("word press" in "wordpress-tips").
+		$joined  = '-' . implode('-', $slug_words) . '-';
+		$phrases = [implode('-', $kw_words) => end($kw_words)];
 
-		if (mb_strpos($joined, '-' . implode('-', $kw_words)) !== false || mb_strpos($joined, '-' . implode('', $kw_words)) !== false) {
-			return true;
+		if (count($kw_words) > 1) {
+			$phrases[implode('', $kw_words)] = implode('', $kw_words);
 		}
 
-		$meaningful = array_diff($kw_words, self::slug_stop_words()) ?: $kw_words;
+		foreach ($phrases as $phrase => $last_word) {
+			$tail = mb_strlen((string) $last_word) >= 3 ? '' : '-';
+
+			if (mb_strpos($joined, '-' . $phrase . $tail) !== false) {
+				return true;
+			}
+		}
+
+		$meaningful = array_values(array_diff($kw_words, self::slug_stop_words()));
+
+		if (count($meaningful) < 2) {
+			$meaningful = $kw_words;
+		}
 
 		foreach ($meaningful as $word) {
+			$long  = mb_strlen($word) >= 3;
 			$found = false;
 
 			foreach ($slug_words as $slug_word) {
-				if (str_starts_with($slug_word, $word)) {
+				if ($slug_word === $word || ($long && str_starts_with($slug_word, $word))) {
 					$found = true;
 					break;
 				}
@@ -691,6 +708,11 @@ class SeoSignals
 
 		return true;
 	}
+
+	/**
+	 * The URL slug of a post. Drafts have no post_name yet, so fall back to
+	 * the slug WordPress will generate from the title on publish.
+	 */
 
 	private static function slug(\WP_Post $post): string
 	{
