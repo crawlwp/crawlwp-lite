@@ -67,6 +67,8 @@ function crawlwp_lite_pro_owned_options()
 		'prefixes' => [
 			'crawlwp_pro_',
 			'crawlwp_license',
+			// Site Audit: results, ignore list, email setting, queue and lock.
+			'crawlwp_site_audit',
 		],
 	];
 }

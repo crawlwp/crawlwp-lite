@@ -282,6 +282,15 @@ class Utils
 	 *
 	 * @return bool
 	 */
+	/**
+	 * Whether this request is one of the Site Audit's own link checks (CrawlWP Premium marks them
+	 * with this header). They must not be counted as visits by the 404 monitor or redirect hits.
+	 */
+	public static function is_site_audit_request(): bool
+	{
+		return ! empty($_SERVER['HTTP_X_CRAWLWP_SITE_AUDIT']);
+	}
+
 	public static function is_admin_page()
 	{
 		$pages = [
