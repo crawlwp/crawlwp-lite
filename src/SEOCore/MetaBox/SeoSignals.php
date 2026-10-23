@@ -59,7 +59,7 @@ class SeoSignals
 	public const CACHE_META = '_crawlwp_seo_signals';
 
 	/** Bumped whenever the cached payload shape or the signal logic changes. */
-	private const CACHE_VERSION = 3;
+	private const CACHE_VERSION = 4;
 
 	/**
 	 * Every signal for a post, in display order.
@@ -310,12 +310,11 @@ class SeoSignals
 		$primary     = $keywords[0];
 		$secondaries = array_slice($keywords, 1);
 
-		$needle  = mb_strtolower($primary);
-		$content = mb_strtolower(wp_strip_all_tags(strip_shortcodes((string) $post->post_content)));
-		$slug    = str_replace('-', ' ', mb_strtolower(urldecode(self::slug($post))));
+		$needle  = self::normalize_text($primary);
+		$content = self::normalize_text(wp_strip_all_tags(strip_shortcodes((string) $post->post_content)));
 
-		$in_title   = mb_stripos($resolved_title, $needle) !== false;
-		$in_slug    = $slug !== '' && mb_stripos($slug, $needle) !== false;
+		$in_title   = mb_stripos(self::normalize_text($resolved_title), $needle) !== false;
+		$in_slug    = self::keyword_in_slug($primary, self::slug($post));
 		$in_content = $content !== '' && mb_stripos($content, $needle) !== false;
 
 		$hits    = (int) $in_title + (int) $in_slug + (int) $in_content;
@@ -335,7 +334,7 @@ class SeoSignals
 		$sec_found = 0;
 		if ($sec_total > 0 && $content !== '') {
 			foreach ($secondaries as $sec) {
-				if (mb_stripos($content, mb_strtolower($sec)) !== false) {
+				if (mb_stripos($content, self::normalize_text($sec)) !== false) {
 					$sec_found++;
 				}
 			}
@@ -625,6 +624,74 @@ class SeoSignals
 	 * The URL slug of a post. Drafts have no post_name yet, so fall back to
 	 * the slug WordPress will generate from the title on publish.
 	 */
+	/**
+	 * Lowercase text with entities decoded, curly apostrophes made straight and
+	 * runs of spaces, non-breaking spaces and line breaks made single spaces.
+	 */
+	public static function normalize_text(string $text): string
+	{
+		$text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+		$text = str_replace(["\u{2018}", "\u{2019}"], "'", $text);
+
+		return trim(mb_strtolower((string) preg_replace('/[\s\x{00A0}]+/u', ' ', $text)));
+	}
+
+	/**
+	 * Small words people leave out of slugs ("best-plugin-seo" for "best plugin for seo").
+	 * Also sent to the metabox script so both checks agree.
+	 *
+	 * @return string[]
+	 */
+	public static function slug_stop_words(): array
+	{
+		$words = [
+			'a', 'an', 'and', 'are', 'as', 'at', 'be', 'by', 'can', 'do', 'does', 'for', 'from', 'how', 'i',
+			'in', 'is', 'it', 'my', 'of', 'on', 'or', 'that', 'the', 'this', 'to', 'vs', 'what', 'when',
+			'where', 'which', 'who', 'why', 'with', 'you', 'your',
+		];
+
+		return array_values(array_filter(array_map('strval', (array) apply_filters('crawlwp_slug_stop_words', $words))));
+	}
+
+	/**
+	 * Whether a keyword is in a slug. Small words may be missing and the other
+	 * words may be in any order; each must start a slug word ("plugin" matches "plugins").
+	 */
+	public static function keyword_in_slug(string $keyword, string $slug): bool
+	{
+		$slug_words = array_values(array_filter(explode('-', mb_strtolower(urldecode($slug))), 'strlen'));
+		$kw_words   = array_values(array_filter(explode('-', mb_strtolower(urldecode(sanitize_title($keyword)))), 'strlen'));
+
+		if ( ! $slug_words || ! $kw_words) {
+			return false;
+		}
+
+		$joined = '-' . implode('-', $slug_words);
+
+		if (mb_strpos($joined, '-' . implode('-', $kw_words)) !== false || mb_strpos($joined, '-' . implode('', $kw_words)) !== false) {
+			return true;
+		}
+
+		$meaningful = array_diff($kw_words, self::slug_stop_words()) ?: $kw_words;
+
+		foreach ($meaningful as $word) {
+			$found = false;
+
+			foreach ($slug_words as $slug_word) {
+				if (str_starts_with($slug_word, $word)) {
+					$found = true;
+					break;
+				}
+			}
+
+			if ( ! $found) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
 	private static function slug(\WP_Post $post): string
 	{
 		if ((string) $post->post_name !== '') {
