@@ -94,6 +94,7 @@ function crawlwp_lite_mo_uninstall_function($force = false)
 		'crawlwp_backfill_robots_index_meta',
 		'crawlwp_redirects_flush_hits',
 		'crawlwp_404_prune',
+		'crawlwp_background_submission',
 	];
 
 	if ( ! $keep_pro) {
@@ -101,7 +102,8 @@ function crawlwp_lite_mo_uninstall_function($force = false)
 	}
 
 	foreach ($cron_hooks as $cron_hook) {
-		wp_clear_scheduled_hook($cron_hook);
+		// Removes every event of the hook, whatever its arguments (delayed pings carry a post ID).
+		wp_unschedule_hook($cron_hook);
 	}
 
 	// Background process healthcheck crons (see BackgroundProcess\Setup and WP_Background_Process).

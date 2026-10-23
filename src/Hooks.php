@@ -25,6 +25,30 @@ class Hooks {
 	public const DELAYED_TERM_EVENT = 'crawlwp_delayed_term_ping';
 
 	/**
+	 * Single event sending a submission in the background, so saving a post,
+	 * a term or a comment never waits for search engines to answer.
+	 */
+	public const BACKGROUND_EVENT = 'crawlwp_background_submission';
+
+	/**
+	 * Submission actions that may be sent in the background.
+	 */
+	private const BACKGROUND_ACTIONS = [
+		'crawlwp/post_added',
+		'crawlwp/post_updated',
+		'crawlwp/post_deleted',
+		'crawlwp/comment_updated',
+		'crawlwp/term_updated',
+	];
+
+	/**
+	 * Whether a background submission was queued in this request.
+	 *
+	 * @var bool
+	 */
+	private $spawn_cron = false;
+
+	/**
 	 * Hooks init.
 	 *
 	 * @return void
@@ -39,6 +63,8 @@ class Hooks {
 		add_action( 'crawlwp/index_pinged', [ $this, 'record_submission' ], 10, 2 );
 		add_action( self::DELAYED_POST_EVENT, [ $this, 'delayed_post_ping' ] );
 		add_action( self::DELAYED_TERM_EVENT, [ $this, 'delayed_term_ping' ], 10, 2 );
+		add_action( self::BACKGROUND_EVENT, [ $this, 'background_submission' ], 10, 2 );
+		add_action( 'shutdown', [ $this, 'maybe_spawn_cron' ] );
 		add_action( 'admin_notices', [ Indexing::class, 'pause_admin_notice' ] );
 	}
 
@@ -102,7 +128,8 @@ class Hooks {
 			return;
 		}
 
-		do_action( 'crawlwp/comment_updated', $post->ID, $comment );
+		// queued per post, not per comment: many comments before the queue runs still mean one ping.
+		$this->submit( 'crawlwp/comment_updated', [ $post->ID ] );
 	}
 
 	/**
@@ -147,7 +174,7 @@ class Hooks {
 			return;
 		}
 
-		do_action( $is_update ? 'crawlwp/post_updated' : 'crawlwp/post_added', $post->ID, $post );
+		$this->submit( $is_update ? 'crawlwp/post_updated' : 'crawlwp/post_added', [ $post->ID ] );
 	}
 
 	/**
@@ -315,7 +342,7 @@ class Hooks {
 			return;
 		}
 
-		do_action( 'crawlwp/post_deleted', $post->ID, $permalink );
+		$this->submit( 'crawlwp/post_deleted', [ $post->ID, $permalink ] );
 	}
 
 	/**
@@ -373,6 +400,138 @@ class Hooks {
 			return;
 		}
 
-		do_action( 'crawlwp/term_updated', $term_id, $taxonomy );
+		$this->submit( 'crawlwp/term_updated', [ $term_id, $taxonomy ] );
+	}
+
+	/**
+	 * Whether submissions are sent in the background. Requests that nobody waits
+	 * on (WP-Cron, WP-CLI) send them straight away. So do sites with WP-Cron
+	 * disabled, since nothing may ever run the queue there; a site with a server
+	 * cron can opt in with the filter.
+	 */
+	private function in_background(): bool {
+
+		if ( wp_doing_cron() || ( defined( 'WP_CLI' ) && WP_CLI ) ) {
+			return false;
+		}
+
+		/**
+		 * Filter whether pings are sent in the background or while the post,
+		 * term or comment is being saved.
+		 *
+		 * @param bool $in_background Default true, false when DISABLE_WP_CRON is set.
+		 */
+		return (bool) apply_filters( 'crawlwp/submit_in_background', ! ( defined( 'DISABLE_WP_CRON' ) && DISABLE_WP_CRON ) );
+	}
+
+	/**
+	 * Fire a submission action now, or queue it as a single WP-Cron event.
+	 *
+	 * Only IDs and strings are queued; objects are loaded again when the event
+	 * runs, so the submission uses the post as it is then.
+	 *
+	 * @param string $action Submission action.
+	 * @param array  $args   Action arguments (IDs and strings).
+	 *
+	 * @return void
+	 */
+	private function submit( string $action, array $args ): void {
+
+		if ( ! $this->in_background() ) {
+			$this->background_submission( $action, $args );
+
+			return;
+		}
+
+		$queued = [ [ $action, $args ] ];
+
+		// A post saved twice before the event runs is submitted once, as added or updated.
+		if ( $action === 'crawlwp/post_added' || $action === 'crawlwp/post_updated' ) {
+			$queued = [ [ 'crawlwp/post_added', $args ], [ 'crawlwp/post_updated', $args ] ];
+		}
+
+		foreach ( $queued as $event_args ) {
+			if ( wp_next_scheduled( self::BACKGROUND_EVENT, $event_args ) ) {
+				return;
+			}
+		}
+
+		if ( wp_schedule_single_event( time(), self::BACKGROUND_EVENT, [ $action, $args ] ) ) {
+			$this->spawn_cron = true;
+		} else {
+			// Could not queue it: send it now rather than lose it.
+			$this->background_submission( $action, $args );
+		}
+	}
+
+	/**
+	 * Start WP-Cron at the end of the request so queued submissions go out within
+	 * seconds. spawn_cron() does not wait for it. When the loopback request is
+	 * blocked, the next WP-Cron run (any page view, or the server cron) sends them.
+	 *
+	 * Skipped with ALTERNATE_WP_CRON: there spawn_cron() redirects and runs cron in
+	 * the current request, which can't be done once the response has been sent.
+	 *
+	 * @return void
+	 */
+	public function maybe_spawn_cron(): void {
+
+		if (
+			$this->spawn_cron
+			&& ! ( defined( 'DISABLE_WP_CRON' ) && DISABLE_WP_CRON )
+			&& ! ( defined( 'ALTERNATE_WP_CRON' ) && ALTERNATE_WP_CRON )
+		) {
+			$this->spawn_cron = false;
+			spawn_cron();
+		}
+	}
+
+	/**
+	 * Send a submission: fire its action with the current post, term or comment.
+	 *
+	 * @param string $action Submission action.
+	 * @param array  $args   Queued arguments.
+	 *
+	 * @return void
+	 */
+	public function background_submission( $action, $args ): void {
+
+		$action = (string) $action;
+		$args   = array_values( (array) $args );
+
+		if ( ! in_array( $action, self::BACKGROUND_ACTIONS, true ) ) {
+			return;
+		}
+
+		switch ( $action ) {
+			case 'crawlwp/post_added':
+			case 'crawlwp/post_updated':
+				$post = get_post( (int) ( $args[0] ?? 0 ) );
+
+				// Re-checked: the post may have been unpublished or set to noindex since.
+				if ( $post instanceof WP_Post && Indexing::get_post_skip_reason( $post ) === '' ) {
+					do_action( $action, $post->ID, $post );
+				}
+				break;
+
+			case 'crawlwp/post_deleted':
+				do_action( $action, (int) ( $args[0] ?? 0 ), (string) ( $args[1] ?? '' ) );
+				break;
+
+			case 'crawlwp/comment_updated':
+				$post = get_post( (int) ( $args[0] ?? 0 ) );
+
+				// the comment was approved when queued; the post is re-checked as it may have changed since.
+				if ( $post instanceof WP_Post && Indexing::get_post_skip_reason( $post ) === '' ) {
+					do_action( $action, $post->ID, null );
+				}
+				break;
+
+			case 'crawlwp/term_updated':
+				if ( Indexing::get_term_skip_reason( (int) ( $args[0] ?? 0 ), (string) ( $args[1] ?? '' ) ) === '' ) {
+					do_action( $action, (int) $args[0], (string) $args[1] );
+				}
+				break;
+		}
 	}
 }
