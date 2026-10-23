@@ -278,19 +278,31 @@ class Utils
 	}
 
 	/**
+	 * Secret value of the X-CrawlWP-Site-Audit header, derived from the site's salts. Premium sends
+	 * it with the Site Audit's own link checks.
+	 */
+	public static function site_audit_token(): string
+	{
+		return wp_hash('crawlwp_site_audit_request', 'nonce');
+	}
+
+	/**
+	 * Whether this request is one of the Site Audit's own link checks. They must not be counted as
+	 * visits by the 404 monitor or redirect hits. The header must carry the secret token, so a
+	 * visitor can't add it to keep their requests out of the 404 monitor.
+	 */
+	public static function is_site_audit_request(): bool
+	{
+		$value = isset($_SERVER['HTTP_X_CRAWLWP_SITE_AUDIT']) ? (string)$_SERVER['HTTP_X_CRAWLWP_SITE_AUDIT'] : '';
+
+		return $value !== '' && hash_equals(self::site_audit_token(), $value);
+	}
+
+	/**
 	 * Check if an admin settings page is CrawlWP'
 	 *
 	 * @return bool
 	 */
-	/**
-	 * Whether this request is one of the Site Audit's own link checks (CrawlWP Premium marks them
-	 * with this header). They must not be counted as visits by the 404 monitor or redirect hits.
-	 */
-	public static function is_site_audit_request(): bool
-	{
-		return ! empty($_SERVER['HTTP_X_CRAWLWP_SITE_AUDIT']);
-	}
-
 	public static function is_admin_page()
 	{
 		$pages = [
