@@ -11,6 +11,13 @@ A single PHP file that lets CrawlWP sites "Connect with Google" and "Connect wit
 
 5. Route every path to `index.php` (the included `.htaccess` does this on Apache; on Nginx use `try_files $uri /index.php?$query_string;`). Bing documents its error redirect with an extra path segment.
 
+## Monitoring
+
+Every OAuth-connected site depends on this app: if it is down for more than an hour, their access tokens expire and Google/Bing data stops until it is back (the plugin keeps using a valid token and retries every 5 minutes).
+
+- Point an uptime monitor (UptimeRobot, Better Stack, etc.) at `https://auth.crawlwp.com/?action=health`. It returns 200 with `{"ok":true,...}` when the Google and Bing credentials, signing secret, storage folder and curl are all in place, and 503 naming what is missing.
+- Requests are limited per IP address per minute (`rate_limit` in `config.php`, default 120; extra requests get 429). Behind Cloudflare or a load balancer, set `client_ip_header` so the limit applies to visitors, not to the CDN.
+
 ## Limits to know
 
 - Google keeps at most 100 refresh tokens per Google account for one OAuth client. An agency connecting more than 100 sites with the same Google account silently loses the oldest connections (those sites must reconnect or use a service account key).

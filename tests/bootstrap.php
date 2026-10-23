@@ -1135,6 +1135,8 @@ if (!function_exists('is_wp_error')) {
 if (!function_exists('wp_remote_post')) {
 	function wp_remote_post($url, $args = [])
 	{
+		$GLOBALS['crawlwp_test_state']['remote_post_calls'][] = ['url' => $url, 'args' => $args];
+
 		if (isset($GLOBALS['crawlwp_test_state']['remote_post_response'])) {
 			return $GLOBALS['crawlwp_test_state']['remote_post_response'];
 		}
@@ -1421,6 +1423,7 @@ require_once CRAWLWP_TESTS_PLUGIN_DIR . '/src/SEOCore/SettingsFieldsTrait.php';
 require_once CRAWLWP_TESTS_PLUGIN_DIR . '/src/SEOCore/SitemapSettings/SitemapSettings.php';
 require_once CRAWLWP_TESTS_PLUGIN_DIR . '/src/SEOCore/SitemapSettings/SitemapStylesheet.php';
 require_once CRAWLWP_TESTS_PLUGIN_DIR . '/src/Utils.php';
+require_once CRAWLWP_TESTS_PLUGIN_DIR . '/src/OAuth/OAuth.php';
 require_once CRAWLWP_TESTS_PLUGIN_DIR . '/src/SEOCore/FeatureGate/FeatureGate.php';
 require_once CRAWLWP_TESTS_PLUGIN_DIR . '/src/SEOCore/Notifications/Notifications.php';
 require_once CRAWLWP_TESTS_PLUGIN_DIR . '/src/SEOCore/Code/CodeSettings.php';

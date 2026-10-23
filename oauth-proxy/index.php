@@ -11,11 +11,10 @@
  *   GET  ?code=…  /  ?error=…                                            Provider callback (the registered redirect URI).
  *   POST ?action=fetch    handle, state                                  Site collects its tokens (server to server).
  *   POST ?action=refresh  provider, refresh_token                        Exchange a refresh token for a new access token.
+ *   GET  ?action=health                                                  For uptime monitors: 200 when ready, 503 otherwise.
  */
 
 declare(strict_types=1);
-
-$config = require __DIR__ . '/config.php';
 
 const HANDOFF_TTL = 300;
 const FLOW_TTL    = 900;
@@ -36,21 +35,32 @@ $providers = [
 	],
 ];
 
-gc_handoffs($config['storage_dir']);
+// Tests define CRAWLWP_OAUTH_PROXY_LIB_ONLY to load the functions below without handling a request.
+if ( ! defined('CRAWLWP_OAUTH_PROXY_LIB_ONLY')) {
+	$config = require __DIR__ . '/config.php';
 
-$action = $_GET['action'] ?? '';
+	gc_handoffs($config['storage_dir']);
 
-if ($action === 'authorize') {
-	authorize($providers, $config);
-} elseif ($action === 'fetch') {
-	fetch_handoff($config);
-} elseif ($action === 'refresh') {
-	refresh($providers, $config);
-} elseif (isset($_GET['code']) || isset($_GET['error'])) {
-	callback($providers, $config);
-} else {
-	http_response_code(404);
-	exit('Not found');
+	$action = $_GET['action'] ?? '';
+
+	if ($action === 'health') {
+		health($config);
+	}
+
+	rate_limit($config);
+
+	if ($action === 'authorize') {
+		authorize($providers, $config);
+	} elseif ($action === 'fetch') {
+		fetch_handoff($config);
+	} elseif ($action === 'refresh') {
+		refresh($providers, $config);
+	} elseif (isset($_GET['code']) || isset($_GET['error'])) {
+		callback($providers, $config);
+	} else {
+		http_response_code(404);
+		exit('Not found');
+	}
 }
 
 function authorize(array $providers, array $config): void
@@ -151,6 +161,55 @@ function callback(array $providers, array $config): void
 	@chmod(handoff_path($config['storage_dir'], $handle), 0600);
 
 	$back(['crawlwp_oauth_handle' => $handle]);
+}
+
+function health(array $config): void
+{
+	$checks = [
+		'google'  => ! empty($config['google']['client_id']) && ! empty($config['google']['client_secret']),
+		'bing'    => ! empty($config['bing']['client_id']) && ! empty($config['bing']['client_secret']),
+		'secret'  => strlen((string)$config['secret']) >= 32,
+		'storage' => is_dir($config['storage_dir']) && is_writable($config['storage_dir']),
+		'curl'    => function_exists('curl_init'),
+	];
+
+	json(in_array(false, $checks, true) ? 503 : 200, ['ok' => ! in_array(false, $checks, true)] + $checks);
+}
+
+/**
+ * Per-IP requests per minute (config `rate_limit`, default 120). Generous because many sites on one
+ * shared host share an IP; it only stops floods. Uses REMOTE_ADDR unless `client_ip_header` names a
+ * header set by a trusted CDN in front of the proxy (e.g. HTTP_CF_CONNECTING_IP).
+ */
+function rate_limit(array $config): void
+{
+	$limit  = (int)($config['rate_limit'] ?? 120);
+	$header = (string)($config['client_ip_header'] ?? '');
+	$ip     = (string)(($header !== '' ? $_SERVER[$header] ?? '' : '') ?: ($_SERVER['REMOTE_ADDR'] ?? ''));
+
+	if ($limit <= 0 || $ip === '') {
+		return;
+	}
+
+	$file = rtrim($config['storage_dir'], '/') . '/rl-' . sha1($ip) . '-' . intdiv(time(), 60) . '.cnt';
+	$fh   = fopen($file, 'c+');
+
+	if ( ! $fh) {
+		return;
+	}
+
+	flock($fh, LOCK_EX);
+	$count = (int)stream_get_contents($fh) + 1;
+	ftruncate($fh, 0);
+	rewind($fh);
+	fwrite($fh, (string)$count);
+	flock($fh, LOCK_UN);
+	fclose($fh);
+
+	if ($count > $limit) {
+		header('Retry-After: 60');
+		json(429, ['error' => 'rate_limited']);
+	}
 }
 
 function fetch_handoff(array $config): void
@@ -266,6 +325,13 @@ function gc_handoffs(string $dir): void
 {
 	foreach (glob(rtrim($dir, '/') . '/*.json') ?: [] as $file) {
 		if (filemtime($file) < time() - HANDOFF_TTL) {
+			@unlink($file);
+		}
+	}
+
+	// Rate-limit counters are per minute: anything older than two minutes is finished.
+	foreach (glob(rtrim($dir, '/') . '/rl-*.cnt') ?: [] as $file) {
+		if (filemtime($file) < time() - 120) {
 			@unlink($file);
 		}
 	}

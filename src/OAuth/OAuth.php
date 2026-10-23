@@ -252,9 +252,18 @@ final class OAuth
 
 	/* ---------- connect / return / disconnect ---------- */
 
-	public static function connect_url(string $provider): string
+	/**
+	 * @param string $return Admin URL to come back to afterwards. Defaults to API Settings.
+	 */
+	public static function connect_url(string $provider, string $return = ''): string
 	{
-		return wp_nonce_url(admin_url('admin-post.php?action=crawlwp_oauth_connect&provider=' . $provider), 'crawlwp_oauth_' . $provider);
+		$url = admin_url('admin-post.php?action=crawlwp_oauth_connect&provider=' . $provider);
+
+		if ($return !== '') {
+			$url = add_query_arg('return', rawurlencode($return), $url);
+		}
+
+		return wp_nonce_url($url, 'crawlwp_oauth_' . $provider);
 	}
 
 	public static function disconnect_url(string $provider): string
@@ -278,8 +287,10 @@ final class OAuth
 		$provider = self::request_provider();
 		check_admin_referer('crawlwp_oauth_' . $provider);
 
-		$state = wp_generate_password(32, false);
-		set_transient(self::state_key($provider), ['state' => $state, 'provider' => $provider], 15 * MINUTE_IN_SECONDS);
+		$state  = wp_generate_password(32, false);
+		$return = wp_validate_redirect(esc_url_raw(wp_unslash($_GET['return'] ?? '')), '');
+
+		set_transient(self::state_key($provider), ['state' => $state, 'provider' => $provider, 'return' => $return], 15 * MINUTE_IN_SECONDS);
 
 		// Not wp_safe_redirect(): the proxy is an external host by design.
 		wp_redirect(add_query_arg([
@@ -300,8 +311,10 @@ final class OAuth
 		$error = sanitize_key(wp_unslash($_GET['crawlwp_oauth_error'] ?? ''));
 		$label = self::label($provider);
 
+		$back = is_array($pending) ? (string)($pending['return'] ?? '') : '';
+
 		if ( ! is_array($pending) || $pending['provider'] !== $provider) {
-			self::finish('error', __('The connection request expired. Please click Connect again.', 'mihdan-index-now'));
+			self::finish('error', __('The connection request expired. Please click Connect again.', 'mihdan-index-now'), $back);
 		}
 
 		if ($error !== '') {
@@ -309,7 +322,7 @@ final class OAuth
 				/* translators: %s: Google or Bing */
 				? sprintf(__('%s connection was cancelled.', 'mihdan-index-now'), $label)
 				/* translators: 1: Google or Bing, 2: error code */
-				: sprintf(__('%1$s connection failed (%2$s). Please try again.', 'mihdan-index-now'), $label, $error));
+				: sprintf(__('%1$s connection failed (%2$s). Please try again.', 'mihdan-index-now'), $label, $error), $back);
 		}
 
 		$response = wp_remote_post(add_query_arg('action', 'fetch', self::proxy_url()), [
@@ -324,7 +337,7 @@ final class OAuth
 
 		if (is_wp_error($response) || empty($data['access_token']) || empty($data['refresh_token'])) {
 			/* translators: %s: Google or Bing */
-			self::finish('error', sprintf(__('%s connection failed: no access was granted. Please try again.', 'mihdan-index-now'), $label));
+			self::finish('error', sprintf(__('%s connection failed: no access was granted. Please try again.', 'mihdan-index-now'), $label), $back);
 		}
 
 		self::set_dropped($provider, false);
@@ -342,7 +355,7 @@ final class OAuth
 		do_action('crawlwp_oauth_connected', $provider);
 
 		/* translators: %s: Google or Bing */
-		self::finish('success', sprintf(__('Connected to %s.', 'mihdan-index-now'), $label));
+		self::finish('success', sprintf(__('Connected to %s.', 'mihdan-index-now'), $label), $back);
 	}
 
 	public static function handle_disconnect(): void
@@ -403,10 +416,10 @@ final class OAuth
 	/**
 	 * @return never
 	 */
-	private static function finish(string $type, string $message): void
+	private static function finish(string $type, string $message, string $return = ''): void
 	{
 		set_transient(self::notice_key(), [$type, $message], MINUTE_IN_SECONDS * 5);
-		wp_safe_redirect(CRAWLWP_API_SETTINGS_URL);
+		wp_safe_redirect($return !== '' ? $return : CRAWLWP_API_SETTINGS_URL);
 		exit;
 	}
 
