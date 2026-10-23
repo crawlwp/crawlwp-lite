@@ -14,6 +14,7 @@ use Mihdan\IndexNow\Dependencies\Google\Service\Exception as Google_Service_Exce
 class GoogleWebmaster extends WebmasterAbstract
 {
 	private const URL_UPDATED = 'URL_UPDATED';
+	private const URL_DELETED = 'URL_DELETED';
 	private const RECRAWL_ENDPOINT = '';
 	private const RATE_LIMIT_OPTION = 'crawlwp_google_indexing_rate_limit_expiration';
 
@@ -50,6 +51,7 @@ class GoogleWebmaster extends WebmasterAbstract
 
 		add_action('crawlwp/post_added', [$this, 'ping']);
 		add_action('crawlwp/post_updated', [$this, 'ping']);
+		add_action('crawlwp/post_deleted', [$this, 'ping_deleted'], 10, 2);
 	}
 
 	/**
@@ -71,6 +73,49 @@ class GoogleWebmaster extends WebmasterAbstract
 
 		if ($this->is_paused(self::RATE_LIMIT_OPTION, $post_url)) return;
 
+		$status_code = $this->notify($post_url, self::URL_UPDATED, $message);
+
+		$this->log_submission($post_url, get_the_title($post_id), $status_code, $message);
+
+		if (Utils::is_response_code_success($status_code)) {
+			do_action('crawlwp/index_pinged', 'post', $post_id);
+		}
+	}
+
+	/**
+	 * Tell Google a post's URL was removed (unpublished, trashed or deleted).
+	 *
+	 * @param int    $post_id   Post ID.
+	 * @param string $permalink Permalink captured before the post was removed.
+	 */
+	public function ping_deleted(int $post_id, string $permalink)
+	{
+		if ($permalink === '' || empty($this->get_token())) return;
+
+		if ($this->is_paused(self::RATE_LIMIT_OPTION, $permalink)) return;
+
+		$status_code = $this->notify($permalink, self::URL_DELETED, $message);
+
+		/* translators: %s: URL */
+		$this->log_submission($permalink, sprintf(__('%s (removed)', 'mihdan-index-now'), $permalink), $status_code, $message);
+
+		// Removals must not move the "last submitted" dates forward, so they get their own action.
+		if (Utils::is_response_code_success($status_code)) {
+			do_action('crawlwp/index_removal_pinged', 'post', $post_id, $permalink);
+		}
+	}
+
+	/**
+	 * Send one Indexing API notification. Pauses Google submissions after a rate limit.
+	 *
+	 * @param string      $url     URL.
+	 * @param string      $type    URL_UPDATED or URL_DELETED.
+	 * @param string|null $message Set to Google's error message, if any.
+	 *
+	 * @return int HTTP status code, 0 when nothing was accepted.
+	 */
+	private function notify(string $url, string $type, ?string &$message = null): int
+	{
 		$status_code   = 0;
 		$message       = '';
 		$is_rate_limit = false;
@@ -78,26 +123,19 @@ class GoogleWebmaster extends WebmasterAbstract
 		try {
 			$client = new Client();
 			$client->setApplicationName(Utils::get_plugin_name());
-			$client->setAuthConfig(json_decode($token, true));
+			$client->setAuthConfig(json_decode($this->get_token(), true));
 			$client->addScope(Indexing::INDEXING);
 			$client->setUseBatch(true);
 
 			$body = new UrlNotification();
-			$urls = [$post_url];
+			$body->setType($type);
+			$body->setUrl($url);
 
 			$service = new Indexing($client);
 			$batch   = $service->createBatch();
+			$batch->add($service->urlNotifications->publish($body), 'url-0');
 
-			foreach ($urls as $i => $url) {
-				$body->setType(self::URL_UPDATED);
-				$body->setUrl($url);
-
-				$batch->add($service->urlNotifications->publish($body), 'url-' . $i);
-			}
-
-			$results = $batch->execute();
-
-			foreach ($results as $result) {
+			foreach ($batch->execute() as $result) {
 				if ($result instanceof Google_Service_Exception) {
 					$status_code   = (int)$result->getCode();
 					$message       = $result->getErrors()[0]['message'] ?? $result->getMessage();
@@ -117,15 +155,13 @@ class GoogleWebmaster extends WebmasterAbstract
 			$message = $e->getMessage();
 		}
 
+		$message = (string)$message;
+
 		if ($is_rate_limit) {
 			update_option(self::RATE_LIMIT_OPTION, time() + (6 * HOUR_IN_SECONDS), false);
 		}
 
-		$this->log_submission($post_url, get_the_title($post_id), $status_code, (string)$message);
-
-		if (Utils::is_response_code_success($status_code)) {
-			do_action('crawlwp/index_pinged', 'post', $post_id);
-		}
+		return $status_code;
 	}
 
 	/**

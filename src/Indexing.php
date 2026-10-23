@@ -113,23 +113,35 @@ class Indexing
 	}
 
 	/**
-	 * Whether a post is effectively noindex: the per-post robots value wins,
-	 * otherwise the post type's "Hide from search results" default applies.
-	 * Robots meta is only output while the SEO features are enabled.
+	 * Whether a post is effectively noindex, by CrawlWP or another active SEO plugin.
 	 */
 	public static function is_post_noindex(WP_Post $post): bool
 	{
-		if ( ! FeatureGate::is_enabled()) {
-			return false;
+		return self::get_post_noindex_source($post) !== '';
+	}
+
+	/**
+	 * Name of the plugin that sets a post to noindex ("CrawlWP", "Yoast SEO"…), or empty.
+	 *
+	 * CrawlWP's own setting counts while its SEO features are enabled (only then is
+	 * its robots meta output): the per-post value wins, otherwise the post type's
+	 * "Hide from search results" default applies. Other SEO plugins are checked
+	 * too, since any noindex tag on the page keeps it out of search results.
+	 */
+	public static function get_post_noindex_source(WP_Post $post): string
+	{
+		if (FeatureGate::is_enabled()) {
+			$value   = (string)MetaFields::get($post->ID, MetaFields::ROBOTS_INDEX, '');
+			$noindex = $value !== ''
+				? $value === 'noindex'
+				: FrontendOutput::is_noindexed(Entities::post_type_key($post->post_type));
+
+			if ($noindex) {
+				return 'CrawlWP';
+			}
 		}
 
-		$value = (string)MetaFields::get($post->ID, MetaFields::ROBOTS_INDEX, '');
-
-		if ($value !== '') {
-			return $value === 'noindex';
-		}
-
-		return FrontendOutput::is_noindexed(Entities::post_type_key($post->post_type));
+		return ThirdPartyRobots::post_noindex_source($post);
 	}
 
 	/**
@@ -173,8 +185,11 @@ class Indexing
 			);
 		} elseif (function_exists('is_post_publicly_viewable') && ! is_post_publicly_viewable($post)) {
 			$reason = __('This post is not publicly viewable, so it is not submitted to search engines.', 'mihdan-index-now');
-		} elseif (self::is_post_noindex($post)) {
-			$reason = __('This post is set to noindex (hidden from search results), so it is not submitted to search engines.', 'mihdan-index-now');
+		} elseif (($source = self::get_post_noindex_source($post)) !== '') {
+			$reason = $source === 'CrawlWP'
+				? __('This post is set to noindex (hidden from search results), so it is not submitted to search engines.', 'mihdan-index-now')
+				/* translators: %s: SEO plugin name, e.g. Yoast SEO */
+				: sprintf(__('This post is set to noindex (hidden from search results) in %s, so it is not submitted to search engines.', 'mihdan-index-now'), $source);
 		} else {
 			$reason = '';
 		}
