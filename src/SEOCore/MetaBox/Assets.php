@@ -46,7 +46,7 @@ class Assets
 		wp_enqueue_script(
 			'crawlwp-seo-metabox',
 			$assets_url . 'crawlwp-metabox.js',
-			['jquery'],
+			['jquery', 'wp-url'],
 			$version,
 			true
 		);
@@ -155,6 +155,7 @@ class Assets
 			'language'         => get_bloginfo('language'),
 			'websiteId'        => home_url('/') . '#website',
 			'publisherId'      => home_url('/') . '#' . ((string) SiteInfoSettings::get('site_type', 'organization') === 'person' ? 'person' : 'organization'),
+			'slugStopWords'    => SeoSignals::slug_stop_words(),
 			'i18n'             => self::get_i18n_strings(),
 		];
 
