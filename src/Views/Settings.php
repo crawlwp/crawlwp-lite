@@ -7,6 +7,7 @@
 
 namespace Mihdan\IndexNow\Views;
 
+use Mihdan\IndexNow\OAuth\OAuth;
 use Mihdan\IndexNow\Indexing;
 use Mihdan\IndexNow\Logger\Logger;
 use Mihdan\IndexNow\SEOCore\FeatureGate\FeatureGate;
@@ -451,7 +452,10 @@ class Settings
 					array(
 						'type' => 'html',
 						'desc' => sprintf(
-							'<div class="notice notice-warning inline"><p>' . __('This setting will not work because Google API is not configured. Go to %sAPI Settings%s to set it up.', 'mihdan-index-now') . '</p></div>',
+							'<div class="notice notice-warning inline"><p>' . (OAuth::is_connected('google')
+								? __('Google only accepts indexing requests from a service account, so connecting with Google is not enough for this setting. Paste a service account JSON key under %sAPI Settings%s to submit pages to Google.', 'mihdan-index-now')
+								: __('This setting will not work because Google API is not configured. Go to %sAPI Settings%s to set it up.', 'mihdan-index-now')
+							) . '</p></div>',
 							'<a target="_blank" href="' . CRAWLWP_API_SETTINGS_URL . '">', '</a>'
 						),
 					)
@@ -704,10 +708,20 @@ class Settings
 			$this->wposa->add_field(
 				'google_webmaster',
 				array(
+					'id'   => 'oauth_connection',
+					'type' => 'html',
+					'name' => __('Google account', 'mihdan-index-now'),
+					'desc' => static fn() => OAuth::render_status('google'),
+				)
+			);
+
+			$this->wposa->add_field(
+				'google_webmaster',
+				array(
 					'id'       => 'json_key',
 					'type'     => 'textarea',
-					'name'     => __('Google JSON Key', 'mihdan-index-now'),
-					'desc'     => __('Paste the Service Account JSON key file contents you obtained from Google Cloud Console in the field.', 'mihdan-index-now'),
+					'name'     => __('Service Account JSON Key', 'mihdan-index-now'),
+					'desc'     => __('Needed only to submit pages with the Google Indexing API, because Google accepts indexing requests from a service account only. Search Console data works with the Google account connection above. Paste the contents of the JSON key file from Google Cloud Console. When a key is set, it is used for all Google requests.', 'mihdan-index-now'),
 					'help_tab' => 'https://crawlwp.com/article/integrating-wordpress-with-google-search/?utm_source=wp_dashboard&utm_medium=api_settings_page&utm_campaign=google_api'
 				)
 			);
@@ -723,9 +737,20 @@ class Settings
 			$this->wposa->add_field(
 				'bing_webmaster',
 				array(
+					'id'   => 'oauth_connection',
+					'type' => 'html',
+					'name' => __('Bing account', 'mihdan-index-now'),
+					'desc' => static fn() => OAuth::render_status('bing'),
+				)
+			);
+
+			$this->wposa->add_field(
+				'bing_webmaster',
+				array(
 					'id'       => 'api_key',
 					'type'     => 'text',
 					'name'     => __('API Key', 'mihdan-index-now'),
+					'desc'     => __('Optional if you connected your Bing account above. When an API key is set, it is used instead of the connection.', 'mihdan-index-now'),
 					'help_tab' => 'https://crawlwp.com/article/integrating-wordpress-with-bing/?utm_source=wp_dashboard&utm_medium=api_settings_page&utm_campaign=bing_api',
 				)
 			);
