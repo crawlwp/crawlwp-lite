@@ -66,6 +66,7 @@ function crawlwp_lite_pro_owned_options()
 		],
 		'prefixes' => [
 			'crawlwp_pro_',
+			'crawlwp_alerts',
 			'crawlwp_license',
 		],
 	];

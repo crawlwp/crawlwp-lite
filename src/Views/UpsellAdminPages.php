@@ -153,7 +153,7 @@ class UpsellAdminPages
 				[
 					'image' => 'upsell-opportunities.png',
 					'title' => __('Opportunities report', 'mihdan-index-now'),
-					'text'  => __('Keywords that are almost on page one, pages Google shows but people don\'t click, and pages losing clicks, each with what to do next.', 'mihdan-index-now'),
+					'text'  => __('Keywords that are almost on page one, pages Google shows but people don\'t click, pages losing clicks, and pages competing for the same search, each with what to do next.', 'mihdan-index-now'),
 				],
 				[
 					'image' => 'upsell-analytics.png',

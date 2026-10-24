@@ -174,6 +174,7 @@ class Settings
 							esc_html__('Site Audit', 'mihdan-index-now') . $new,
 							esc_html__('Why pages aren\'t indexed, with fixes', 'mihdan-index-now') . $new,
 							esc_html__('SEO Opportunities report', 'mihdan-index-now') . $new,
+							esc_html__('Index and ranking alerts by email', 'mihdan-index-now') . $new,
 							esc_html__('Google Analytics visitor stats', 'mihdan-index-now') . $new,
 							esc_html__('Job posting, Course and more schema types', 'mihdan-index-now') . $new,
 							esc_html__('Google Search Insights', 'mihdan-index-now'),
