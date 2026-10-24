@@ -287,9 +287,10 @@ class Utils
 		$pages = [
 			CRAWLWP_SLUG,
 			CRAWLWP_PRO_SEO_INDEX_SLUG,
-			CRAWLWP_PRO_SEO_STAT_SLUG,
-			CRAWLWP_PRO_ANALYTICS_SLUG
+			CRAWLWP_PRO_SEO_STAT_SLUG
 		];
+
+		$pages[] = CRAWLWP_PRO_ANALYTICS_SLUG;
 
 		return (isset($_GET['page']) && in_array($_GET['page'], $pages));
 	}

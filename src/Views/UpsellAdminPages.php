@@ -12,6 +12,13 @@ use Mihdan\IndexNow\Utils;
 class UpsellAdminPages
 {
 	/**
+	 * Analytics upsell page (Premium feature).
+	 *
+	 * @var WPOSA $analytics_wposa
+	 */
+	public $analytics_wposa;
+
+	/**
 	 * WP_OSA instance.
 	 *
 	 * @var WPOSA $wposa
@@ -23,12 +30,6 @@ class UpsellAdminPages
 	 * @var WPOSA $wposa2
 	 */
 	public $wposa2;
-	/**
-	 * WP_OSA instance for the Analytics page.
-	 *
-	 * @var WPOSA $wposa3
-	 */
-	public $wposa3;
 
 	public function __construct()
 	{
@@ -52,7 +53,9 @@ class UpsellAdminPages
 
 		$this->wposa2->enable_blank_mode()->setup_hooks();
 
-		$this->wposa3 = new WPOSA(
+		add_action('init', [$this, 'setup_fields'], 110);
+
+		$this->analytics_wposa = new WPOSA(
 			Utils::get_plugin_name(),
 			Utils::get_plugin_version(),
 			Utils::get_plugin_slug(),
@@ -60,9 +63,7 @@ class UpsellAdminPages
 			CRAWLWP_PRO_ANALYTICS_SLUG
 		);
 
-		$this->wposa3->enable_blank_mode()->setup_hooks();
-
-		add_action('init', [$this, 'setup_fields'], 110);
+		$this->analytics_wposa->enable_blank_mode()->setup_hooks();
 	}
 
 
@@ -196,7 +197,6 @@ class UpsellAdminPages
 
 		$this->wposa->sub_page_title  = esc_html__('SEO Indexing', 'mihdan-index-now');
 		$this->wposa2->sub_page_title = esc_html__('SEO Stats', 'mihdan-index-now');
-		$this->wposa3->sub_page_title = esc_html__('Analytics', 'mihdan-index-now');
 
 		$this->wposa->add_section([
 			'id' => 'seo_index_upsell',
@@ -224,14 +224,16 @@ class UpsellAdminPages
 			]
 		);
 
-		$this->wposa3->add_section([
+		$this->analytics_wposa->sub_page_title = esc_html__('Analytics', 'mihdan-index-now');
+
+		$this->analytics_wposa->add_section([
 			'id' => 'analytics_upsell',
 		]);
 
-		$this->wposa3->add_field(
+		$this->analytics_wposa->add_field(
 			'analytics_upsell',
 			[
-				'id'   => 'pages3',
+				'id'   => 'analytics_page',
 				'type' => 'html',
 				'desc' => $analytics_upsell
 			]
