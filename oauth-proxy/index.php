@@ -31,6 +31,8 @@ $providers = [
 		'token'     => 'https://oauth2.googleapis.com/token',
 		'scope'     => 'openid email https://www.googleapis.com/auth/webmasters.readonly',
 		'extra'     => ['access_type' => 'offline', 'prompt' => 'consent', 'include_granted_scopes' => 'true'],
+		// Optional permissions a site can ask for on top of the base scope.
+		'features'  => ['analytics' => 'https://www.googleapis.com/auth/analytics.readonly'],
 	],
 	'bing'   => [
 		'authorize' => 'https://www.bing.com/webmasters/oauth/authorize',
@@ -88,6 +90,7 @@ function authorize(array $providers, array $config): void
 	$provider   = (string)($input['provider'] ?? '');
 	$return_url = (string)($input['return_url'] ?? '');
 	$site_state = (string)($input['state'] ?? '');
+	$features   = requested_features($providers, $provider, (string)($input['features'] ?? ''));
 
 	if ( ! isset($providers[$provider]) || empty($config[$provider]['client_id'])) {
 		fail(400, 'Unknown provider.');
@@ -107,7 +110,7 @@ function authorize(array $providers, array $config): void
 	// site gets access before we send them to Google/Bing. The confirm cookie is SameSite=Lax, so a
 	// cross-site POST can't carry it and the form can't be submitted on the user's behalf.
 	if ( ! $post) {
-		confirm_page($provider, $return_url, $site_state);
+		confirm_page($provider, $return_url, $site_state, $features);
 	}
 
 	if ( ! hash_equals((string)($_COOKIE[CONFIRM] ?? ''), (string)($_POST['confirm'] ?? '')) || empty($_POST['confirm'])) {
@@ -125,21 +128,51 @@ function authorize(array $providers, array $config): void
 			'response_type' => 'code',
 			'client_id'     => $config[$provider]['client_id'],
 			'redirect_uri'  => $config['redirect_uri'],
-			'scope'         => $p['scope'],
+			'scope'         => scope_for($providers, $provider, $features),
 			'state'         => $nonce,
 		] + $p['extra']));
 }
 
 /**
+ * Optional features (e.g. "analytics") the provider knows about, from a comma-separated list. Unknown ones are dropped.
+ *
+ * @return string[]
+ */
+function requested_features(array $providers, string $provider, string $features): array
+{
+	$known = array_keys($providers[$provider]['features'] ?? []);
+
+	return array_values(array_intersect($known, array_map('trim', explode(',', $features))));
+}
+
+/**
+ * The base scope plus the scopes of the requested features.
+ */
+function scope_for(array $providers, string $provider, array $features): string
+{
+	$scopes = [$providers[$provider]['scope']];
+
+	foreach ($features as $feature) {
+		$scopes[] = $providers[$provider]['features'][$feature];
+	}
+
+	return implode(' ', $scopes);
+}
+
+/**
  * "Connect <site> to Google Search Console?" page. Exits.
  */
-function confirm_page(string $provider, string $return_url, string $site_state): void
+function confirm_page(string $provider, string $return_url, string $site_state, array $features = []): void
 {
 	$token = bin2hex(random_bytes(16));
 	setcookie(CONFIRM, $token, cookie_options(time() + FLOW_TTL));
 
 	$site    = site_label($return_url);
 	$service = $provider === 'google' ? 'Google Search Console' : 'Bing Webmaster Tools';
+
+	if (in_array('analytics', $features, true)) {
+		$service .= ' and Google Analytics';
+	}
 	$e       = static fn(string $v): string => htmlspecialchars($v, ENT_QUOTES, 'UTF-8');
 
 	http_response_code(200);
@@ -164,6 +197,7 @@ function confirm_page(string $provider, string $return_url, string $site_state):
 		. '<input type="hidden" name="provider" value="' . $e($provider) . '">'
 		. '<input type="hidden" name="return_url" value="' . $e($return_url) . '">'
 		. '<input type="hidden" name="state" value="' . $e($site_state) . '">'
+		. '<input type="hidden" name="features" value="' . $e(implode(',', $features)) . '">'
 		. '<input type="hidden" name="confirm" value="' . $e($token) . '">'
 		. '<button type="submit">Continue to ' . $e($provider === 'google' ? 'Google' : 'Microsoft') . '</button>'
 		. '<a href="' . $e(substr($return_url, 0, (int)strpos($return_url, '/wp-admin/')) . '/wp-admin/') . '">Cancel</a>'
