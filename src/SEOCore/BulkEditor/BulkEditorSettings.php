@@ -2,6 +2,7 @@
 
 namespace Mihdan\IndexNow\SEOCore\BulkEditor;
 
+use Mihdan\IndexNow\SEOCore\AI\Generator;
 use Mihdan\IndexNow\SEOCore\MetaBox\MetaFields;
 use Mihdan\IndexNow\SEOCore\MetaBox\PostListColumn;
 use Mihdan\IndexNow\SEOCore\MetaBox\SeoSignals;
@@ -24,6 +25,8 @@ use Mihdan\IndexNow\Views\WPOSA;
  *   crawlwp_bulk_editor_list — fetch table HTML + pagination
  *   crawlwp_bulk_editor_save — persist edited rows
  *   crawlwp_bulk_editor_preview — length of a value once its variables are resolved
+ *   crawlwp_bulk_editor_images — image rows for the "Image alt text" view (ImageAlt)
+ *   crawlwp_bulk_editor_ai — write one field with AI (BulkAI)
  */
 class BulkEditorSettings
 {
@@ -42,6 +45,36 @@ class BulkEditorSettings
 		add_action('wp_ajax_crawlwp_bulk_editor_list', [$this, 'ajax_list']);
 		add_action('wp_ajax_crawlwp_bulk_editor_save', [$this, 'ajax_save']);
 		add_action('wp_ajax_crawlwp_bulk_editor_preview', [$this, 'ajax_preview']);
+
+		new BulkAI();
+		new ImageAlt();
+	}
+
+	/**
+	 * The "AI" button next to a field, or '' when no AI provider is connected
+	 * (Settings > Connectors), since it could only ever fail.
+	 */
+	public static function ai_button(string $field): string
+	{
+		static $ready = null;
+
+		if ($ready === null) {
+			$ready = Generator::is_ready();
+		}
+
+		if (! $ready) {
+			return '';
+		}
+
+		return '<button type="button" class="cwp-bulk-ai" data-ai-field="' . esc_attr($field) . '" title="' . esc_attr__('Write with AI', 'mihdan-index-now') . '">'
+			. self::ai_icon(12)
+			. esc_html__('AI', 'mihdan-index-now')
+			. '</button>';
+	}
+
+	public static function ai_icon(int $size): string
+	{
+		return '<svg width="' . $size . '" height="' . $size . '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2l2.09 6.26L20 10l-5.91 1.74L12 18l-2.09-6.26L4 10l5.91-1.74z"/><path d="M19 2l.87 2.61L22.5 5.5l-2.63.89L19 9l-.87-2.61L15.5 5.5l2.63-.89z"/></svg>';
 	}
 
 	// -------------------------------------------------------------------------
@@ -58,7 +91,7 @@ class BulkEditorSettings
 			'header_menu_id' => 'advanced_settings',
 			'id'             => self::SECTION,
 			'title'          => __('Bulk Editor', 'mihdan-index-now'),
-			'desc'           => __('Edit the SEO title and meta description of many posts at once, right from this table — no need to open each post individually.', 'mihdan-index-now'),
+			'desc'           => __('Edit the SEO title and meta description of many posts, and the alt text of many images, at once, right from this table — no need to open each one individually.', 'mihdan-index-now'),
 		]);
 
 		$wposa->add_field(self::SECTION, [
@@ -90,14 +123,14 @@ class BulkEditorSettings
 			'crawlwp-bulk-editor',
 			$assets_url . 'bulk-editor.css',
 			[],
-			'1.0.0'
+			'1.1.0'
 		);
 
 		wp_enqueue_script(
 			'crawlwp-bulk-editor',
 			$assets_url . 'bulk-editor.js',
 			['jquery'],
-			'1.0.1',
+			'1.1.0',
 			true
 		);
 
@@ -105,7 +138,57 @@ class BulkEditorSettings
 			'ajaxUrl'   => admin_url('admin-ajax.php'),
 			'nonce'     => wp_create_nonce('crawlwp_bulk_editor_nonce'),
 			'variables' => $this->get_variables(),
+			'aiReady'    => Generator::is_ready(),
+			'batchAI'    => BulkAI::batch_enabled(),
+			'upgradeUrl' => 'https://crawlwp.com/pricing/?utm_source=wp_dashboard&utm_medium=upgrade&utm_campaign=crawlwp-bulk-ai',
+			'connectUrl' => admin_url('options-connectors.php'),
+			'aiIcon'     => self::ai_icon(18),
 			'i18n'      => [
+				'post'            => __('Post', 'mihdan-index-now'),
+				'seoTitle'        => __('SEO Title', 'mihdan-index-now'),
+				'metaDescription' => __('Meta Description', 'mihdan-index-now'),
+				'image'           => __('Image', 'mihdan-index-now'),
+				'altText'         => __('Alt text', 'mihdan-index-now'),
+				'noImages'        => __('No images found.', 'mihdan-index-now'),
+				/* translators: %s: number of images without alt text. */
+				'missingAlt'      => __('%s missing', 'mihdan-index-now'),
+				'aiWriting'       => __('Writing…', 'mihdan-index-now'),
+				'aiLookingImage'  => __('Looking at the image…', 'mihdan-index-now'),
+				'aiNotSaved'      => __('AI · not saved', 'mihdan-index-now'),
+				'aiError'         => __('AI generation failed. Please try again.', 'mihdan-index-now'),
+				'aiNotReady'      => __('Connect an AI provider in WordPress under Settings → Connectors to write with AI.', 'mihdan-index-now'),
+				'aiConnect'       => __('Open Connectors', 'mihdan-index-now'),
+				'aiPremium'       => __('Writing many titles, descriptions or alt texts at once is part of CrawlWP Premium. You can still use the AI button on each field.', 'mihdan-index-now'),
+				'aiUpgrade'       => __('Upgrade to CrawlWP Premium', 'mihdan-index-now'),
+				'aiDialogTitle'   => __('Write with AI', 'mihdan-index-now'),
+				'aiWrite'         => __('Write', 'mihdan-index-now'),
+				'aiFor'           => __('For', 'mihdan-index-now'),
+				'aiExisting'      => __('Fields that already have text', 'mihdan-index-now'),
+				'aiKeep'          => __('Leave them as they are', 'mihdan-index-now'),
+				'aiRewrite'       => __('Rewrite them too', 'mihdan-index-now'),
+				'aiTitles'        => __('SEO titles', 'mihdan-index-now'),
+				'aiDescriptions'  => __('Meta descriptions', 'mihdan-index-now'),
+				'aiAlts'          => __('Alt text', 'mihdan-index-now'),
+				/* translators: %d: number of selected rows. */
+				'aiSelected'      => __('The %d selected rows on this page', 'mihdan-index-now'),
+				/* translators: %d: number of rows on this page. */
+				'aiAllOnPage'     => __('All %d rows on this page', 'mihdan-index-now'),
+				'aiPageHint'      => __('Show up to 100 rows per page to do more at once.', 'mihdan-index-now'),
+				/* translators: %d: number of AI requests. */
+				'aiNote'          => __('Up to %d requests to your AI provider (Settings → Connectors). The text is filled in for you to review. Nothing is saved until you click Save Table Changes.', 'mihdan-index-now'),
+				/* translators: %d: number of fields. */
+				'aiStart'         => __('Write %d fields', 'mihdan-index-now'),
+				'aiNothing'       => __('Nothing to write: the chosen fields already have text. Choose "Rewrite them too" to replace it.', 'mihdan-index-now'),
+				'cancel'          => __('Cancel', 'mihdan-index-now'),
+				'stop'            => __('Stop', 'mihdan-index-now'),
+				'aiProgressPosts' => __('Writing SEO titles and descriptions…', 'mihdan-index-now'),
+				'aiProgressAlt'   => __('Writing alt text…', 'mihdan-index-now'),
+				/* translators: 1: fields done, 2: total fields. */
+				'aiProgressCount' => __('%1$d of %2$d', 'mihdan-index-now'),
+				/* translators: 1: fields written, 2: fields that failed. */
+				'aiDone'          => __('Wrote %1$d fields. %2$d could not be written. Review the text, then click Save Table Changes.', 'mihdan-index-now'),
+				'aiStopped'       => __('Stopped. The text written so far is in the table, not saved yet.', 'mihdan-index-now'),
+				'aiRateLimited'   => __('Stopped: too many AI requests for now. Wait a few minutes, then run it again for the rest.', 'mihdan-index-now'),
 				'saving'          => __('Saving…', 'mihdan-index-now'),
 				'saved'           => __('All changes saved.', 'mihdan-index-now'),
 				'saveError'       => __('Some changes could not be saved. Please try again.', 'mihdan-index-now'),
@@ -225,6 +308,10 @@ class BulkEditorSettings
 			wp_send_json_error(['message' => __('Nothing to save.', 'mihdan-index-now')]);
 		}
 
+		if (sanitize_key(wp_unslash($_POST['type'] ?? '')) === 'images') {
+			$this->send_save_result(ImageAlt::save($rows), true);
+		}
+
 		$saved  = [];
 		$failed = [];
 
@@ -258,6 +345,17 @@ class BulkEditorSettings
 			$saved[] = $id;
 		}
 
+		$this->send_save_result(['saved' => $saved, 'failed' => $failed], false);
+	}
+
+	/**
+	 * @param array{saved: int[], failed: int[]} $result
+	 */
+	private function send_save_result(array $result, bool $images): void
+	{
+		$saved  = $result['saved'];
+		$failed = $result['failed'];
+
 		if (empty($saved)) {
 			wp_send_json_error([
 				'message' => __('Failed to save changes.', 'mihdan-index-now'),
@@ -265,11 +363,17 @@ class BulkEditorSettings
 			]);
 		}
 
-		$message = sprintf(
-			/* translators: %d: number of posts updated. */
-			_n('%d post updated.', '%d posts updated.', count($saved), 'mihdan-index-now'),
-			count($saved)
-		);
+		$message = $images
+			? sprintf(
+				/* translators: %d: number of images updated. */
+				_n('%d image updated.', '%d images updated.', count($saved), 'mihdan-index-now'),
+				count($saved)
+			)
+			: sprintf(
+				/* translators: %d: number of posts updated. */
+				_n('%d post updated.', '%d posts updated.', count($saved), 'mihdan-index-now'),
+				count($saved)
+			);
 
 		if (! empty($failed)) {
 			$message .= ' ' . sprintf(
@@ -392,10 +496,26 @@ class BulkEditorSettings
 
 		ob_start();
 		?>
-		<div class="cwp-bulk-wrap" id="cwp-bulk-wrap">
+		<div class="cwp-bulk-wrap<?php echo BulkAI::batch_enabled() ? ' cwp-bulk-wrap--batch' : ''; ?>" id="cwp-bulk-wrap">
+
+			<?php /* ---- Views ---- */ ?>
+			<div class="cwp-bulk-views" role="tablist">
+				<button type="button" class="cwp-bulk-view is-active" role="tab" aria-selected="true" data-view="posts"><?php esc_html_e('Posts and pages', 'mihdan-index-now'); ?></button>
+				<?php if (current_user_can('upload_files')) : $missing = ImageAlt::count_missing(); ?>
+					<button type="button" class="cwp-bulk-view" role="tab" aria-selected="false" data-view="images">
+						<?php esc_html_e('Image alt text', 'mihdan-index-now'); ?>
+						<b class="cwp-bulk-view__badge" id="cwp-bulk-missing-alt"<?php echo $missing ? '' : ' style="display:none"'; ?>><?php echo esc_html(sprintf(/* translators: %s: number of images without alt text. */ __('%s missing', 'mihdan-index-now'), number_format_i18n($missing))); ?></b>
+					</button>
+				<?php endif; ?>
+			</div>
 
 			<?php /* ---- Toolbar ---- */ ?>
 			<div class="cwp-bulk-toolbar">
+				<select id="cwp-bulk-image-filter" class="cwp-bulk-select" style="display:none">
+					<option value="missing_alt"><?php esc_html_e('Missing alt text', 'mihdan-index-now'); ?></option>
+					<option value="all"><?php esc_html_e('All images', 'mihdan-index-now'); ?></option>
+				</select>
+
 				<select id="cwp-bulk-post-type" class="cwp-bulk-select">
 					<option value=""><?php esc_html_e('All post types', 'mihdan-index-now'); ?></option>
 					<?php foreach ($post_types as $post_type) : ?>
@@ -412,6 +532,11 @@ class BulkEditorSettings
 				</select>
 
 				<div class="cwp-bulk-toolbar__right">
+					<button type="button" class="cwp-bulk-btn cwp-bulk-btn--ai<?php echo BulkAI::batch_enabled() ? '' : ' is-locked'; ?>" id="cwp-bulk-ai-btn">
+						<?php echo self::ai_icon(14); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static SVG ?>
+						<?php esc_html_e('Write with AI', 'mihdan-index-now'); ?>
+						<?php if (! BulkAI::batch_enabled()) : ?><span class="cwp-bulk-pro"><?php esc_html_e('Premium', 'mihdan-index-now'); ?></span><?php endif; ?>
+					</button>
 					<input type="search" id="cwp-bulk-search" class="cwp-bulk-search"
 					       placeholder="<?php esc_attr_e('Search…', 'mihdan-index-now'); ?>" />
 					<button type="button" class="cwp-bulk-btn cwp-bulk-btn--primary" id="cwp-bulk-save-btn" disabled>
@@ -420,10 +545,18 @@ class BulkEditorSettings
 				</div>
 			</div>
 
+			<div class="cwp-bulk-notice" id="cwp-bulk-notice" hidden></div>
+			<div class="cwp-bulk-progress" id="cwp-bulk-progress" style="display:none" role="status" aria-live="polite">
+				<span class="cwp-bulk-progress__label"></span>
+				<span class="cwp-bulk-progress__bar"><i></i></span>
+				<button type="button" class="cwp-bulk-progress__stop"><?php esc_html_e('Stop', 'mihdan-index-now'); ?></button>
+			</div>
+
 			<?php /* ---- Table ---- */ ?>
 			<table class="cwp-bulk-table" id="cwp-bulk-table">
-				<thead>
+				<thead id="cwp-bulk-thead">
 					<tr>
+						<th class="cwp-bulk-col-check"><input type="checkbox" class="cwp-bulk-check-all" aria-label="<?php esc_attr_e('Select all rows', 'mihdan-index-now'); ?>"></th>
 						<th class="cwp-bulk-col-post"><?php esc_html_e('Post', 'mihdan-index-now'); ?></th>
 						<th class="cwp-bulk-col-title"><?php esc_html_e('SEO Title', 'mihdan-index-now'); ?></th>
 						<th class="cwp-bulk-col-desc"><?php esc_html_e('Meta Description', 'mihdan-index-now'); ?></th>
@@ -431,7 +564,7 @@ class BulkEditorSettings
 				</thead>
 				<tbody id="cwp-bulk-tbody">
 					<tr class="cwp-bulk-loading-row">
-						<td colspan="3"><?php esc_html_e('Loading…', 'mihdan-index-now'); ?></td>
+						<td colspan="4"><?php esc_html_e('Loading…', 'mihdan-index-now'); ?></td>
 					</tr>
 				</tbody>
 			</table>
@@ -450,7 +583,7 @@ class BulkEditorSettings
 				<span class="cwp-bulk-page-links" id="cwp-bulk-page-links"></span>
 			</div>
 
-			<div class="cwp-bulk-notice" id="cwp-bulk-notice" hidden></div>
+
 
 		</div><!-- .cwp-bulk-wrap -->
 		<?php
@@ -466,7 +599,7 @@ class BulkEditorSettings
 	private function render_table_rows(array $posts): string
 	{
 		if (empty($posts)) {
-			return '<tr class="cwp-bulk-no-items"><td colspan="3">' . esc_html__('No posts found.', 'mihdan-index-now') . '</td></tr>';
+			return '<tr class="cwp-bulk-no-items"><td colspan="4">' . esc_html__('No posts found.', 'mihdan-index-now') . '</td></tr>';
 		}
 
 		$html = '';
@@ -481,6 +614,8 @@ class BulkEditorSettings
 			$view    = get_permalink($id);
 
 			$html .= '<tr data-id="' . $id . '">';
+
+			$html .= '<td class="cwp-bulk-col-check"><input type="checkbox" class="cwp-bulk-check" aria-label="' . esc_attr(sprintf(/* translators: %s: post title */ __('Select %s', 'mihdan-index-now'), get_the_title($id))) . '"></td>';
 
 			$html .= '<td class="cwp-bulk-col-post">'
 				. '<strong class="cwp-bulk-post-title">' . esc_html(get_the_title($id) !== '' ? get_the_title($id) : __('(no title)', 'mihdan-index-now')) . '</strong>'
@@ -497,6 +632,7 @@ class BulkEditorSettings
 				. '<textarea class="cwp-bulk-input cwp-bulk-input--title" rows="2" data-field="seo_title" '
 				. 'placeholder="' . esc_attr__('Leave blank to use the global template', 'mihdan-index-now') . '" '
 				. 'data-original="' . esc_attr($title) . '">' . esc_textarea($title) . '</textarea>'
+				. self::ai_button('seo_title')
 				. '<button type="button" class="cwp-bulk-vars" aria-haspopup="true" aria-expanded="false" title="' . esc_attr__('Insert variable', 'mihdan-index-now') . '">&hellip;</button>'
 				. '</div>'
 				. '<span class="cwp-bulk-count" data-max="' . self::TITLE_MAX . '" data-length="' . $this->resolved_length($title, $post) . '"></span>'
@@ -507,6 +643,7 @@ class BulkEditorSettings
 				. '<textarea class="cwp-bulk-input cwp-bulk-input--desc" rows="3" data-field="seo_description" '
 				. 'placeholder="' . esc_attr__('Leave blank to use the global template', 'mihdan-index-now') . '" '
 				. 'data-original="' . esc_attr($desc) . '">' . esc_textarea($desc) . '</textarea>'
+				. self::ai_button('seo_description')
 				. '<button type="button" class="cwp-bulk-vars" aria-haspopup="true" aria-expanded="false" title="' . esc_attr__('Insert variable', 'mihdan-index-now') . '">&hellip;</button>'
 				. '</div>'
 				. '<span class="cwp-bulk-count" data-max="' . self::DESC_MAX . '" data-length="' . $this->resolved_length($desc, $post) . '"></span>'
