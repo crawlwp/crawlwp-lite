@@ -66,6 +66,10 @@
 		bindEvents();
 		bindAI();
 		loadTable();
+
+		if ($('#cwp-bulk-missing-alt').length) {
+			refreshMissingCount();
+		}
 	});
 
 	// -------------------------------------------------------------------------
@@ -513,7 +517,7 @@
 
 	function refreshMissingCount() {
 		$.post(cfg.ajaxUrl, {
-			action: 'crawlwp_bulk_editor_images', nonce: cfg.nonce, filter: 'missing_alt', per_page: 1, page: 1
+			action: 'crawlwp_bulk_editor_images', nonce: cfg.nonce, count_only: 1
 		}, function (resp) {
 			if (resp && resp.success) {
 				updateMissingBadge(resp.data.missing);
@@ -611,7 +615,7 @@
 
 			var data = resp && resp.data ? resp.data : {};
 			fieldError($td, data.message || i18n.aiError);
-			done({ error: data.message || i18n.aiError, connectUrl: data.connectUrl });
+			done({ error: data.message || i18n.aiError, connectUrl: data.connectUrl, stop: !!data.stop });
 		}).fail(function (xhr) {
 			var data = xhr && xhr.responseJSON && xhr.responseJSON.data ? xhr.responseJSON.data : {};
 			fieldError($td, data.message || i18n.aiError);
@@ -805,8 +809,8 @@
 					return;
 				}
 
-				// A connection problem fails every field the same way: stop.
-				if (result.connectUrl) {
+				// A connection problem (or a model that can't read images) fails every field the same way: stop.
+				if (result.connectUrl || result.stop) {
 					finish(result.error, true, result.connectUrl);
 					return;
 				}

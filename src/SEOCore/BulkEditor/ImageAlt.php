@@ -70,6 +70,11 @@ class ImageAlt
 			wp_send_json_error(['message' => __('Permission denied.', 'mihdan-index-now')]);
 		}
 
+		// Just the number of images without alt text, for the view's badge.
+		if (! empty($_POST['count_only'])) {
+			wp_send_json_success(['missing' => self::count_missing()]);
+		}
+
 		$filter   = sanitize_key(wp_unslash($_POST['filter'] ?? 'missing_alt'));
 		$search   = sanitize_text_field(wp_unslash($_POST['search'] ?? ''));
 		$per_page = max(1, min(200, (int) ($_POST['per_page'] ?? 20)));

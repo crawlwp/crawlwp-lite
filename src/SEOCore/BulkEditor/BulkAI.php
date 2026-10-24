@@ -62,7 +62,14 @@ class BulkAI
 		$text = $field === 'alt' ? $this->alt($id, $previous) : $this->post_field($id, $field, $previous);
 
 		if (is_wp_error($text)) {
-			wp_send_json_error(Requests::error_response($text));
+			$response = Requests::error_response($text);
+
+			// Every other image would fail the same way: stop a "Write with AI" run.
+			if ($text->get_error_code() === 'crawlwp_ai_no_vision') {
+				$response['stop'] = true;
+			}
+
+			wp_send_json_error($response);
 		}
 
 		Requests::count_request($batch);

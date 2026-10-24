@@ -501,10 +501,11 @@ class BulkEditorSettings
 			<?php /* ---- Views ---- */ ?>
 			<div class="cwp-bulk-views" role="tablist">
 				<button type="button" class="cwp-bulk-view is-active" role="tab" aria-selected="true" data-view="posts"><?php esc_html_e('Posts and pages', 'mihdan-index-now'); ?></button>
-				<?php if (current_user_can('upload_files')) : $missing = ImageAlt::count_missing(); ?>
+				<?php if (current_user_can('upload_files')) : ?>
 					<button type="button" class="cwp-bulk-view" role="tab" aria-selected="false" data-view="images">
 						<?php esc_html_e('Image alt text', 'mihdan-index-now'); ?>
-						<b class="cwp-bulk-view__badge" id="cwp-bulk-missing-alt"<?php echo $missing ? '' : ' style="display:none"'; ?>><?php echo esc_html(sprintf(/* translators: %s: number of images without alt text. */ __('%s missing', 'mihdan-index-now'), number_format_i18n($missing))); ?></b>
+						<?php /* Filled in by the script once the Bulk Editor loads: counting can be slow on large media libraries. */ ?>
+						<b class="cwp-bulk-view__badge" id="cwp-bulk-missing-alt" style="display:none"></b>
 					</button>
 				<?php endif; ?>
 			</div>

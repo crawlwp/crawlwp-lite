@@ -312,6 +312,12 @@ class Generator
 			return new \WP_Error('crawlwp_ai_image', __('The image file is missing or too large to send.', 'mihdan-index-now'));
 		}
 
+		// The resized copy can be in another format than the original (WordPress can save sizes as WebP).
+		if (strpos($file, '://') === false) {
+			$type = wp_check_filetype($file);
+			$mime = ! empty($type['type']) ? (string) $type['type'] : $mime;
+		}
+
 		$parent   = (int) wp_get_post_parent_id($attachment_id);
 		$language = $this->post_language($parent);
 		$this->reserved = 0;
@@ -393,20 +399,21 @@ class Generator
 	}
 
 	/**
-	 * Local path of a mid-sized copy of the image (the "large" size when there
-	 * is one), so requests stay small. '' when no usable file exists.
+	 * A mid-sized copy of the image to send: the local path of the "large"
+	 * size when there is one, so requests stay small. When the uploads aren't
+	 * on this server (offloaded to cloud storage), its public URL instead.
+	 * '' when there is nothing usable.
 	 */
 	private function image_file(int $attachment_id): string
 	{
-		$original = (string) get_attached_file($attachment_id);
-		$file     = $original;
+		$file    = (string) get_attached_file($attachment_id);
+		$uploads = wp_get_upload_dir();
 
 		foreach (['large', 'medium_large'] as $size) {
 			$meta = image_get_intermediate_size($attachment_id, $size);
 
 			if (is_array($meta) && ! empty($meta['path'])) {
-				$uploads = wp_get_upload_dir();
-				$path    = trailingslashit($uploads['basedir']) . $meta['path'];
+				$path = trailingslashit($uploads['basedir']) . $meta['path'];
 
 				if (is_file($path)) {
 					$file = $path;
@@ -415,11 +422,14 @@ class Generator
 			}
 		}
 
-		if ($file === '' || ! is_file($file) || (int) filesize($file) > self::MAX_IMAGE_BYTES) {
-			return '';
+		if ($file !== '' && is_file($file)) {
+			return (int) filesize($file) <= self::MAX_IMAGE_BYTES ? $file : '';
 		}
 
-		return $file;
+		$url = (string) wp_get_attachment_image_url($attachment_id, 'large');
+
+		// wp_http_validate_url() refuses local and private network addresses.
+		return $url !== '' && wp_http_validate_url($url) ? $url : '';
 	}
 
 	/**
