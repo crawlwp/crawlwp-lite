@@ -3,6 +3,7 @@
 namespace Mihdan\IndexNow\SEOCore\MetaBox;
 
 use Mihdan\IndexNow\SEOCore\AI\Generator;
+use Mihdan\IndexNow\SEOCore\Schema\RichResults;
 use Mihdan\IndexNow\SEOCore\Breadcrumbs\BreadcrumbSettings;
 use Mihdan\IndexNow\SEOCore\SiteInfoSettings\SiteInfoSettings;
 use Mihdan\IndexNow\SEOCore\TitleMeta\Entities;
@@ -61,6 +62,15 @@ class Assets
 			'var crawlwpSEO = ' . wp_json_encode($localize_data, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . ';',
 			'before'
 		);
+
+		if ($post instanceof \WP_Post) {
+			wp_enqueue_script('crawlwp-rich-results', $assets_url . 'rich-results.js', [], $version, true);
+			wp_add_inline_script(
+				'crawlwp-rich-results',
+				'var crawlwpRich = ' . wp_json_encode(RichResults::editor_data($post), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . ';',
+				'before'
+			);
+		}
 
 		/**
 		 * Fires after the SEO metabox assets are enqueued, so add-on plugins can

@@ -517,6 +517,13 @@ $cwp_templates = \Mihdan\IndexNow\SEOCore\MetaBox\Assets::title_meta_templates($
       </div>
     </div>
 
+    <div class="cwp-section cwp-rich" id="cwpRich">
+      <h4 class="cwp-section-title"><?php esc_html_e('Rich result', 'mihdan-index-now'); ?></h4>
+      <p class="cwp-section-desc"><?php esc_html_e('Describe what this page is about so Google can show extra details in search, like star ratings, prices or event dates. Only add information that visitors can see on the page.', 'mihdan-index-now'); ?></p>
+      <input type="hidden" id="cwpRichValue" name="<?php echo esc_attr(MetaFields::SCHEMA_RICH); ?>" value="<?php echo esc_attr((string) MetaFields::get($post->ID, MetaFields::SCHEMA_RICH, '')); ?>">
+      <div id="cwpRichApp"></div>
+    </div>
+
     <div class="cwp-section">
       <div class="cwp-field">
         <div class="cwp-label-row"><label class="cwp-label" for="cwpSchemaCustom"><?php esc_html_e('Custom JSON-LD', 'mihdan-index-now'); ?></label></div>
