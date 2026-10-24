@@ -23,6 +23,12 @@ class UpsellAdminPages
 	 * @var WPOSA $wposa2
 	 */
 	public $wposa2;
+	/**
+	 * WP_OSA instance for the Analytics page.
+	 *
+	 * @var WPOSA $wposa3
+	 */
+	public $wposa3;
 
 	public function __construct()
 	{
@@ -45,6 +51,16 @@ class UpsellAdminPages
 		);
 
 		$this->wposa2->enable_blank_mode()->setup_hooks();
+
+		$this->wposa3 = new WPOSA(
+			Utils::get_plugin_name(),
+			Utils::get_plugin_version(),
+			Utils::get_plugin_slug(),
+			'crawlwp_upsell',
+			CRAWLWP_PRO_ANALYTICS_SLUG
+		);
+
+		$this->wposa3->enable_blank_mode()->setup_hooks();
 
 		add_action('init', [$this, 'setup_fields'], 110);
 	}
@@ -141,7 +157,7 @@ class UpsellAdminPages
 				[
 					'image' => 'upsell-analytics.png',
 					'title' => __('Google Analytics visitor stats', 'mihdan-index-now'),
-					'text'  => __('Visitors, views and time on page on your dashboard and for each post, read from your Google Analytics. No extra tracking code.', 'mihdan-index-now'),
+					'text'  => __('A full Analytics report in WordPress, plus visitor numbers on your dashboard and for each post, read from your Google Analytics. No extra tracking code.', 'mihdan-index-now'),
 				],
 			]
 		);
@@ -155,8 +171,32 @@ class UpsellAdminPages
 		$seo_stat_upsell .= '</div>';
 		$seo_stat_upsell .= '</div>';
 
+		$analytics_url = 'https://crawlwp.com/pricing/?utm_source=wp_dashboard&utm_medium=upgrade&utm_campaign=crawlwp-analytics-upsell-page';
+
+		$analytics_upsell = '<div class="crawlwp-analytics-upsell">';
+		$analytics_upsell .= '<img class="crawlwp-analytics-upsell__preview" src="' . esc_url(Utils::get_plugin_asset_url('images/upsell-analytics-page.png')) . '" alt="">';
+		$analytics_upsell .= '<div class="crawlwp-analytics-upsell__box">';
+		$analytics_upsell .= sprintf('<h2>%s</h2>', esc_html__('See your Google Analytics stats in WordPress', 'mihdan-index-now'));
+		$analytics_upsell .= sprintf('<p>%s</p>', esc_html__('CrawlWP Premium shows who visits your site, where they come from and which pages they read, right next to your search data.', 'mihdan-index-now'));
+		$analytics_upsell .= '<ul>';
+		foreach (
+			[
+				__('Visitors, views and time on page, compared with the previous period', 'mihdan-index-now'),
+				__('Top pages, landing pages, traffic sources, countries and devices', 'mihdan-index-now'),
+				__('Click any page to see its own numbers, or check them in the post editor', 'mihdan-index-now'),
+				__('Connect with one click, or use your service account', 'mihdan-index-now'),
+			] as $point
+		) {
+			$analytics_upsell .= '<li>' . esc_html($point) . '</li>';
+		}
+		$analytics_upsell .= '</ul>';
+		$analytics_upsell .= sprintf('<a class="button button-primary button-hero" target="_blank" href="%s">%s</a>', esc_url($analytics_url), esc_html__('Upgrade to CrawlWP Premium', 'mihdan-index-now'));
+		$analytics_upsell .= '</div>';
+		$analytics_upsell .= '</div>';
+
 		$this->wposa->sub_page_title  = esc_html__('SEO Indexing', 'mihdan-index-now');
 		$this->wposa2->sub_page_title = esc_html__('SEO Stats', 'mihdan-index-now');
+		$this->wposa3->sub_page_title = esc_html__('Analytics', 'mihdan-index-now');
 
 		$this->wposa->add_section([
 			'id' => 'seo_index_upsell',
@@ -181,6 +221,19 @@ class UpsellAdminPages
 				'id'   => 'pages2',
 				'type' => 'html',
 				'desc' => $seo_stat_upsell
+			]
+		);
+
+		$this->wposa3->add_section([
+			'id' => 'analytics_upsell',
+		]);
+
+		$this->wposa3->add_field(
+			'analytics_upsell',
+			[
+				'id'   => 'pages3',
+				'type' => 'html',
+				'desc' => $analytics_upsell
 			]
 		);
 	}
