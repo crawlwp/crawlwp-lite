@@ -123,4 +123,21 @@ class OAuthProxyTest extends TestCase
 		$this->assertTrue(\cookie_options(1)['secure']);
 		$this->assertArrayNotHasKey('domain', \cookie_options(1));
 	}
+
+	public function test_optional_features_add_their_scope(): void
+	{
+		$providers = [
+			'google' => ['scope' => 'openid email https://www.googleapis.com/auth/webmasters.readonly', 'features' => ['analytics' => 'https://www.googleapis.com/auth/analytics.readonly']],
+			'bing'   => ['scope' => 'webmaster.manage'],
+		];
+
+		$this->assertSame(['analytics'], \requested_features($providers, 'google', 'analytics, evil'));
+		$this->assertSame([], \requested_features($providers, 'google', ''));
+		$this->assertSame([], \requested_features($providers, 'bing', 'analytics'));
+		$this->assertSame(
+			'openid email https://www.googleapis.com/auth/webmasters.readonly https://www.googleapis.com/auth/analytics.readonly',
+			\scope_for($providers, 'google', ['analytics'])
+		);
+		$this->assertSame('webmaster.manage', \scope_for($providers, 'bing', []));
+	}
 }
