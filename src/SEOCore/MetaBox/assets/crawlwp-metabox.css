@@ -620,3 +620,9 @@
 @media (prefers-reduced-motion:reduce){
   *{transition:none !important;animation:none !important;}
 }
+
+/* ---------- locked Insights tab: blurred preview behind the upgrade card ---------- */
+.cwp-insights-upsell-wrap{position:relative;overflow:hidden;border-radius:var(--cwp-radius);padding:20px 12px;}
+.cwp-insights-upsell__preview{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:top;opacity:.5;pointer-events:none;}
+.cwp-insights-upsell-wrap .cwp-insights-upsell{position:relative;max-width:460px;padding:24px 26px 18px;background:var(--cwp-white);border:1px solid var(--cwp-line);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.10);}
+.cwp-new-badge{display:inline-block;margin-left:4px;padding:0 6px;border-radius:999px;background:var(--cwp-good-bg);color:var(--cwp-good);font-size:10px;font-weight:600;line-height:1.7;vertical-align:1px;}

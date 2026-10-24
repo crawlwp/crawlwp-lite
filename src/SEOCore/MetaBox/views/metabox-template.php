@@ -713,21 +713,26 @@ $cwp_templates = \Mihdan\IndexNow\SEOCore\MetaBox\Assets::title_meta_templates($
   <!-- INSIGHTS (upsell — the real panel is rendered by mihdan-index-now-pro
        via the crawlwp_metabox_panels hook below when that plugin is active) -->
   <div class="cwp-panel" id="cwp-panel-insights" role="tabpanel">
+    <div class="cwp-insights-upsell-wrap">
+    <img class="cwp-insights-upsell__preview" src="<?php echo esc_url(\Mihdan\IndexNow\Utils::get_plugin_asset_url('images/insights-preview.png')); ?>" alt="" aria-hidden="true">
     <div class="cwp-insights-upsell">
       <div class="cwp-insights-upsell__icon">
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l3-4 3 2 5-7"/></svg>
       </div>
-      <h4 class="cwp-insights-upsell__title"><?php esc_html_e('Search performance insights, right in this editor', 'mihdan-index-now'); ?></h4>
-      <p class="cwp-insights-upsell__desc"><?php esc_html_e('See this page\'s real clicks, impressions, average position and indexing status across Google, Bing and Yandex, plus its top search queries, without ever leaving the post editor.', 'mihdan-index-now'); ?></p>
+      <h4 class="cwp-insights-upsell__title"><?php esc_html_e('Search and visitor insights, right in this editor', 'mihdan-index-now'); ?></h4>
+      <p class="cwp-insights-upsell__desc"><?php esc_html_e('See this page\'s real clicks, impressions, search queries, visitors and indexing status across Google, Bing, Yandex and Google Analytics, without ever leaving the post editor.', 'mihdan-index-now'); ?></p>
       <ul class="cwp-insights-upsell__list">
         <li><?php esc_html_e('Clicks, impressions, average position and CTR for every search engine', 'mihdan-index-now'); ?></li>
         <li><?php esc_html_e('Top search queries driving traffic to this exact page', 'mihdan-index-now'); ?></li>
         <li><?php esc_html_e('Live indexing status and last crawl date for Google, Bing and Yandex', 'mihdan-index-now'); ?></li>
+        <li><?php esc_html_e('Visitors, views and time on page from Google Analytics', 'mihdan-index-now'); ?> <span class="cwp-new-badge"><?php esc_html_e('New', 'mihdan-index-now'); ?></span></li>
+        <li><?php esc_html_e('Why Google hasn\'t indexed this page, and how to fix it', 'mihdan-index-now'); ?> <span class="cwp-new-badge"><?php esc_html_e('New', 'mihdan-index-now'); ?></span></li>
       </ul>
       <a class="cwp-btn cwp-btn-primary cwp-insights-upsell__cta" target="_blank" rel="noopener noreferrer" href="<?php echo esc_url('https://crawlwp.com/pricing/?utm_source=wp_dashboard&utm_medium=upgrade&utm_campaign=crawlwp-metabox-insights-upsell'); ?>">
         <?php esc_html_e('Upgrade to CrawlWP Premium', 'mihdan-index-now'); ?>
       </a>
       <p class="cwp-insights-upsell__note"><?php esc_html_e('Already have CrawlWP Premium? Make sure it\'s activated to see real data here.', 'mihdan-index-now'); ?></p>
+    </div>
     </div>
   </div>
   <?php endif; ?>

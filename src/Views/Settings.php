@@ -168,7 +168,14 @@ class Settings
 						$upgrade_url    = 'https://crawlwp.com/pricing/?utm_source=wp_dashboard&utm_medium=upgrade&utm_campaign=crawlwp-settings-page-sidebar-card';
 						$learn_more_url = 'https://crawlwp.com/?utm_source=wp_dashboard&utm_medium=upgrade&utm_campaign=crawlwp-settings-page-sidebar-card';
 
+						$new = ' <span class="crawlwp-new-badge">' . esc_html__('New', 'mihdan-index-now') . '</span>';
+
 						$pro_features = [
+							esc_html__('Site Audit', 'mihdan-index-now') . $new,
+							esc_html__('Why pages aren\'t indexed, with fixes', 'mihdan-index-now') . $new,
+							esc_html__('SEO Opportunities report', 'mihdan-index-now') . $new,
+							esc_html__('Google Analytics visitor stats', 'mihdan-index-now') . $new,
+							esc_html__('Job posting, Course and more schema types', 'mihdan-index-now') . $new,
 							esc_html__('Google Search Insights', 'mihdan-index-now'),
 							esc_html__('Bing Search Insights', 'mihdan-index-now'),
 							esc_html__('Yandex Search Insights', 'mihdan-index-now'),
@@ -711,6 +718,24 @@ class Settings
 					'help_tab' => 'https://crawlwp.com/article/integrating-wordpress-with-google-search/?utm_source=wp_dashboard&utm_medium=api_settings_page&utm_campaign=google_api'
 				)
 			);
+
+			if ( ! defined('CRAWLWP_DETACH_LIBSODIUM')) {
+				$this->wposa->add_field(
+					'google_webmaster',
+					array(
+						'id'   => 'google_analytics_upsell',
+						'type' => 'html',
+						'name' => __('Google Analytics', 'mihdan-index-now'),
+						'desc' => sprintf(
+							'<p style="margin-top:0"><span class="crawlwp-new-badge">%1$s</span>%2$s</p><a class="button" target="_blank" href="%3$s">%4$s</a>',
+							esc_html__('Premium', 'mihdan-index-now'),
+							esc_html__('See visitors, views and time on page on your dashboard and in each post\'s Insights tab, read from your Google Analytics with this same Google connection.', 'mihdan-index-now'),
+							esc_url('https://crawlwp.com/pricing/?utm_source=wp_dashboard&utm_medium=upgrade&utm_campaign=api-settings-google-analytics'),
+							esc_html__('Upgrade to CrawlWP Premium', 'mihdan-index-now')
+						),
+					)
+				);
+			}
 
 			$this->wposa->add_section(
 				array(
