@@ -3,6 +3,7 @@
 namespace Mihdan\IndexNow\SEOCore\MetaBox;
 
 use Mihdan\IndexNow\SEOCore\AI\Generator;
+use Mihdan\IndexNow\SEOCore\AI\Requests;
 use Mihdan\IndexNow\SEOCore\Breadcrumbs\BreadcrumbSettings;
 use Mihdan\IndexNow\SEOCore\SiteInfoSettings\SiteInfoSettings;
 use Mihdan\IndexNow\SEOCore\TitleMeta\Entities;
@@ -531,7 +532,7 @@ class Assets
 			wp_send_json_error(['message' => __('You are not allowed to generate SEO text for this post.', 'mihdan-index-now')], 403);
 		}
 
-		if ($this->ai_rate_limited()) {
+		if (Requests::rate_limited()) {
 			wp_send_json_error(['message' => __('Too many AI requests. Please wait a few minutes and try again.', 'mihdan-index-now')], 429);
 		}
 
@@ -561,7 +562,7 @@ class Assets
 		$generated = apply_filters('crawlwp_ai_generate_seo', '', $field, $context);
 
 		if (! empty($generated)) {
-			$this->ai_count_request();
+			Requests::count_request();
 			wp_send_json_success(['text' => $generated, 'source' => 'filter']);
 		}
 
@@ -569,85 +570,11 @@ class Assets
 		$generated = (new Generator())->generate($field, $context);
 
 		if (is_wp_error($generated)) {
-			wp_send_json_error($this->ai_error_response($generated));
+			wp_send_json_error(Requests::error_response($generated));
 		}
 
-		$this->ai_count_request();
+		Requests::count_request();
 		wp_send_json_success(['text' => $generated, 'source' => 'ai']);
-	}
-
-	/**
-	 * Per-user rate limit for AI generation: at most 20 generated values per
-	 * 5 minutes. Only successful generations count (see ai_count_request()),
-	 * so provider errors or missing content never lock a user out.
-	 */
-	private function ai_rate_limited(): bool
-	{
-		$limit = (int) apply_filters('crawlwp_ai_rate_limit', 20);
-
-		if ($limit <= 0) {
-			return false;
-		}
-
-		return (int) $this->ai_rate_state()['count'] >= $limit;
-	}
-
-	private function ai_count_request(): void
-	{
-		$window = (int) apply_filters('crawlwp_ai_rate_limit_window', 5 * MINUTE_IN_SECONDS);
-		$state  = $this->ai_rate_state();
-
-		$state['count'] = (int) $state['count'] + 1;
-		$remaining      = $window - (time() - (int) $state['start']);
-
-		set_transient('crawlwp_ai_rl_' . get_current_user_id(), $state, max(1, $remaining));
-	}
-
-	/**
-	 * Fixed window: [count, window start]. A missing/expired transient starts a fresh window.
-	 */
-	private function ai_rate_state(): array
-	{
-		$window = (int) apply_filters('crawlwp_ai_rate_limit_window', 5 * MINUTE_IN_SECONDS);
-		$state  = get_transient('crawlwp_ai_rl_' . get_current_user_id());
-		$now    = time();
-
-		if (! is_array($state) || ! isset($state['count'], $state['start']) || ($now - (int) $state['start']) >= $window) {
-			$state = ['count' => 0, 'start' => $now];
-		}
-
-		return $state;
-	}
-
-	/**
-	 * Build the payload shown to the user when AI generation failed.
-	 *
-	 * Only errors that the user fixes by connecting a provider link to the
-	 * Connectors screen; content and provider errors are shown as they are so
-	 * the message stays truthful.
-	 */
-	private function ai_error_response(\WP_Error $error): array
-	{
-		$code    = $error->get_error_code();
-		$message = $error->get_error_message();
-
-		$connection_codes = ['crawlwp_ai_unavailable', 'crawlwp_ai_unsupported'];
-
-		if (in_array($code, $connection_codes, true)) {
-			Generator::forget_ready();
-
-			return [
-				'message'    => __('AI generation is unavailable. Connect an AI provider in WordPress under Settings → Connectors, then try again.', 'mihdan-index-now')
-					. ($message !== '' ? "\n\n" . $message : ''),
-				'connectUrl' => admin_url('options-connectors.php'),
-			];
-		}
-
-		return [
-			'message' => $message !== ''
-				? $message
-				: __('AI generation failed. Please try again.', 'mihdan-index-now'),
-		];
 	}
 
 	/**
