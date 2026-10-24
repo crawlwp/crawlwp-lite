@@ -3,7 +3,6 @@
 namespace Mihdan\IndexNow\SEOCore\MetaBox;
 
 use Mihdan\IndexNow\SEOCore\AI\Generator;
-use Mihdan\IndexNow\SEOCore\AI\Requests;
 use Mihdan\IndexNow\SEOCore\Breadcrumbs\BreadcrumbSettings;
 use Mihdan\IndexNow\SEOCore\SiteInfoSettings\SiteInfoSettings;
 use Mihdan\IndexNow\SEOCore\TitleMeta\Entities;
@@ -11,6 +10,7 @@ use Mihdan\IndexNow\SEOCore\TitleMeta\Options;
 use Mihdan\IndexNow\SEOCore\TitleMeta\Variables;
 use Mihdan\IndexNow\Indexing;
 use Mihdan\IndexNow\Utils;
+use Mihdan\IndexNow\SEOCore\AI\Requests;
 
 class Assets
 {
