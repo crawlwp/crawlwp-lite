@@ -27,7 +27,8 @@ class RichResults
 	 * required_any (list of field-key groups; at least one group must be complete),
 	 * required_any_message.
 	 * Field keys: label, type (text|textarea|list|url|number|currency|datetime|date|minutes|duration|select),
-	 * required (bool, ['field' => key, 'in' => values] or ['field' => key, 'nonzero' => true]), options, default (title|description|image|url|date|author|organization|site),
+	 * required (bool, ['field' => key, 'in' => values] or ['field' => key, 'nonzero' => true]),
+	 * empty (label of a select's empty option when empty means a default, e.g. "Scheduled"), options, default (title|description|image|url|date|author|organization|site),
 	 * placeholder, hint, group.
 	 *
 	 * @return array<string, array<string, mixed>>
@@ -48,6 +49,22 @@ class RichResults
 		$types = self::types();
 
 		return isset($types[$type]) && is_callable($types[$type]['build'] ?? null);
+	}
+
+	/**
+	 * Types offered for a post. WooCommerce products already get Product data, so Product is left out there.
+	 *
+	 * @return array<string, array<string, mixed>>
+	 */
+	public static function types_for(\WP_Post $post): array
+	{
+		$types = self::types();
+
+		if ($post->post_type === 'product' && function_exists('WC')) {
+			unset($types['Product']);
+		}
+
+		return $types;
 	}
 
 	/**
@@ -265,9 +282,9 @@ class RichResults
 	public static function nodes_for_post(\WP_Post $post, string $webpage_id = ''): array
 	{
 		$stored = self::get($post->ID);
-		$types  = self::types();
+		$types  = self::types_for($post);
 
-		if ($stored['type'] === '' || ! self::is_available($stored['type'])) {
+		if ($stored['type'] === '' || ! isset($types[$stored['type']]) || ! self::is_available($stored['type'])) {
 			return [];
 		}
 
@@ -447,7 +464,7 @@ class RichResults
 	{
 		$types = [];
 
-		foreach (self::types() as $id => $type) {
+		foreach (self::types_for($post) as $id => $type) {
 			$types[$id] = [
 				'label'              => (string) ($type['label'] ?? $id),
 				'premium'            => ! empty($type['premium']),

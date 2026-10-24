@@ -71,7 +71,7 @@
 
         if (field.type === 'select') {
             c = el('select', { className: 'cwp-select', id: id });
-            c.appendChild(el('option', { value: '', text: i18n.choose }));
+            c.appendChild(el('option', { value: '', text: field.empty || i18n.choose }));
             Object.keys(field.options || {}).forEach(function (k) {
                 var o = el('option', { value: k, text: field.options[k] });
                 if (k === stored) o.selected = true;

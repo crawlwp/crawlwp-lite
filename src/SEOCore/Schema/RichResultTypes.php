@@ -150,8 +150,7 @@ class RichResultTypes
 			'label'  => __('Event', 'mihdan-index-now'),
 			'fields' => [
 				'name'        => ['label' => __('Event name', 'mihdan-index-now'), 'type' => 'text', 'required' => true, 'default' => 'title'],
-				'status'      => ['label' => __('Status', 'mihdan-index-now'), 'type' => 'select', 'options' => [
-					'EventScheduled'   => __('Scheduled', 'mihdan-index-now'),
+				'status'      => ['label' => __('Status', 'mihdan-index-now'), 'type' => 'select', 'empty' => __('Scheduled', 'mihdan-index-now'), 'options' => [
 					'EventCancelled'   => __('Cancelled', 'mihdan-index-now'),
 					'EventPostponed'   => __('Postponed', 'mihdan-index-now'),
 					'EventRescheduled' => __('Rescheduled', 'mihdan-index-now'),
@@ -159,8 +158,7 @@ class RichResultTypes
 				]],
 				'start'       => ['label' => __('Starts', 'mihdan-index-now'), 'type' => 'datetime', 'required' => true],
 				'end'         => ['label' => __('Ends', 'mihdan-index-now'), 'type' => 'datetime'],
-				'attendance'  => ['label' => __('Attendance', 'mihdan-index-now'), 'type' => 'select', 'options' => [
-					'OfflineEventAttendanceMode' => __('In person', 'mihdan-index-now'),
+				'attendance'  => ['label' => __('Attendance', 'mihdan-index-now'), 'type' => 'select', 'empty' => __('In person', 'mihdan-index-now'), 'options' => [
 					'OnlineEventAttendanceMode'  => __('Online', 'mihdan-index-now'),
 					'MixedEventAttendanceMode'   => __('In person and online', 'mihdan-index-now'),
 				]],
