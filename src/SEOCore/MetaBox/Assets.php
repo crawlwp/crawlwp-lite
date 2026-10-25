@@ -16,11 +16,11 @@ class Assets
 	public function __construct()
 	{
 		add_action('admin_enqueue_scripts', [$this, 'enqueue']);
+		add_action('wp_ajax_crawlwp_keyword_suggestions', [$this, 'ajax_keyword_suggestions']);
 		add_action('wp_ajax_crawlwp_ai_generate', [$this, 'ajax_ai_generate']);
 		add_action('wp_ajax_crawlwp_submit_indexnow', [$this, 'ajax_submit_indexnow']);
 		add_action('wp_ajax_crawlwp_check_duplicate_keyword', [$this, 'ajax_check_duplicate_keyword']);
 		add_action('wp_ajax_crawlwp_suggested_links', [$this, 'ajax_suggested_links']);
-		add_action('wp_ajax_crawlwp_keyword_suggestions', [$this, 'ajax_keyword_suggestions']);
 		add_action('crawlwp/index_pinged', [$this, 'store_last_pinged_time'], 10, 2);
 		add_action('save_post', [$this, 'flush_inbound_links_cache']);
 		add_action('deleted_post', [$this, 'flush_inbound_links_cache']);
@@ -147,10 +147,10 @@ class Assets
 			'dateModified'     => $post instanceof \WP_Post ? (string) get_the_modified_date('c', $post) : '',
 			'breadcrumbs'      => self::get_breadcrumb_trail($post),
 			'ajaxUrl'          => admin_url('admin-ajax.php'),
+			'kwSuggestNonce'   => self::keyword_suggestions_enabled() ? wp_create_nonce('crawlwp_keyword_suggestions') : '',
 			'aiNonce'          => wp_create_nonce('crawlwp_ai_generate'),
 			'aiReady'          => Generator::is_ready(),
 			'indexNowNonce'    => wp_create_nonce('crawlwp_submit_indexnow'),
-			'kwSuggestNonce'   => self::keyword_suggestions_enabled() ? wp_create_nonce('crawlwp_keyword_suggestions') : '',
 			'postId'           => $post instanceof \WP_Post ? $post->ID : 0,
 			'featuredImageUrl' => $post instanceof \WP_Post ? (get_the_post_thumbnail_url($post->ID, 'medium') ?: '') : '',
 			'featuredImageFull' => $post instanceof \WP_Post ? (get_the_post_thumbnail_url($post->ID, 'full') ?: '') : '',
@@ -669,6 +669,7 @@ class Assets
 	private static function get_i18n_strings(): array
 	{
 		return [
+			'kwSuggestTitle'   => __('Related Google searches', 'mihdan-index-now'),
 			/* Pixel meter labels */
 			'meterTooShort'    => __('Too short', 'mihdan-index-now'),
 			'meterGoodLength'  => __('Good length', 'mihdan-index-now'),
@@ -689,7 +690,6 @@ class Assets
 
 			/* Schema preview */
 			'noStructuredData' => __('// No structured data will be output for this post.', 'mihdan-index-now'),
-			'kwSuggestTitle'   => __('Related Google searches', 'mihdan-index-now'),
 
 			/* Image picker */
 			'selectImage'      => __('Select Image', 'mihdan-index-now'),
