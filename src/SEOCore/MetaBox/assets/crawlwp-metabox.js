@@ -1455,6 +1455,96 @@
       $text.html('<b>' + label + '</b> \u2014 ' + this.fmt(L.readabilityDetail, flesch, avgLen, longPct));
     },
 
+    /* ---------- structure checks: paragraphs, sections, sentence openings ---------- */
+
+    /* First few words of a text, for pointing at a paragraph in a message. */
+    textStart: function(text, words) {
+      var parts = $.trim(text).split(/\s+/);
+      return parts.slice(0, words || 4).join(' ') + (parts.length > (words || 4) ? '\u2026' : '');
+    },
+
+    /* Paragraph lengths, words between subheadings and repeated sentence openings. */
+    structureData: function(html) {
+      var self = this;
+      /* The classic editor's text tab has no <p> tags: add them the way WordPress does. */
+      if (!/<p[\s>]/i.test(html) && window.wp && wp.editor && typeof wp.editor.autop === 'function') {
+        html = wp.editor.autop(html);
+      }
+      var $root = $('<div>').html(html);
+      $root.find('script,style,pre,code,table').remove();
+
+      var data = { paras: 0, longParas: [], sections: [], repeats: [] };
+      var section = { words: 0, heading: null };
+
+      $root.find('h1,h2,h3,h4,h5,h6,p,li').each(function() {
+        var $el = $(this);
+        var tag = this.tagName.toLowerCase();
+        /* A list item's own paragraphs are counted as paragraphs. */
+        if (tag === 'li' && $el.find('p').length) return;
+        /* A nested list's items are counted on their own. */
+        var text = $.trim((tag === 'li' ? $el.clone().find('ul,ol').remove().end() : $el).text().replace(/\u00a0/g, ' '));
+        if (!text) return;
+
+        if (tag.charAt(0) === 'h') {
+          data.sections.push(section);
+          section = { words: 0, heading: text };
+          return;
+        }
+
+        var words = self.getWordCount(text);
+        section.words += words;
+        if (tag !== 'p') return;
+
+        data.paras++;
+        if (words > 150) data.longParas.push({ words: words, start: self.textStart(text) });
+
+        /* Three or more sentences in a row that start with the same word. */
+        var sentences = text.match(/[^.!?]+[.!?]*/g) || [];
+        var prev = '', run = 0;
+        var flush = function() {
+          if (run >= 3) data.repeats.push({ count: run, word: prev, start: self.textStart(text) });
+        };
+        $.each(sentences, function(i, s) {
+          var first = ($.trim(s).split(/\s+/)[0] || '')
+            .replace(/^[\s"'\u201c\u2018(\[]+|[\s"'\u201d\u2019),:;.!?\]]+$/g, '').toLowerCase();
+          if (first && first === prev) {
+            run++;
+          } else {
+            flush();
+            prev = first;
+            run = first ? 1 : 0;
+          }
+        });
+        flush();
+      });
+      data.sections.push(section);
+
+      data.longSections = $.grep(data.sections, function(s) { return s.words > 300; });
+      data.longSections.sort(function(a, b) { return b.words - a.words; });
+      data.longParas.sort(function(a, b) { return b.words - a.words; });
+      return data;
+    },
+
+    /* Links whose text contains the keyword and that point to another page. */
+    competingLinks: function(kw, parsed) {
+      var norm = function(s) {
+        return ' ' + String(s || '').toLowerCase().replace(/[\s\u00a0.,;:!?"'\u201c\u201d\u2018\u2019()\[\]{}<>\/\\|_\u2013\u2014-]+/g, ' ') + ' ';
+      };
+      var bare = function(u) { return String(u || '').split('#')[0].replace(/\/+$/, '').toLowerCase(); };
+      var key = $.trim(norm(kw));
+      if (!key) return [];
+      /* Match whole words, except in scripts written without spaces between words. */
+      var whole = /[a-z0-9\u00c0-\u024f\u0400-\u04ff]/.test(key);
+      var selfUrl = bare(crawlwpSEO.permalink);
+      var found = [];
+      $.each(parsed.internal.concat(parsed.external), function(i, link) {
+        if (bare(link.href) === selfUrl || link.text === link.href) return;
+        var text = norm(link.text);
+        if (whole ? text.indexOf(' ' + key + ' ') !== -1 : text.indexOf(key) !== -1) found.push(link);
+      });
+      return found;
+    },
+
     /* ---------- breadcrumb preview ---------- */
     updateBreadcrumbPreview: function() {
       var $el = $('#cwpBreadcrumbPreview');
@@ -1630,6 +1720,7 @@
         imagesNoAlt: imagesNoAlt,
         firstParaText: firstParaText
       };
+      sharedData.structure = this.structureData(html);
 
       var results = [];
       for (var i = 0; i < keywords.length; i++) {
@@ -1785,6 +1876,19 @@
         addCheck('warn', this.fmt(L.h1Multiple, d.h1Count), L.h1MultipleFix);
       }
 
+      /* Words between subheadings */
+      var st = d.structure;
+      if (d.wordCount > 300) {
+        if (st.longSections.length) {
+          var longest = st.longSections[0];
+          addCheck('warn', this.plural(L.sectionsLong, st.longSections.length), longest.heading === null
+            ? this.fmt(L.sectionsIntroD, longest.words)
+            : this.fmt(L.sectionsLongD, longest.words, '\u201c' + longest.heading + '\u201d'));
+        } else {
+          addCheck('good', L.sectionsGood, '');
+        }
+      }
+
       /* 8. Images alt text */
       if (d.$images.length === 0) {
         addCheck('warn', L.noImages, L.noImagesFix);
@@ -1810,6 +1914,19 @@
         addCheck('warn', L.intLinksOne, L.intLinksOneFix);
       } else {
         addCheck('bad', L.intLinksNone, L.intLinksNoneFix);
+      }
+
+      /* Link text that competes for the keyword */
+      if (d.parsed.internal.length + d.parsed.external.length > 0) {
+        var competing = this.competingLinks(kw, d.parsed);
+        if (competing.length) {
+          var path = competing[0].href;
+          try { var u = new URL(path); if (u.origin === new URL(crawlwpSEO.siteUrl).origin) path = u.pathname + u.search; } catch (e) {}
+          addCheck('bad', this.fmt(L.competingBad, '\u201c' + competing[0].text + '\u201d'),
+            this.fmt(L.competingBadD, path) + (competing.length > 1 ? ' ' + this.plural(L.competingMore, competing.length - 1) : ''));
+        } else {
+          addCheck('good', L.competingGood, '');
+        }
       }
 
       /* 11. External links */
@@ -1847,6 +1964,27 @@
           addCheck('warn', this.fmt(L.readability, d.avgSentenceLen), L.readabilityWarnD);
         } else {
           addCheck('bad', this.fmt(L.readability, d.avgSentenceLen), L.readabilityBadD);
+        }
+      }
+
+      /* Paragraph length */
+      if (d.structure.paras > 0 && d.wordCount >= 50) {
+        if (d.structure.longParas.length) {
+          var lp = d.structure.longParas[0];
+          addCheck('warn', this.plural(L.parasLong, d.structure.longParas.length), this.fmt(L.parasLongD, lp.words, '\u201c' + lp.start + '\u201d'));
+        } else {
+          addCheck('good', L.parasGood, '');
+        }
+      }
+
+      /* Sentences starting with the same word */
+      if (d.sentences.length >= 3) {
+        if (d.structure.repeats.length) {
+          var rp = d.structure.repeats[0];
+          addCheck('warn', this.plural(L.repeatsBad, d.structure.repeats.length),
+            this.fmt(L.repeatsBadD, rp.count, '\u201c' + rp.word.charAt(0).toUpperCase() + rp.word.slice(1) + '\u201d', '\u201c' + rp.start + '\u201d'));
+        } else {
+          addCheck('good', L.repeatsGood, '');
         }
       }
 
