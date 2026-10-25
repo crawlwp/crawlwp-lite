@@ -1193,7 +1193,7 @@ class FrontendOutput
 		 * Filter the social image chosen for a post or term. CrawlWP Premium's
 		 * share images use it to fill in posts that have no image.
 		 *
-		 * @param array{id: int, url: string} $image  Attachment id (0 when not an attachment) and URL ('' for none).
+		 * @param array{id: int, url: string} $image  Attachment id (0 when unknown, -1 when not an attachment, so it isn't looked up) and URL ('' for none).
 		 * @param string                      $source Where it came from: post, term, default (Title & Meta), featured or none.
 		 * @param string                      $field  og_image or x_image (an empty X image falls back to the Open Graph image).
 		 * @param \WP_Post|null               $post   Post, when the page is a post.
@@ -1339,7 +1339,8 @@ class FrontendOutput
 			$og_tags['og:image'] = $og_image;
 
 			/* Image dimensions — the id is usually already known. */
-			$img_id = $og_image_id > 0 ? $og_image_id : $this->attachment_id_from_url($og_image);
+			/* -1: not an attachment (a generated image), so there is nothing to look up. */
+			$img_id = $og_image_id > 0 ? $og_image_id : ($og_image_id < 0 ? 0 : $this->attachment_id_from_url($og_image));
 
 			if ($img_id > 0) {
 				$img_meta = wp_get_attachment_metadata($img_id);
@@ -1546,7 +1547,7 @@ class FrontendOutput
 			}
 
 			if ($img_alt === '') {
-				$img_id = $x_image_id > 0 ? $x_image_id : $this->attachment_id_from_url($x_image);
+				$img_id = $x_image_id > 0 ? $x_image_id : ($x_image_id < 0 ? 0 : $this->attachment_id_from_url($x_image));
 
 				if ($img_id > 0) {
 					$img_alt = (string) get_post_meta($img_id, '_wp_attachment_image_alt', true);
