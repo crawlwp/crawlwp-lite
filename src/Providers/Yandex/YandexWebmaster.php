@@ -417,4 +417,40 @@ class YandexWebmaster extends WebmasterAbstract
 			];
 		}
 	}
+
+	/**
+	 * A token plus the user and site Yandex needs to recrawl a URL.
+	 */
+	public function is_connected()
+	{
+		return ! empty($this->get_token()) && ! empty($this->get_user_id()) && ! empty($this->get_host_id());
+	}
+
+	protected function rate_limit_option(): string
+	{
+		return self::RATE_LIMIT_OPTION;
+	}
+
+	protected function send_url(string $url, bool $removed): array
+	{
+		// Yandex's recrawl queue has no "removed"; removed pages reach Yandex through IndexNow.
+		if ($removed) return [0, __('Yandex only accepts removed pages through IndexNow.', 'mihdan-index-now')];
+
+		$response = wp_remote_post(sprintf($this->get_ping_endpoint(), $this->get_user_id(), $this->get_host_id()), [
+			'timeout' => 60,
+			'headers' => ['Authorization' => 'OAuth ' . $this->get_token(), 'Content-Type' => 'application/json'],
+			'body'    => wp_json_encode(['url' => $url]),
+		]);
+
+		if (is_wp_error($response)) return [0, $response->get_error_message()];
+
+		$status = (int)wp_remote_retrieve_response_code($response);
+		$body   = json_decode(wp_remote_retrieve_body($response), true);
+
+		if ($status === 429) {
+			update_option(self::RATE_LIMIT_OPTION, time() + (6 * HOUR_IN_SECONDS), false);
+		}
+
+		return [$status, is_array($body) ? (string)($body['error_message'] ?? '') : ''];
+	}
 }

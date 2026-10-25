@@ -117,4 +117,90 @@ class BingWebmaster extends WebmasterAbstract
 		// TODO: Implement get_quota() method.
 		return [];
 	}
+
+	protected function rate_limit_option(): string
+	{
+		return self::RATE_LIMIT_OPTION;
+	}
+
+	protected function send_url(string $url, bool $removed): array
+	{
+		// Bing's URL submission has no "removed"; removed pages reach Bing through IndexNow.
+		if ($removed) return [0, __('Bing only accepts removed pages through IndexNow.', 'mihdan-index-now')];
+
+		$request = $this->api_request('SubmitUrlbatch');
+
+		if ($request === null) return [0, __('Not connected.', 'mihdan-index-now')];
+
+		$response = wp_remote_post($request['url'], [
+			'timeout' => 30,
+			'headers' => ['Content-Type' => 'application/json'] + $request['headers'],
+			'body'    => wp_json_encode(['siteUrl' => Utils::normalized_home_url(), 'urlList' => [$url]]),
+		]);
+
+		if (is_wp_error($response)) return [0, $response->get_error_message()];
+
+		$status = (int)wp_remote_retrieve_response_code($response);
+		$body   = json_decode(wp_remote_retrieve_body($response), true);
+		$error  = is_array($body) ? (string)($body['Message'] ?? '') : '';
+
+		if ($error === '' && ! Utils::is_response_code_success($status)) {
+			$error = (string)wp_remote_retrieve_response_message($response);
+		}
+
+		// Same quota signals as ping().
+		if ($status === 429 || in_array((int)($body['ErrorCode'] ?? 0), [4, 5], true) || stripos($error, 'quota') !== false) {
+			update_option(self::RATE_LIMIT_OPTION, time() + (6 * HOUR_IN_SECONDS), false);
+		}
+
+		return [$status, $error];
+	}
+
+	/**
+	 * URLs Bing still accepts today, or null when unknown. Cached for 10 minutes.
+	 */
+	public function remaining_today(): ?int
+	{
+		$cached = get_transient('crawlwp_bing_url_quota');
+
+		if ($cached !== false) return $cached === '' ? null : (int)$cached;
+
+		$remaining = null;
+		$request   = $this->is_connected() ? $this->api_request('GetUrlSubmissionQuota') : null;
+
+		if ($request !== null) {
+			$response = wp_remote_get(add_query_arg('siteUrl', rawurlencode(Utils::normalized_home_url()), $request['url']), [
+				'timeout' => 15,
+				'headers' => $request['headers'],
+			]);
+			$body = is_wp_error($response) ? null : json_decode(wp_remote_retrieve_body($response), true);
+
+			if (isset($body['d']['DailyQuota'])) $remaining = (int)$body['d']['DailyQuota'];
+		}
+
+		set_transient('crawlwp_bing_url_quota', $remaining === null ? '' : (string)$remaining, 10 * MINUTE_IN_SECONDS);
+
+		return $remaining;
+	}
+
+	/**
+	 * URL and headers for a Bing Webmaster API method: the API key, or "Connect with Bing" when available.
+	 *
+	 * @return array{url: string, headers: array<string, string>}|null
+	 */
+	private function api_request(string $method): ?array
+	{
+		$oauth = '\\Mihdan\\IndexNow\\OAuth\\OAuth';
+
+		if (class_exists($oauth) && method_exists($oauth, 'bing_request')) {
+			return $oauth::bing_request($method);
+		}
+
+		$key = (string)$this->get_token();
+
+		return $key === '' ? null : [
+			'url'     => add_query_arg('apikey', rawurlencode($key), 'https://ssl.bing.com/webmaster/api.svc/json/' . $method),
+			'headers' => [],
+		];
+	}
 }

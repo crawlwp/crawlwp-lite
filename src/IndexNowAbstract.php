@@ -40,6 +40,9 @@ abstract class IndexNowAbstract implements SearchEngineInterface
 	 *
 	 * @param Logger $logger Logger instance.
 	 */
+	/** Message of the last failed push(), for Submit URLs. */
+	private $last_error = '';
+
 	public function __construct(Logger $logger, WPOSA $wposa)
 	{
 		$this->logger     = $logger;
@@ -299,6 +302,8 @@ abstract class IndexNowAbstract implements SearchEngineInterface
 	 */
 	private function log_failure(array $url_list, string $message, array $data): void
 	{
+		$this->last_error = $message;
+
 		$links = implode(', ', array_map([Indexing::class, 'url_link'], $url_list));
 
 		$this->logger->error(trim($links . ' - ' . $message, ' -'), $data);
@@ -363,5 +368,35 @@ abstract class IndexNowAbstract implements SearchEngineInterface
 		status_header(200);
 		echo esc_html($api_key);
 		die;
+	}
+
+	/**
+	 * Whether this is the IndexNow engine submissions go to.
+	 */
+	public function is_current(): bool
+	{
+		return $this->is_enabled() && $this->get_current_search_engine() === $this->get_slug();
+	}
+
+	/**
+	 * Submit URLs by hand (Settings > Submit URLs), logged like automatic submissions.
+	 *
+	 * @param string[] $url_list URLs on this site.
+	 *
+	 * @return array{status: int, message: string}
+	 */
+	public function submit_urls(array $url_list): array
+	{
+		if (Indexing::get_pause_expiry($this->rate_limit_db_key()) > 0) {
+			return ['status' => 0, 'message' => __('Paused after IndexNow asked CrawlWP to slow down. Try again later.', 'mihdan-index-now')];
+		}
+
+		$this->last_error = '';
+
+		if ($this->push($url_list)) {
+			return ['status' => 200, 'message' => ''];
+		}
+
+		return ['status' => 0, 'message' => $this->last_error !== '' ? $this->last_error : __('Unknown error', 'mihdan-index-now')];
 	}
 }

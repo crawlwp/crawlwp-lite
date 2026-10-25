@@ -16,6 +16,7 @@ use Mihdan\IndexNow\SEOCore\FeatureGate\FeatureGate;
 use Mihdan\IndexNow\SEOCore\Notifications\Notifications;
 use Mihdan\IndexNow\SEOCore\SEOCoreInit;
 use Mihdan\IndexNow\Views\Settings;
+use Mihdan\IndexNow\Views\SubmitUrls;
 use Mihdan\IndexNow\Views\UpsellAdminPages;
 use Mihdan\IndexNow\Views\WPOSA;
 use WP_List_Table;
@@ -122,6 +123,8 @@ class Main
 		$GLOBALS['CRAWLWP_YANDEX_WEBMASTER']->setup_hooks();
 		$GLOBALS['CRAWLWP_BING_WEBMASTER']->setup_hooks();
 		$GLOBALS['CRAWLWP_GOOGLE_WEBMASTER']->setup_hooks();
+
+		(new SubmitUrls($this->container))->setup_hooks();
 	}
 
 	/**
