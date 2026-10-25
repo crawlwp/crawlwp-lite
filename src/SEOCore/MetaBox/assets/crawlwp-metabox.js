@@ -64,6 +64,7 @@
       this.updateBreadcrumbPreview();
       this.initSocialImagePlaceholders();
       this.validateExistingImages();
+      this.bindSitemapNotice();
       this.emit('renderLinks');
       this.emit('analyze');
     },
@@ -1093,6 +1094,58 @@
           self.initSocialImagePlaceholders();
         });
       }
+    },
+
+    /* ---------- "Not in sitemap" notice (General tab) ---------- */
+    bindSitemapNotice: function() {
+      var self = this;
+      if (!crawlwpSEO.sitemap || !$('#cwpSitemapNotice').length) return;
+      $('#cwpIndex, #cwpCanonical, #cwpRedirectUrl, #cwpRedirectType').on('change input', function() {
+        self.updateSitemapNotice();
+      });
+      $('#cwpSitemapNotice').on('click', '[data-cwp-goto]', function(e) {
+        e.preventDefault();
+        var $target = $('#' + $(this).attr('data-cwp-goto'));
+        self.$mb.find('.cwp-tab[data-panel="advanced"]').trigger('click');
+        if ($target.length) $target.trigger('focus');
+      });
+      this.updateSitemapNotice();
+    },
+
+    updateSitemapNotice: function() {
+      var st = crawlwpSEO.sitemap, t = st.text, $box = $('#cwpSitemapNotice');
+      var reason = st.reason, link = '', label = '', goTo = '', tone = 'warn', title = t.out, text = '';
+      var canonical = $.trim($('#cwpCanonical').val() || '');
+      var redirect = $.trim($('#cwpRedirectUrl').val() || '');
+      var code = $('#cwpRedirectType').val() || '';
+      var norm = function(u) { return u.replace(/^https?:\/\/(www\.)?/i, '').replace(/[?#].*$/, '').replace(/\/+$/, '').toLowerCase(); };
+
+      if (reason === 'draft') reason = '';
+
+      if (reason) {
+        text = t[reason] || '';
+        if (reason === 'type_noindex') { link = st.link; label = t.toTitleMeta; }
+        if (reason === 'off' && st.link) { link = st.link; label = t.toReading; }
+      } else if ($('#cwpIndex').val() === 'noindex') {
+        text = t.noindex; goTo = 'cwpIndex'; label = t.toAdvanced;
+      } else if (st.reason !== 'draft') {
+        tone = 'info'; title = t.mixed;
+        if (code === '410' || code === '451') {
+          text = t.gone; goTo = 'cwpRedirectType'; label = t.toRedirect;
+        } else if (redirect) {
+          text = t.redirect; goTo = 'cwpRedirectUrl'; label = t.toRedirect;
+        } else if (canonical && norm(canonical.charAt(0) === '/' ? st.permalink.replace(/^(https?:\/\/[^\/]+).*$/, '$1') + canonical : canonical) !== norm(st.permalink)) {
+          text = t.canonical; goTo = 'cwpCanonical'; label = t.toCanonical;
+        }
+      }
+
+      if (!text) { $box.empty().hide(); return; }
+
+      var html = '<div class="cwp-sitemap-notice is-' + tone + '"><span class="cwp-sitemap-icon" aria-hidden="true">' + (tone === 'warn' ? '!' : 'i') + '</span><div>'
+        + '<b>' + this.escHtml(title) + '</b> ' + this.escHtml(text);
+      if (label && link) html += ' <a href="' + this.escHtml(link) + '">' + this.escHtml(label) + '</a>';
+      else if (label && goTo) html += ' <a href="#" data-cwp-goto="' + goTo + '">' + this.escHtml(label) + '</a>';
+      $box.html(html + '</div></div>').show();
     },
 
     /* ---------- helpers ---------- */

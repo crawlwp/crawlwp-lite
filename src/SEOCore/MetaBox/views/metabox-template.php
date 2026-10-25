@@ -116,6 +116,7 @@ $cwp_templates = \Mihdan\IndexNow\SEOCore\MetaBox\Assets::title_meta_templates($
 
   <!-- GENERAL -->
   <div class="cwp-panel is-active" id="cwp-panel-general" role="tabpanel">
+    <div id="cwpSitemapNotice" aria-live="polite"></div>
     <div class="cwp-field">
       <div class="cwp-label-row">
         <label class="cwp-label" for="cwpTitle"><?php esc_html_e('SEO title', 'mihdan-index-now'); ?></label>
@@ -685,7 +686,7 @@ $cwp_templates = \Mihdan\IndexNow\SEOCore\MetaBox\Assets::title_meta_templates($
       <h4 class="cwp-section-title"><?php esc_html_e('Canonical URL', 'mihdan-index-now'); ?></h4>
       <p class="cwp-section-desc"><?php esc_html_e('Point engines at the original when this content exists elsewhere.', 'mihdan-index-now'); ?></p>
       <div class="cwp-field">
-        <input class="cwp-input" name="<?php echo esc_attr(MetaFields::CANONICAL_URL); ?>" type="url" value="<?php echo esc_attr($data['canonical_url']); ?>" placeholder="<?php echo esc_url($permalink); ?>">
+        <input class="cwp-input" id="cwpCanonical" name="<?php echo esc_attr(MetaFields::CANONICAL_URL); ?>" type="url" value="<?php echo esc_attr($data['canonical_url']); ?>" placeholder="<?php echo esc_url($permalink); ?>">
         <p class="cwp-hint"><?php esc_html_e('Leave empty to use the post\'s own permalink.', 'mihdan-index-now'); ?></p>
       </div>
     </div>

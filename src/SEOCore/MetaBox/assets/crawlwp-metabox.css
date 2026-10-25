@@ -620,3 +620,13 @@
 @media (prefers-reduced-motion:reduce){
   *{transition:none !important;animation:none !important;}
 }
+
+/* "Not in sitemap" notice at the top of the General tab */
+#cwpSitemapNotice:empty { display: none; }
+.cwp-sitemap-notice { display: flex; gap: 10px; align-items: flex-start; margin: 0 0 14px; padding: 10px 14px; border-left: 4px solid; border-radius: 4px; font-size: 13px; line-height: 1.5; color: #1d2327; }
+.cwp-sitemap-notice.is-warn { background: #fcf9e8; border-color: #dba617; }
+.cwp-sitemap-notice.is-info { background: #f0f6fc; border-color: #72aee6; }
+.cwp-sitemap-icon { flex: 0 0 auto; width: 20px; height: 20px; border-radius: 50%; color: #fff; font-weight: 700; font-size: 12px; line-height: 20px; text-align: center; }
+.is-warn .cwp-sitemap-icon { background: #dba617; }
+.is-info .cwp-sitemap-icon { background: #72aee6; }
+.cwp-sitemap-notice a { white-space: nowrap; }

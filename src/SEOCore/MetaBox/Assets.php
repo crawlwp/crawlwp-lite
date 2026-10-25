@@ -158,6 +158,10 @@ class Assets
 			'i18n'             => self::get_i18n_strings(),
 		];
 
+		if ($post instanceof \WP_Post) {
+			$localize_data['sitemap'] = \Mihdan\IndexNow\SEOCore\SitemapStatus::for_metabox($post);
+		}
+
 		if ($post instanceof \WP_Post && $post->post_type === 'product') {
 			$context = ['post' => $post];
 			$localize_data['product'] = [
