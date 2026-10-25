@@ -71,6 +71,12 @@ namespace {
 	$tsf_foreign = TokenMapper::convert('%%title%% %%sep%% %%sitename%%', 'tsf');
 	cwp_assert($tsf_foreign === '{{ post.title }} {{ sep }} {{ site.title }}', 'TSF translates migrated Yoast syntax');
 
+	$sr = TokenMapper::convert('%title% %separator% %site_name% %tagline% %term_title% %currentyear%', 'surerank');
+	cwp_assert($sr === '{{ post.title }} {{ sep }} {{ site.title }} {{ site.description }} {{ term.title }} {{ current.year }}', 'SureRank tags');
+
+	$sr_desc = TokenMapper::convert('%content% at %permalink%', 'surerank');
+	cwp_assert($sr_desc === '{{ post.auto_description }} at {{ post.url }}', 'SureRank description tags');
+
 	echo "\nAll tests passed.\n";
 	exit(0);
 }
