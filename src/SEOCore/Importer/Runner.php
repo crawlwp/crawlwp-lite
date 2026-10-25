@@ -3,10 +3,10 @@
 namespace Mihdan\IndexNow\SEOCore\Importer;
 
 use Mihdan\IndexNow\SEOCore\Importer\Sources\AIOSEO;
+use Mihdan\IndexNow\SEOCore\Importer\Sources\Redirection;
 use Mihdan\IndexNow\SEOCore\Importer\Sources\RankMath;
 use Mihdan\IndexNow\SEOCore\Importer\Sources\SEOPress;
 use Mihdan\IndexNow\SEOCore\Importer\Sources\SlimSEO;
-use Mihdan\IndexNow\SEOCore\Importer\Sources\Redirection;
 use Mihdan\IndexNow\SEOCore\Importer\Sources\TheSEOFramework;
 use Mihdan\IndexNow\SEOCore\Importer\Sources\Yoast;
 
@@ -27,13 +27,13 @@ class Runner
 	public static function sources(): array
 	{
 		return [
+			new Redirection(),
 			new Yoast(),
 			new RankMath(),
 			new AIOSEO(),
 			new SEOPress(),
 			new TheSEOFramework(),
 			new SlimSEO(),
-			new Redirection(),
 		];
 	}
 
@@ -73,13 +73,13 @@ class Runner
 	public static function is_plugin_active(string $id): bool
 	{
 		$constants = [
+			'redirection' => defined('REDIRECTION_VERSION'),
 			'yoast'    => defined('WPSEO_VERSION'),
 			'rankmath' => defined('RANK_MATH_VERSION'),
 			'aioseo'   => defined('AIOSEO_VERSION'),
 			'seopress' => defined('SEOPRESS_VERSION') || defined('SEOPRESS_PRO_VERSION'),
 			'tsf'      => defined('THE_SEO_FRAMEWORK_VERSION'),
 			'slimseo'  => defined('SLIM_SEO_VER'),
-			'redirection' => defined('REDIRECTION_VERSION'),
 		];
 
 		if (! empty($constants[$id])) {
@@ -92,13 +92,13 @@ class Runner
 
 		if (function_exists('is_plugin_active')) {
 			$files = [
+				'redirection' => ['redirection/redirection.php'],
 				'yoast'    => ['wordpress-seo/wp-seo.php', 'wordpress-seo-premium/wp-seo-premium.php'],
 				'rankmath' => ['seo-by-rank-math/rank-math.php', 'seo-by-rank-math-pro/rank-math-pro.php'],
 				'aioseo'   => ['all-in-one-seo-pack/all_in_one_seo_pack.php', 'all-in-one-seo-pack-pro/all_in_one_seo_pack.php'],
 				'seopress' => ['wp-seopress/seopress.php', 'wp-seopress-pro/seopress-pro.php'],
 				'tsf'      => ['autodescription/autodescription.php'],
 				'slimseo'  => ['slim-seo/slim-seo.php'],
-				'redirection' => ['redirection/redirection.php'],
 			];
 
 			foreach ($files[$id] ?? [] as $file) {
@@ -121,13 +121,13 @@ class Runner
 		}
 
 		$files = [
+			'redirection' => ['redirection/redirection.php'],
 			'yoast'    => ['wordpress-seo/wp-seo.php', 'wordpress-seo-premium/wp-seo-premium.php'],
 			'rankmath' => ['seo-by-rank-math/rank-math.php', 'seo-by-rank-math-pro/rank-math-pro.php'],
 			'aioseo'   => ['all-in-one-seo-pack/all_in_one_seo_pack.php', 'all-in-one-seo-pack-pro/all_in_one_seo_pack.php'],
 			'seopress' => ['wp-seopress/seopress.php', 'wp-seopress-pro/seopress-pro.php'],
 			'tsf'      => ['autodescription/autodescription.php'],
 			'slimseo'  => ['slim-seo/slim-seo.php'],
-			'redirection' => ['redirection/redirection.php'],
 		];
 
 		foreach ($files[$id] ?? [] as $file) {
