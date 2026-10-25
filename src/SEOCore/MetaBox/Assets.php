@@ -20,6 +20,7 @@ class Assets
 		add_action('wp_ajax_crawlwp_submit_indexnow', [$this, 'ajax_submit_indexnow']);
 		add_action('wp_ajax_crawlwp_check_duplicate_keyword', [$this, 'ajax_check_duplicate_keyword']);
 		add_action('wp_ajax_crawlwp_suggested_links', [$this, 'ajax_suggested_links']);
+		add_action('wp_ajax_crawlwp_keyword_suggestions', [$this, 'ajax_keyword_suggestions']);
 		add_action('crawlwp/index_pinged', [$this, 'store_last_pinged_time'], 10, 2);
 		add_action('save_post', [$this, 'flush_inbound_links_cache']);
 		add_action('deleted_post', [$this, 'flush_inbound_links_cache']);
@@ -149,6 +150,7 @@ class Assets
 			'aiNonce'          => wp_create_nonce('crawlwp_ai_generate'),
 			'aiReady'          => Generator::is_ready(),
 			'indexNowNonce'    => wp_create_nonce('crawlwp_submit_indexnow'),
+			'kwSuggestNonce'   => self::keyword_suggestions_enabled() ? wp_create_nonce('crawlwp_keyword_suggestions') : '',
 			'postId'           => $post instanceof \WP_Post ? $post->ID : 0,
 			'featuredImageUrl' => $post instanceof \WP_Post ? (get_the_post_thumbnail_url($post->ID, 'medium') ?: '') : '',
 			'featuredImageFull' => $post instanceof \WP_Post ? (get_the_post_thumbnail_url($post->ID, 'full') ?: '') : '',
@@ -687,6 +689,7 @@ class Assets
 
 			/* Schema preview */
 			'noStructuredData' => __('// No structured data will be output for this post.', 'mihdan-index-now'),
+			'kwSuggestTitle'   => __('Related Google searches', 'mihdan-index-now'),
 
 			/* Image picker */
 			'selectImage'      => __('Select Image', 'mihdan-index-now'),
@@ -1117,6 +1120,72 @@ class Assets
 	/**
 	 * AJAX: Check if any focus keyword is already used by another published post.
 	 */
+	/**
+	 * Whether the focus keyword field suggests related Google searches.
+	 */
+	public static function keyword_suggestions_enabled(): bool
+	{
+		/**
+		 * Filter whether the focus keyword field shows Google search suggestions.
+		 * The typed keyword is sent from this site to Google's autocomplete service.
+		 *
+		 * @param bool $enabled Default true.
+		 */
+		return (bool) apply_filters('crawlwp_keyword_suggestions', true);
+	}
+
+	/**
+	 * Google autocomplete suggestions for the keyword being typed, cached for a day.
+	 */
+	public function ajax_keyword_suggestions(): void
+	{
+		check_ajax_referer('crawlwp_keyword_suggestions', 'nonce');
+
+		if (! current_user_can('edit_posts') || ! self::keyword_suggestions_enabled()) {
+			wp_send_json_error(['message' => __('You are not allowed to do this.', 'mihdan-index-now')], 403);
+		}
+
+		$query = trim(sanitize_text_field(wp_unslash($_POST['q'] ?? '')));
+
+		if (mb_strlen($query) < 2 || mb_strlen($query) > 100) {
+			wp_send_json_success(['suggestions' => []]);
+		}
+
+		$lang = strtolower(substr((string) get_locale(), 0, 2));
+		$key  = 'crawlwp_kw_suggest_' . md5($lang . '|' . mb_strtolower($query));
+		$list = get_transient($key);
+
+		if (! is_array($list)) {
+			$list     = [];
+			$response = wp_remote_get(add_query_arg([
+				'client' => 'firefox',
+				'ie'     => 'utf-8',
+				'oe'     => 'utf-8',
+				'hl'     => $lang,
+				'q'      => rawurlencode($query),
+			], 'https://suggestqueries.google.com/complete/search'), ['timeout' => 5]);
+
+			$body = is_wp_error($response) || (int) wp_remote_retrieve_response_code($response) !== 200
+				? null
+				: json_decode(wp_remote_retrieve_body($response), true);
+
+			foreach ((array) ($body[1] ?? []) as $suggestion) {
+				$suggestion = trim(sanitize_text_field((string) $suggestion));
+
+				if ($suggestion !== '' && mb_strtolower($suggestion) !== mb_strtolower($query)) {
+					$list[] = $suggestion;
+				}
+			}
+
+			$list = array_slice(array_values(array_unique($list)), 0, 8);
+
+			// Keep a failed or empty lookup for an hour only.
+			set_transient($key, $list, $list === [] ? HOUR_IN_SECONDS : DAY_IN_SECONDS);
+		}
+
+		wp_send_json_success(['suggestions' => $list]);
+	}
+
 	public function ajax_check_duplicate_keyword(): void
 	{
 		check_ajax_referer('crawlwp_check_keyword', 'nonce');
