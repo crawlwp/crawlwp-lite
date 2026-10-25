@@ -2,8 +2,6 @@
 
 namespace Mihdan\IndexNow\SEOCore\MetaBox;
 
-use Mihdan\IndexNow\SEOCore\Permissions;
-
 class MetaFields
 {
 	public const SEO_TITLE       = '_crawlwp_seo_title';
@@ -318,11 +316,11 @@ class MetaFields
 	 */
 	public static function allowed_values(array $values): array
 	{
-		if (! Permissions::can(Permissions::SEO_BOX)) {
+		if (! \Mihdan\IndexNow\SEOCore\Permissions::can(\Mihdan\IndexNow\SEOCore\Permissions::SEO_BOX)) {
 			return [];
 		}
 
-		if (Permissions::can(Permissions::SEO_ADVANCED)) {
+		if (\Mihdan\IndexNow\SEOCore\Permissions::can(\Mihdan\IndexNow\SEOCore\Permissions::SEO_ADVANCED)) {
 			return $values;
 		}
 
