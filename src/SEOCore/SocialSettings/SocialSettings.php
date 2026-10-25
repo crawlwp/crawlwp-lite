@@ -102,6 +102,14 @@ class SocialSettings
 			'name' => __('Social Image Fallback', 'mihdan-index-now'),
 			'desc' => esc_html__('When no image is available from the page or term, this fallback image will be used instead. Recommended size: 1200×630 px.', 'mihdan-index-now'),
 		]);
+
+		/**
+		 * Add fields after Social Image Fallback (CrawlWP Premium's share images).
+		 *
+		 * @param WPOSA  $wposa   Settings screen.
+		 * @param string $section Section id.
+		 */
+		do_action('crawlwp_social_settings_after_image', $wposa, self::SECTION);
 	}
 
 	// -------------------------------------------------------------------------
