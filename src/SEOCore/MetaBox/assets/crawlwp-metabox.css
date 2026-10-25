@@ -636,3 +636,7 @@
 .cwp-rich-lock{padding:20px;border:1px dashed var(--cwp-line);border-radius:var(--cwp-radius);background:var(--cwp-bg);text-align:center;}
 .cwp-rich-lock p{margin:6px 0 12px;color:var(--cwp-ink-2);}
 @media (max-width:782px){.cwp-rich-grid{grid-template-columns:1fr;}}
+
+/* Rich result fields still needed, under the JSON-LD preview. */
+.cwp-json-note { margin: 8px 0 0; padding: 8px 12px; border-radius: 6px; background: #fcf9e8; color: #6e4b00; font-size: 12px; }
+#cwpJson[hidden] + .cwp-json-note { display: none !important; }

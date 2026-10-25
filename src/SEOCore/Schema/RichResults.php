@@ -281,19 +281,44 @@ class RichResults
 	 */
 	public static function nodes_for_post(\WP_Post $post, string $webpage_id = ''): array
 	{
-		$stored = self::get($post->ID);
-		$types  = self::types_for($post);
+		return self::build($post, self::get($post->ID), $webpage_id)['nodes'];
+	}
+
+	/**
+	 * What the post would output for unsaved rich result values, for the
+	 * Schema tab preview. Uses the same code as the page output.
+	 *
+	 * @param array{type: string, fields: array<string, string>} $stored
+	 *
+	 * @return array{nodes: array<int, array<string, mixed>>, missing: string[], label: string}
+	 */
+	public static function preview(\WP_Post $post, array $stored, string $webpage_id = ''): array
+	{
+		return self::build($post, $stored, $webpage_id);
+	}
+
+	/**
+	 * @param array{type: string, fields: array<string, string>} $stored
+	 *
+	 * @return array{nodes: array<int, array<string, mixed>>, missing: string[], label: string}
+	 */
+	private static function build(\WP_Post $post, array $stored, string $webpage_id): array
+	{
+		$none  = ['nodes' => [], 'missing' => [], 'label' => ''];
+		$types = self::types_for($post);
 
 		if ($stored['type'] === '' || ! isset($types[$stored['type']]) || ! self::is_available($stored['type'])) {
-			return [];
+			return $none;
 		}
 
 		$type     = $types[$stored['type']];
 		$defaults = self::defaults($post);
 		$values   = self::values($type, $stored['fields'], $defaults);
+		$missing  = self::missing($type, $values);
+		$none['label'] = (string) $type['label'];
 
-		if (self::missing($type, $values) !== []) {
-			return [];
+		if ($missing !== []) {
+			return ['missing' => $missing] + $none;
 		}
 
 		$url = $defaults['url'];
@@ -309,7 +334,7 @@ class RichResults
 		$node = call_user_func($type['build'], $values, $context);
 
 		if (! is_array($node) || empty($node['@type'])) {
-			return [];
+			return $none;
 		}
 
 		$node = ['@id' => $context['id']] + $node;
@@ -324,7 +349,7 @@ class RichResults
 		 */
 		$node = (array) apply_filters('crawlwp_rich_result_node', $node, $stored['type'], $values, $post);
 
-		return [self::prune($node)];
+		return ['nodes' => [self::prune($node)]] + $none;
 	}
 
 	/**

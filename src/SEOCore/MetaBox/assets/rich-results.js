@@ -60,8 +60,12 @@
     }
 
     function save() {
-        if (!state.type) { input.value = ''; return; }
-        input.value = JSON.stringify({ type: state.type, fields: current() });
+        input.value = state.type ? JSON.stringify({ type: state.type, fields: current() }) : '';
+
+        // Lets the Schema tab preview follow unsaved changes.
+        var ev = document.createEvent('HTMLEvents');
+        ev.initEvent('change', true, false);
+        input.dispatchEvent(ev);
     }
 
     function control(key, field) {

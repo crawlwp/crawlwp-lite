@@ -21,6 +21,7 @@ class Assets
 		add_action('wp_ajax_crawlwp_submit_indexnow', [$this, 'ajax_submit_indexnow']);
 		add_action('wp_ajax_crawlwp_check_duplicate_keyword', [$this, 'ajax_check_duplicate_keyword']);
 		add_action('wp_ajax_crawlwp_suggested_links', [$this, 'ajax_suggested_links']);
+		add_action('wp_ajax_crawlwp_rich_result_preview', [$this, 'ajax_rich_result_preview']);
 		add_action('crawlwp/index_pinged', [$this, 'store_last_pinged_time'], 10, 2);
 		add_action('save_post', [$this, 'flush_inbound_links_cache']);
 		add_action('deleted_post', [$this, 'flush_inbound_links_cache']);
@@ -159,6 +160,7 @@ class Assets
 			'aiNonce'          => wp_create_nonce('crawlwp_ai_generate'),
 			'aiReady'          => Generator::is_ready(),
 			'indexNowNonce'    => wp_create_nonce('crawlwp_submit_indexnow'),
+			'richPreviewNonce' => wp_create_nonce('crawlwp_rich_result_preview'),
 			'postId'           => $post instanceof \WP_Post ? $post->ID : 0,
 			'featuredImageUrl' => $post instanceof \WP_Post ? (get_the_post_thumbnail_url($post->ID, 'medium') ?: '') : '',
 			'featuredImageFull' => $post instanceof \WP_Post ? (get_the_post_thumbnail_url($post->ID, 'full') ?: '') : '',
@@ -697,6 +699,8 @@ class Assets
 
 			/* Schema preview */
 			'noStructuredData' => __('// No structured data will be output for this post.', 'mihdan-index-now'),
+			/* translators: 1: rich result type, e.g. Product. 2: fields still needed. */
+			'richMissing'      => __('The %1$s rich result isn\'t output until this is filled in: %2$s.', 'mihdan-index-now'),
 
 			/* Image picker */
 			'selectImage'      => __('Select Image', 'mihdan-index-now'),
@@ -909,6 +913,27 @@ class Assets
 			'imgOgMin'              => __('1200 × 630 px', 'mihdan-index-now'),
 			'imgXMin'               => __('800 × 418 px', 'mihdan-index-now'),
 		];
+	}
+
+	/**
+	 * Rich result node for the Schema tab preview, built from the unsaved
+	 * field values with the same code as the page output.
+	 */
+	public function ajax_rich_result_preview(): void
+	{
+		check_ajax_referer('crawlwp_rich_result_preview', 'nonce');
+
+		$post_id = isset($_POST['post_id']) ? absint($_POST['post_id']) : 0;
+		$post    = get_post($post_id);
+
+		if (! $post instanceof \WP_Post || ! current_user_can('edit_post', $post_id)) {
+			wp_send_json_error(['message' => __('You are not allowed to edit this item.', 'mihdan-index-now')], 403);
+		}
+
+		$value      = isset($_POST['value']) ? RichResults::sanitize((string) wp_unslash($_POST['value'])) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- sanitized by RichResults::sanitize().
+		$webpage_id = isset($_POST['webpage_id']) ? esc_url_raw(wp_unslash($_POST['webpage_id'])) : '';
+
+		wp_send_json_success(RichResults::preview($post, RichResults::decode($value), $webpage_id));
 	}
 
 	public function ajax_submit_indexnow(): void
