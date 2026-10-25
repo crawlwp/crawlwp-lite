@@ -71,6 +71,8 @@ class SEOCoreInit
 		FrontendOutput::class,
 		Sitemap::class,
 		WooCommerce::class,
+		\Mihdan\IndexNow\SEOCore\Authors\AuthorSchema::class,
+		\Mihdan\IndexNow\SEOCore\Authors\AuthorBox::class,
 	];
 
 	/**
@@ -86,6 +88,7 @@ class SEOCoreInit
 		TermMetaBox::class,
 		CoreSettings\Assets::class,
 		UserProfile::class,
+		\Mihdan\IndexNow\SEOCore\Authors\AuthorProfile::class,
 	];
 
 	public function __construct()
