@@ -33,6 +33,7 @@ use Mihdan\IndexNow\SEOCore\Importer\ImporterSettings;
 use Mihdan\IndexNow\SEOCore\TermSEO\TermMetaBox;
 use Mihdan\IndexNow\SEOCore\Schema\Graph;
 use Mihdan\IndexNow\SEOCore\SitemapSettings\SitemapStylesheet;
+use Mihdan\IndexNow\SEOCore\SitemapSettings\ImageSitemap;
 use Mihdan\IndexNow\SEOCore\ImageSEO\ImageSEO;
 use Mihdan\IndexNow\SEOCore\LlmsTxt\LlmsTxt;
 use Mihdan\IndexNow\SEOCore\InternalLinks\InternalLinksUpsell;
@@ -52,6 +53,7 @@ class SEOCoreInit
 	private const MODULES_ALWAYS = [
 		Graph::class,
 		SitemapStylesheet::class,
+		ImageSitemap::class,
 		ImageSEO::class,
 		LlmsTxt::class,
 		InternalLinksUpsell::class,
