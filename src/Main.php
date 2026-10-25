@@ -103,6 +103,7 @@ class Main
 		($this->container->make(Hooks::class))->setup_hooks();
 
 		($this->container->make(Settings::class))->setup_hooks();
+		(new SubmitUrls($this->container))->setup_hooks();
 		($this->container->make(Cron::class))->setup_hooks();
 		($this->container->make(YandexIndexNow::class))->setup_hooks();
 		($this->container->make(BingIndexNow::class))->setup_hooks();
@@ -123,8 +124,6 @@ class Main
 		$GLOBALS['CRAWLWP_YANDEX_WEBMASTER']->setup_hooks();
 		$GLOBALS['CRAWLWP_BING_WEBMASTER']->setup_hooks();
 		$GLOBALS['CRAWLWP_GOOGLE_WEBMASTER']->setup_hooks();
-
-		(new SubmitUrls($this->container))->setup_hooks();
 	}
 
 	/**
