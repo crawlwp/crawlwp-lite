@@ -1422,6 +1422,9 @@ require_once CRAWLWP_TESTS_PLUGIN_DIR . '/src/SEOCore/SitemapSettings/SitemapSet
 require_once CRAWLWP_TESTS_PLUGIN_DIR . '/src/SEOCore/SitemapSettings/SitemapStylesheet.php';
 require_once CRAWLWP_TESTS_PLUGIN_DIR . '/src/Utils.php';
 require_once CRAWLWP_TESTS_PLUGIN_DIR . '/src/SEOCore/FeatureGate/FeatureGate.php';
+require_once CRAWLWP_TESTS_PLUGIN_DIR . '/src/SEOCore/AI/Generator.php';
+require_once CRAWLWP_TESTS_PLUGIN_DIR . '/src/SEOCore/BulkEditor/BulkAI.php';
+require_once CRAWLWP_TESTS_PLUGIN_DIR . '/src/SEOCore/BulkEditor/ImageAlt.php';
 require_once CRAWLWP_TESTS_PLUGIN_DIR . '/src/SEOCore/Notifications/Notifications.php';
 require_once CRAWLWP_TESTS_PLUGIN_DIR . '/src/SEOCore/Code/CodeSettings.php';
 require_once CRAWLWP_TESTS_PLUGIN_DIR . '/src/SEOCore/MetaBox/FieldProcessor.php';

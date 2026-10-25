@@ -14,15 +14,20 @@
 	// -------------------------------------------------------------------------
 
 	var state = {
-		page:      1,
-		per_page:  20,
-		search:    '',
-		post_type: '',
-		filter:    'all'
+		view:         'posts',
+		page:         1,
+		per_page:     20,
+		search:       '',
+		post_type:    '',
+		filter:       'all',
+		image_filter: 'missing_alt'
 	};
 
-	// Dirty rows keyed by post id: { seo_title: '...', seo_description: '...' }.
+	// Dirty rows keyed by post/attachment id: { field: value, ... } for every field in the row.
 	var dirty = {};
+
+	// The running "Write with AI" job, if any.
+	var aiJob = null;
 
 	// -------------------------------------------------------------------------
 	// DOM refs (resolved after DOMContentLoaded)
@@ -59,7 +64,12 @@
 		}
 
 		bindEvents();
+		bindAI();
 		loadTable();
+
+		if ($('#cwp-bulk-missing-alt').length) {
+			refreshMissingCount();
+		}
 	});
 
 	// -------------------------------------------------------------------------
@@ -77,6 +87,51 @@
 			state.post_type = $(this).val();
 			state.page = 1;
 			loadTable();
+		});
+
+		// Posts / Image alt text views.
+		$wrap.on('click', '.cwp-bulk-view', function () {
+			var view = $(this).data('view');
+
+			if (view === state.view || aiJob || !confirmDiscard()) {
+				return;
+			}
+
+			state.view   = view;
+			state.page   = 1;
+			state.search = '';
+			$('#cwp-bulk-search').val('');
+
+			$wrap.find('.cwp-bulk-view').each(function () {
+				var on = $(this).data('view') === view;
+				$(this).toggleClass('is-active', on).attr('aria-selected', on ? 'true' : 'false');
+			});
+
+			$('#cwp-bulk-post-type, #cwp-bulk-filter').toggle(view === 'posts');
+			$('#cwp-bulk-image-filter').toggle(view === 'images');
+
+			renderHead();
+			loadTable();
+		});
+
+		$wrap.on('change', '#cwp-bulk-image-filter', function () {
+			if (!confirmDiscard()) {
+				$(this).val(state.image_filter);
+				return;
+			}
+			state.image_filter = $(this).val();
+			state.page = 1;
+			loadTable();
+		});
+
+		// Select all rows on this page.
+		$wrap.on('change', '.cwp-bulk-check-all', function () {
+			$tbody.find('.cwp-bulk-check').prop('checked', this.checked);
+		});
+
+		$wrap.on('change', '.cwp-bulk-check', function () {
+			var $checks = $tbody.find('.cwp-bulk-check');
+			$wrap.find('.cwp-bulk-check-all').prop('checked', $checks.length > 0 && $checks.filter(':checked').length === $checks.length);
 		});
 
 		// Missing title/description filter.
@@ -183,6 +238,11 @@
 	 * @return {boolean} True when it is fine to reload.
 	 */
 	function confirmDiscard() {
+		// Writing with AI fills fields on this page: finish or stop it first.
+		if (aiJob) {
+			return false;
+		}
+
 		return !hasDirty() || window.confirm(i18n.confirmDiscard || 'You have unsaved changes in the table. Discard them?');
 	}
 
@@ -192,26 +252,33 @@
 
 	function loadTable() {
 		closeVarsPanel();
-		$tbody.html('<tr class="cwp-bulk-loading-row"><td colspan="3">' + escapeHtml(i18n.loading || 'Loading…') + '</td></tr>');
+		$tbody.html('<tr class="cwp-bulk-loading-row"><td colspan="4">' + escapeHtml(i18n.loading || 'Loading…') + '</td></tr>');
+		$wrap.find('.cwp-bulk-check-all').prop('checked', false);
 		dirty = {};
 		toggleSaveButton();
 
+		var images = state.view === 'images';
+
 		$.post(cfg.ajaxUrl, {
-			action:    'crawlwp_bulk_editor_list',
+			action:    images ? 'crawlwp_bulk_editor_images' : 'crawlwp_bulk_editor_list',
 			nonce:     cfg.nonce,
 			search:    state.search,
 			post_type: state.post_type,
-			filter:    state.filter,
+			filter:    images ? state.image_filter : state.filter,
 			per_page:  state.per_page,
 			page:      state.page
 		}, function (resp) {
 			if (!resp.success) {
-				$tbody.html('<tr><td colspan="3">' + escapeHtml((resp.data && resp.data.message) ? resp.data.message : (i18n.error || 'Error')) + '</td></tr>');
+				$tbody.html('<tr><td colspan="4">' + escapeHtml((resp.data && resp.data.message) ? resp.data.message : (i18n.error || 'Error')) + '</td></tr>');
 				return;
 			}
 
 			var data = resp.data;
 			$tbody.html(data.html);
+
+			if (typeof data.missing !== 'undefined') {
+				updateMissingBadge(data.missing);
+			}
 
 			$tbody.find('.cwp-bulk-input').each(function () {
 				// The server-rendered length belongs to the stored value.
@@ -237,12 +304,10 @@
 		}
 
 		var rows = ids.map(function (id) {
-			return {
-				id:              id,
-				seo_title:       dirty[id].seo_title,
-				seo_description: dirty[id].seo_description
-			};
+			return $.extend({ id: id }, dirty[id]);
 		});
+
+		var images = state.view === 'images';
 
 		$saveBtn.prop('disabled', true).text(i18n.saving || 'Saving…');
 		hideNotice();
@@ -250,6 +315,7 @@
 		$.post(cfg.ajaxUrl, {
 			action: 'crawlwp_bulk_editor_save',
 			nonce:  cfg.nonce,
+			type:   images ? 'images' : 'posts',
 			rows:   rows
 		}, function (resp) {
 			$saveBtn.text(i18n.saveChanges || 'Save Changes');
@@ -272,7 +338,12 @@
 				});
 				$row.removeClass('is-dirty is-failed');
 				$row.find('.cwp-bulk-row-error').remove();
+				$row.find('.is-ai').removeClass('is-ai').find('.cwp-bulk-ai-tag').remove();
 			});
+
+			if (images) {
+				refreshMissingCount();
+			}
 
 			// Rows the server refused stay dirty and are called out in the table.
 			var failedIds = (resp.data && resp.data.failed) ? resp.data.failed : [];
@@ -335,20 +406,17 @@
 		// Editing the row clears a previous failure marker.
 		$row.removeClass('is-failed').find('.cwp-bulk-row-error').remove();
 
-		var $title = $row.find('[data-field="seo_title"]');
-		var $desc  = $row.find('[data-field="seo_description"]');
+		var values  = {};
+		var changed = false;
 
-		var titleVal = $title.val();
-		var descVal  = $desc.val();
+		$row.find('.cwp-bulk-input').each(function () {
+			var $field = $(this);
+			values[$field.data('field')] = $field.val();
+			changed = changed || $field.val() !== ($field.attr('data-original') || '');
+		});
 
-		var titleChanged = titleVal !== ($title.attr('data-original') || '');
-		var descChanged  = descVal !== ($desc.attr('data-original') || '');
-
-		if (titleChanged || descChanged) {
-			dirty[String(id)] = {
-				seo_title:       titleVal,
-				seo_description: descVal
-			};
+		if (changed) {
+			dirty[String(id)] = values;
 			$row.addClass('is-dirty');
 		} else {
 			delete dirty[String(id)];
@@ -421,17 +489,374 @@
 	}
 
 	// -------------------------------------------------------------------------
+	// Views
+	// -------------------------------------------------------------------------
+
+	function renderHead() {
+		var check = '<th class="cwp-bulk-col-check"><input type="checkbox" class="cwp-bulk-check-all"></th>';
+		var cols  = state.view === 'images'
+			? [['cwp-bulk-col-image', i18n.image], ['cwp-bulk-col-alt', i18n.altText, 2]]
+			: [['cwp-bulk-col-post', i18n.post], ['cwp-bulk-col-title', i18n.seoTitle], ['cwp-bulk-col-desc', i18n.metaDescription]];
+		var $tr = $('<tr></tr>').append(check);
+
+		cols.forEach(function (c) {
+			var $th = $('<th></th>').addClass(c[0]).text(c[1] || '');
+			if (c[2]) {
+				$th.attr('colspan', c[2]);
+			}
+			$tr.append($th);
+		});
+
+		$('#cwp-bulk-thead').empty().append($tr);
+	}
+
+	function updateMissingBadge(count) {
+		var $badge = $('#cwp-bulk-missing-alt');
+		$badge.text(fmt(i18n.missingAlt || '%s missing', [Number(count).toLocaleString()])).toggle(count > 0);
+	}
+
+	function refreshMissingCount() {
+		$.post(cfg.ajaxUrl, {
+			action: 'crawlwp_bulk_editor_images', nonce: cfg.nonce, count_only: 1
+		}, function (resp) {
+			if (resp && resp.success) {
+				updateMissingBadge(resp.data.missing);
+			}
+		});
+	}
+
+	// -------------------------------------------------------------------------
+	// AI
+	// -------------------------------------------------------------------------
+
+	function bindAI() {
+		// One field.
+		$wrap.on('click', '.cwp-bulk-ai', function (e) {
+			e.preventDefault();
+			var $input = $(this).closest('.cwp-bulk-field').find('.cwp-bulk-input');
+
+			if (aiJob || $input.closest('td').hasClass('is-ai-busy')) {
+				return;
+			}
+
+			writeField($input, false, function (result) {
+				if (result.error) {
+					showNotice(result.error, true, result.connectUrl);
+				}
+			});
+		});
+
+		// Many fields.
+		$wrap.on('click', '#cwp-bulk-ai-btn', function () {
+			if (!cfg.batchAI) {
+				showNotice(i18n.aiPremium, true, cfg.upgradeUrl, i18n.aiUpgrade);
+				return;
+			}
+
+			if (!cfg.aiReady) {
+				showNotice(i18n.aiNotReady, true, cfg.connectUrl, i18n.aiConnect);
+				return;
+			}
+
+			if (!aiJob) {
+				openDialog();
+			}
+		});
+
+		$wrap.on('click', '.cwp-bulk-progress__stop', function () {
+			if (aiJob) {
+				aiJob.stopped = true;
+			}
+		});
+	}
+
+	/**
+	 * Ask the server to write one field and put the result in it, marked
+	 * "AI · not saved" until the table is saved.
+	 *
+	 * @param {jQuery}   $input
+	 * @param {boolean}  batch
+	 * @param {Function} done   Called with {ok, error, connectUrl, rateLimited}.
+	 */
+	function writeField($input, batch, done) {
+		var $td    = $input.closest('td');
+		var field  = $input.data('field');
+		var $count = $td.find('.cwp-bulk-count');
+		var label  = field === 'alt' ? i18n.aiLookingImage : i18n.aiWriting;
+
+		$td.addClass('is-ai-busy');
+		$td.find('.cwp-bulk-ai-wait').remove();
+		$td.find('.cwp-bulk-field').append($('<span class="cwp-bulk-ai-wait"></span>').text(label || ''));
+		$td.find('.cwp-bulk-ai-error').remove();
+
+		$.ajax({
+			url:  cfg.ajaxUrl,
+			type: 'POST',
+			data: {
+				action:   'crawlwp_bulk_editor_ai',
+				nonce:    cfg.nonce,
+				id:       $input.closest('tr').data('id'),
+				field:    field,
+				previous: $input.val(),
+				batch:    batch ? 1 : 0
+			}
+		}).done(function (resp) {
+			if (resp && resp.success && resp.data && typeof resp.data.text === 'string') {
+				$input.val(resp.data.text).trigger('input');
+				$td.addClass('is-ai');
+
+				if (!$count.find('.cwp-bulk-ai-tag').length) {
+					$count.before($('<span class="cwp-bulk-ai-tag"></span>').text(i18n.aiNotSaved || ''));
+				}
+
+				done({ ok: true });
+				return;
+			}
+
+			var data = resp && resp.data ? resp.data : {};
+			fieldError($td, data.message || i18n.aiError);
+			done({ error: data.message || i18n.aiError, connectUrl: data.connectUrl, stop: !!data.stop });
+		}).fail(function (xhr) {
+			var data = xhr && xhr.responseJSON && xhr.responseJSON.data ? xhr.responseJSON.data : {};
+			fieldError($td, data.message || i18n.aiError);
+			done({ error: data.message || i18n.aiError, connectUrl: data.connectUrl, rateLimited: xhr && xhr.status === 429 });
+		}).always(function () {
+			$td.removeClass('is-ai-busy').find('.cwp-bulk-ai-wait').remove();
+		});
+	}
+
+	function fieldError($td, message) {
+		$td.find('.cwp-bulk-ai-error').remove();
+		$td.append($('<span class="cwp-bulk-ai-error"></span>').text(message));
+	}
+
+	/**
+	 * Fields of the rows "Write with AI" would fill.
+	 *
+	 * @param {Object} opts {fields: [], scope: 'selected'|'page', overwrite: bool}
+	 * @return {jQuery[]}
+	 */
+	function batchTargets(opts) {
+		var $rows = $tbody.find('tr[data-id]');
+
+		if (opts.scope === 'selected') {
+			$rows = $rows.filter(function () {
+				return $(this).find('.cwp-bulk-check').is(':checked');
+			});
+		}
+
+		var out = [];
+
+		$rows.each(function () {
+			var $row = $(this);
+			opts.fields.forEach(function (f) {
+				var $input = $row.find('.cwp-bulk-input[data-field="' + f + '"]');
+				if ($input.length && (opts.overwrite || $.trim($input.val()) === '')) {
+					out.push($input);
+				}
+			});
+		});
+
+		return out;
+	}
+
+	function openDialog() {
+		var images   = state.view === 'images';
+		var selected = $tbody.find('.cwp-bulk-check:checked').length;
+		var onPage   = $tbody.find('tr[data-id]').length;
+
+		var fields = images
+			? [['alt', i18n.aiAlts]]
+			: [['seo_title', i18n.aiTitles], ['seo_description', i18n.aiDescriptions]];
+
+		var $dialog = $('<div class="cwp-bulk-dialog" role="dialog" aria-modal="true"></div>');
+		var $box    = $('<div class="cwp-bulk-dialog__box"></div>').appendTo($dialog);
+
+		$box.append($('<h2 class="cwp-bulk-dialog__title"></h2>').html(cfg.aiIcon || '').append($('<span></span>').text(i18n.aiDialogTitle)));
+
+		var $body = $('<div class="cwp-bulk-dialog__body"></div>').appendTo($box);
+
+		if (fields.length > 1) {
+			var $write = $('<fieldset></fieldset>').append($('<legend></legend>').text(i18n.aiWrite));
+			fields.forEach(function (f) {
+				$write.append($('<label></label>').append($('<input type="checkbox" name="cwp-ai-field" checked>').val(f[0])).append(document.createTextNode(' ' + f[1])));
+			});
+			$body.append($write);
+		}
+
+		var $for = $('<fieldset></fieldset>').append($('<legend></legend>').text(i18n.aiFor));
+		if (selected) {
+			$for.append($('<label></label>').append('<input type="radio" name="cwp-ai-scope" value="selected" checked>').append(document.createTextNode(' ' + fmt(i18n.aiSelected, [selected]))));
+		}
+		$for.append($('<label></label>').append($('<input type="radio" name="cwp-ai-scope" value="page">').prop('checked', !selected)).append(document.createTextNode(' ' + fmt(i18n.aiAllOnPage, [onPage]))));
+		$for.append($('<p class="cwp-bulk-dialog__hint"></p>').text(i18n.aiPageHint));
+		$body.append($for);
+
+		var $existing = $('<fieldset></fieldset>').append($('<legend></legend>').text(i18n.aiExisting));
+		$existing.append($('<label></label>').append('<input type="radio" name="cwp-ai-overwrite" value="0" checked>').append(document.createTextNode(' ' + i18n.aiKeep)));
+		$existing.append($('<label></label>').append('<input type="radio" name="cwp-ai-overwrite" value="1">').append(document.createTextNode(' ' + i18n.aiRewrite)));
+		$body.append($existing);
+
+		var $note = $('<p class="cwp-bulk-dialog__note"></p>').appendTo($body);
+
+		var $foot   = $('<div class="cwp-bulk-dialog__foot"></div>').appendTo($box);
+		var $cancel = $('<button type="button" class="cwp-bulk-btn"></button>').text(i18n.cancel).appendTo($foot);
+		var $start  = $('<button type="button" class="cwp-bulk-btn cwp-bulk-btn--ai"></button>').appendTo($foot);
+
+		function options() {
+			var chosen = fields.length > 1
+				? $body.find('input[name="cwp-ai-field"]:checked').map(function () { return this.value; }).get()
+				: [fields[0][0]];
+
+			return {
+				fields:    chosen,
+				scope:     $body.find('input[name="cwp-ai-scope"]:checked').val(),
+				overwrite: $body.find('input[name="cwp-ai-overwrite"]:checked').val() === '1'
+			};
+		}
+
+		function update() {
+			var count = batchTargets(options()).length;
+			$note.text(count ? fmt(i18n.aiNote, [count]) : i18n.aiNothing);
+			$start.text(fmt(i18n.aiStart, [count])).prop('disabled', count === 0);
+		}
+
+		function close() {
+			$dialog.remove();
+			$(document).off('keydown.cwpAiDialog');
+			$('#cwp-bulk-ai-btn').trigger('focus');
+		}
+
+		$body.on('change', 'input', update);
+		$cancel.on('click', close);
+		$dialog.on('click', function (e) {
+			if (e.target === $dialog.get(0)) {
+				close();
+			}
+		});
+		$(document).on('keydown.cwpAiDialog', function (e) {
+			if (e.key === 'Escape') {
+				close();
+			}
+		});
+		$start.on('click', function () {
+			var targets = batchTargets(options());
+			close();
+			runBatch(targets);
+		});
+
+		update();
+		$('body').append($dialog);
+		$start.trigger('focus');
+	}
+
+	/**
+	 * Write the fields one after another, so the provider and the rate limit
+	 * are not flooded, showing progress with a Stop button.
+	 *
+	 * @param {jQuery[]} targets
+	 */
+	function runBatch(targets) {
+		var $progress = $('#cwp-bulk-progress');
+		var label     = state.view === 'images' ? i18n.aiProgressAlt : i18n.aiProgressPosts;
+		var job       = { stopped: false, done: 0, ok: 0, failed: 0 };
+
+		aiJob = job;
+		hideNotice();
+		$wrap.addClass('is-ai-running');
+		$progress.css('display', 'flex');
+
+		function render() {
+			$progress.find('.cwp-bulk-progress__label').empty()
+				.append($('<b></b>').text(label + ' '))
+				.append(document.createTextNode(fmt(i18n.aiProgressCount, [job.done, targets.length])));
+			$progress.find('.cwp-bulk-progress__bar i').css('width', (targets.length ? job.done / targets.length * 100 : 0) + '%');
+		}
+
+		function finish(message, isError, linkUrl) {
+			aiJob = null;
+			$wrap.removeClass('is-ai-running');
+			$progress.hide();
+			showNotice(message, isError, linkUrl);
+		}
+
+		function next() {
+			if (job.stopped) {
+				finish(i18n.aiStopped, false);
+				return;
+			}
+
+			if (job.done >= targets.length) {
+				finish(fmt(i18n.aiDone, [job.ok, job.failed]), job.failed > 0);
+				return;
+			}
+
+			var $input = targets[job.done];
+
+			writeField($input, true, function (result) {
+				job.done++;
+
+				if (result.ok) {
+					job.ok++;
+				} else {
+					job.failed++;
+				}
+
+				render();
+
+				if (result.rateLimited) {
+					finish(i18n.aiRateLimited, true);
+					return;
+				}
+
+				// A connection problem (or a model that can't read images) fails every field the same way: stop.
+				if (result.connectUrl || result.stop) {
+					finish(result.error, true, result.connectUrl);
+					return;
+				}
+
+				next();
+			});
+		}
+
+		render();
+		next();
+	}
+
+	/**
+	 * PHP-style placeholders (%s, %d, %1$s) in translated strings.
+	 */
+	function fmt(str, args) {
+		var i = 0;
+		return String(str || '').replace(/%(\d+\$)?[sd]/g, function (m, pos) {
+			var index = pos ? parseInt(pos, 10) - 1 : i++;
+			return typeof args[index] !== 'undefined' ? args[index] : m;
+		});
+	}
+
+	// -------------------------------------------------------------------------
 	// Notices
 	// -------------------------------------------------------------------------
 
-	function showNotice(message, isError) {
+	var noticeTimer = null;
+
+	function showNotice(message, isError, linkUrl, linkText) {
 		$notice
 			.text(message)
 			.toggleClass('cwp-bulk-notice--error', !!isError)
 			.toggleClass('cwp-bulk-notice--success', !isError)
 			.prop('hidden', false);
 
-		setTimeout(hideNotice, 4000);
+		if (linkUrl) {
+			$notice.append(' ').append($('<a target="_blank" rel="noopener"></a>').attr('href', linkUrl).text(linkText || i18n.aiConnect || linkUrl));
+		}
+
+		clearTimeout(noticeTimer);
+
+		// Messages with a link or about AI results stay until the next action.
+		if (!linkUrl && !isError) {
+			noticeTimer = setTimeout(hideNotice, 6000);
+		}
 	}
 
 	function hideNotice() {
