@@ -2,6 +2,8 @@
 
 namespace Mihdan\IndexNow\SEOCore\Redirects;
 
+use Mihdan\IndexNow\SEOCore\Permissions;
+
 use Mihdan\IndexNow\Utils;
 use Mihdan\IndexNow\Views\WPOSA;
 
@@ -126,7 +128,7 @@ class RedirectsSettings
 	{
 		check_ajax_referer('crawlwp_redirects_nonce', 'nonce');
 
-		if (!current_user_can('manage_options')) {
+		if (!Permissions::can(Permissions::REDIRECTS)) {
 			wp_send_json_error(['message' => __('Permission denied.', 'mihdan-index-now')]);
 		}
 
@@ -158,7 +160,7 @@ class RedirectsSettings
 	{
 		check_ajax_referer('crawlwp_redirects_nonce', 'nonce');
 
-		if (!current_user_can('manage_options')) {
+		if (!Permissions::can(Permissions::REDIRECTS)) {
 			wp_send_json_error(['message' => __('Permission denied.', 'mihdan-index-now')]);
 		}
 
@@ -234,7 +236,7 @@ class RedirectsSettings
 	{
 		check_ajax_referer('crawlwp_redirects_nonce', 'nonce');
 
-		if (!current_user_can('manage_options')) {
+		if (!Permissions::can(Permissions::REDIRECTS)) {
 			wp_send_json_error(['message' => __('Permission denied.', 'mihdan-index-now')]);
 		}
 
@@ -254,7 +256,7 @@ class RedirectsSettings
 	{
 		check_ajax_referer('crawlwp_redirects_nonce', 'nonce');
 
-		if (!current_user_can('manage_options')) {
+		if (!Permissions::can(Permissions::REDIRECTS)) {
 			wp_send_json_error(['message' => __('Permission denied.', 'mihdan-index-now')]);
 		}
 
@@ -278,7 +280,7 @@ class RedirectsSettings
 	{
 		check_ajax_referer('crawlwp_redirects_nonce', 'nonce');
 
-		if (!current_user_can('manage_options')) {
+		if (!Permissions::can(Permissions::REDIRECTS)) {
 			wp_send_json_error(['message' => __('Permission denied.', 'mihdan-index-now')]);
 		}
 

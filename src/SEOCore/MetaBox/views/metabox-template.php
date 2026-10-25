@@ -88,11 +88,12 @@ $cwp_templates = \Mihdan\IndexNow\SEOCore\MetaBox\Assets::title_meta_templates($
       <?php esc_html_e('Analysis', 'mihdan-index-now'); ?> <span class="cwp-dot cwp-dot-analysis" title="" hidden></span>
     </button>
     <button class="cwp-tab" role="tab" aria-selected="false" data-panel="social" type="button"><?php esc_html_e('Social', 'mihdan-index-now'); ?></button>
-    <button class="cwp-tab" role="tab" aria-selected="false" data-panel="schema" type="button"><?php esc_html_e('Schema', 'mihdan-index-now'); ?></button>
+    <?php $cwp_advanced_hidden = ! \Mihdan\IndexNow\SEOCore\Permissions::can(\Mihdan\IndexNow\SEOCore\Permissions::SEO_ADVANCED); ?>
+    <button class="cwp-tab" role="tab" aria-selected="false" data-panel="schema" type="button"<?php echo $cwp_advanced_hidden ? ' style="display:none"' : ''; ?>><?php esc_html_e('Schema', 'mihdan-index-now'); ?></button>
     <button class="cwp-tab" role="tab" aria-selected="false" data-panel="links" type="button">
       <?php esc_html_e('Links', 'mihdan-index-now'); ?> <span class="cwp-dot cwp-dot-links" title="<?php esc_attr_e('No internal links yet', 'mihdan-index-now'); ?>" hidden></span>
     </button>
-    <button class="cwp-tab" role="tab" aria-selected="false" data-panel="advanced" type="button"><?php esc_html_e('Advanced', 'mihdan-index-now'); ?></button>
+    <button class="cwp-tab" role="tab" aria-selected="false" data-panel="advanced" type="button"<?php echo $cwp_advanced_hidden ? ' style="display:none"' : ''; ?>><?php esc_html_e('Advanced', 'mihdan-index-now'); ?></button>
     <?php if (! defined('CRAWLWP_PRO_VERSION')) : ?>
     <button class="cwp-tab" role="tab" aria-selected="false" data-panel="insights" type="button">
       <?php esc_html_e('Insights', 'mihdan-index-now'); ?> <span class="cwp-pro-badge"><?php esc_html_e('PRO', 'mihdan-index-now'); ?></span>

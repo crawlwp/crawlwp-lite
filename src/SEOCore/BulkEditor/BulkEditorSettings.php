@@ -2,6 +2,8 @@
 
 namespace Mihdan\IndexNow\SEOCore\BulkEditor;
 
+use Mihdan\IndexNow\SEOCore\Permissions;
+
 use Mihdan\IndexNow\SEOCore\MetaBox\MetaFields;
 use Mihdan\IndexNow\SEOCore\MetaBox\PostListColumn;
 use Mihdan\IndexNow\SEOCore\MetaBox\SeoSignals;
@@ -156,7 +158,7 @@ class BulkEditorSettings
 	{
 		check_ajax_referer('crawlwp_bulk_editor_nonce', 'nonce');
 
-		if (! current_user_can('edit_posts')) {
+		if (! current_user_can('edit_posts') || ! Permissions::can(Permissions::BULK_EDITOR)) {
 			wp_send_json_error(['message' => __('Permission denied.', 'mihdan-index-now')]);
 		}
 
@@ -215,7 +217,7 @@ class BulkEditorSettings
 	{
 		check_ajax_referer('crawlwp_bulk_editor_nonce', 'nonce');
 
-		if (! current_user_can('edit_posts')) {
+		if (! current_user_can('edit_posts') || ! Permissions::can(Permissions::BULK_EDITOR)) {
 			wp_send_json_error(['message' => __('Permission denied.', 'mihdan-index-now')]);
 		}
 

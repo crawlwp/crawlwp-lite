@@ -724,7 +724,7 @@ class Elementor
 		$definitions = array_intersect_key(MetaFields::field_definitions(true), $submitted);
 		// FieldProcessor expects slashed request data; Elementor's payload is
 		// already unslashed (JSON-decoded), so re-slash to keep backslashes.
-		$values      = FieldProcessor::process($definitions, wp_slash($normalized));
+		$values      = MetaFields::allowed_values(FieldProcessor::process($definitions, wp_slash($normalized)));
 
 		// External redirect authorization check
 		if (

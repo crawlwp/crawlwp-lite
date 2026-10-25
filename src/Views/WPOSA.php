@@ -10,6 +10,8 @@
 
 namespace Mihdan\IndexNow\Views;
 
+use Mihdan\IndexNow\SEOCore\Permissions;
+
 use Mihdan\IndexNow\Utils;
 
 /**
@@ -586,7 +588,7 @@ class WPOSA
 	 */
 	function admin_init()
 	{
-		if (isset($_REQUEST['action'], $_REQUEST['crawlwp_options_save']) && $_REQUEST['action'] == 'update' && current_user_can('manage_options')) {
+		if (isset($_REQUEST['action'], $_REQUEST['crawlwp_options_save']) && $_REQUEST['action'] == 'update' && Permissions::can(Permissions::SETTINGS)) {
 
 			$option_page = ! empty($_REQUEST['option_page']) ? sanitize_text_field($_REQUEST['option_page']) : '';
 
@@ -1523,6 +1525,35 @@ class WPOSA
 	/**
 	 * Add submenu page to the Settings main menu.
 	 */
+	/**
+	 * Capability for this page. CrawlWP's Permissions (and Premium's Role
+	 * Manager) can let other roles in.
+	 */
+	private function page_capability(): string
+	{
+		return (string) apply_filters('crawlwp_admin_page_capability', 'manage_options', ! empty($this->sub_menu_slug) ? $this->sub_menu_slug : $this->plugin_slug);
+	}
+
+	/**
+	 * Drop the sections (and then the header menus) the current user may not open.
+	 */
+	private function apply_section_visibility(): void
+	{
+		$before = count($this->sections_array);
+
+		$this->sections_array = (array) apply_filters('crawlwp_wposa_sections', $this->sections_array, $this->plugin_prefix, ! empty($this->sub_menu_slug) ? $this->sub_menu_slug : $this->plugin_slug);
+
+		if (count($this->sections_array) === $before) return;
+
+		$used = array_flip(array_filter(array_column($this->sections_array, 'header_menu_id')));
+
+		$this->header_menu_array = array_values(array_filter($this->header_menu_array, static function ($menu) use ($used) {
+			return isset($used[$menu['id']]);
+		}));
+
+		$this->sidebar_cards = [];
+	}
+
 	public function admin_menu()
 	{
 		if ( ! empty($this->sub_menu_slug)) {
@@ -1531,7 +1562,7 @@ class WPOSA
 				$this->plugin_slug,
 				$this->sub_page_title,
 				$this->sub_page_title,
-				'manage_options',
+				$this->page_capability(),
 				$this->sub_menu_slug,
 				array($this, 'plugin_page')
 			);
@@ -1541,7 +1572,7 @@ class WPOSA
 			$hook = add_menu_page(
 				$this->plugin_name,
 				$this->plugin_name,
-				'manage_options',
+				$this->page_capability(),
 				$this->plugin_slug,
 				array($this, 'plugin_page'),
 				$this->getMenuIcon()
@@ -1551,7 +1582,7 @@ class WPOSA
 				$this->plugin_slug,
 				$this->plugin_name,
 				esc_html__('Settings', 'mihdan-index-now'),
-				'manage_options',
+				$this->page_capability(),
 				$this->plugin_slug,
 				array($this, 'plugin_page')
 			);
@@ -1591,6 +1622,8 @@ class WPOSA
 	{
 		$review_url  = 'https://wordpress.org/support/plugin/mihdan-index-now/reviews/?filter=5#new-post';
 		$upgrade_url = 'https://crawlwp.com/pricing/?utm_source=wp_dashboard&utm_medium=upgrade&utm_campaign=crawlwp-header-top';
+
+		$this->apply_section_visibility();
 
 		$active_header_menu_id = $this->get_active_header_menu();
 
