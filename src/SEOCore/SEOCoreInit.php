@@ -100,6 +100,11 @@ class SEOCoreInit
 		new SiteVerificationFrontendOutput();
 		new EmailReportsUpsell();
 
+		// WP-CLI: `wp crawlwp ...`. Registered once the plugin's services exist.
+		if (defined('WP_CLI') && WP_CLI) {
+			add_action('crawlwp/init', [CLI\Commands::class, 'register']);
+		}
+
 		// The on-page SEO output features are gated behind the master toggle.
 		// Admins who are upgrading from another SEO plugin can review settings
 		// first, then flip the switch on the "SEO Features" tab.
