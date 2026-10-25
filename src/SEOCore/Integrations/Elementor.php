@@ -290,6 +290,14 @@ class Elementor
 			return;
 		}
 
+		// Same as the SEO box: no panels without the SEO box permission, and no
+		// canonical, primary category, schema, robots or redirects without the advanced one.
+		if (! \Mihdan\IndexNow\SEOCore\Permissions::can(\Mihdan\IndexNow\SEOCore\Permissions::SEO_BOX)) {
+			return;
+		}
+
+		$advanced = \Mihdan\IndexNow\SEOCore\Permissions::can(\Mihdan\IndexNow\SEOCore\Permissions::SEO_ADVANCED);
+
 		// ---------------------------------------------------------------------
 		// 1. General
 		// ---------------------------------------------------------------------
@@ -323,31 +331,33 @@ class Elementor
 			'default'     => self::control_default(MetaFields::FOCUS_KEYWORD),
 		]);
 
-		$document->add_control(MetaFields::CANONICAL_URL, [
-			'label'       => __('Canonical URL', 'mihdan-index-now'),
-			'type'        => \Elementor\Controls_Manager::URL,
-			'ai'          => ['active' => false],
-			'placeholder' => 'https://...',
-			'default'     => self::control_default(MetaFields::CANONICAL_URL),
-		]);
+		if ($advanced) {
+			$document->add_control(MetaFields::CANONICAL_URL, [
+				'label'       => __('Canonical URL', 'mihdan-index-now'),
+				'type'        => \Elementor\Controls_Manager::URL,
+				'ai'          => ['active' => false],
+				'placeholder' => 'https://...',
+				'default'     => self::control_default(MetaFields::CANONICAL_URL),
+			]);
 
-		$category_options = [
-			'0' => __('Default (First category)', 'mihdan-index-now'),
-		];
-		$terms = get_the_terms($post_id, 'category');
-		if (! empty($terms) && ! is_wp_error($terms)) {
-			foreach ($terms as $term) {
-				$category_options[(string) $term->term_id] = $term->name;
+			$category_options = [
+				'0' => __('Default (First category)', 'mihdan-index-now'),
+			];
+			$terms = get_the_terms($post_id, 'category');
+			if (! empty($terms) && ! is_wp_error($terms)) {
+				foreach ($terms as $term) {
+					$category_options[(string) $term->term_id] = $term->name;
+				}
 			}
-		}
 
-		$document->add_control(MetaFields::PRIMARY_CATEGORY, [
-			'label'       => __('Primary category', 'mihdan-index-now'),
-			'type'        => \Elementor\Controls_Manager::SELECT,
-			'options'     => $category_options,
-			'description' => __('Used for breadcrumbs and category permalink tags.', 'mihdan-index-now'),
-			'default'     => self::control_default(MetaFields::PRIMARY_CATEGORY),
-		]);
+			$document->add_control(MetaFields::PRIMARY_CATEGORY, [
+				'label'       => __('Primary category', 'mihdan-index-now'),
+				'type'        => \Elementor\Controls_Manager::SELECT,
+				'options'     => $category_options,
+				'description' => __('Used for breadcrumbs and category permalink tags.', 'mihdan-index-now'),
+				'default'     => self::control_default(MetaFields::PRIMARY_CATEGORY),
+			]);
+		}
 
 		$document->end_controls_section();
 
@@ -478,8 +488,12 @@ class Elementor
 
 		$document->end_controls_section();
 
+		if (! $advanced) {
+			return;
+		}
+
 		// ---------------------------------------------------------------------
-		// 3. Schema & Structured Data
+		// 3. Schema & Structured Data (and 4. Robots & Redirects): advanced only
 		// ---------------------------------------------------------------------
 		$document->start_controls_section('crawlwp_seo_schema', [
 			'label' => __('CrawlWP: Schema & Structured Data', 'mihdan-index-now'),
@@ -679,7 +693,7 @@ class Elementor
 			return;
 		}
 
-		if (! current_user_can('edit_post', $post_id) || ! self::is_supported_post($post_id)) {
+		if (! current_user_can('edit_post', $post_id) || ! self::is_supported_post($post_id) || ! \Mihdan\IndexNow\SEOCore\Permissions::can(\Mihdan\IndexNow\SEOCore\Permissions::SEO_BOX)) {
 			return;
 		}
 
