@@ -6,6 +6,7 @@ use Mihdan\IndexNow\SEOCore\Importer\Sources\AIOSEO;
 use Mihdan\IndexNow\SEOCore\Importer\Sources\RankMath;
 use Mihdan\IndexNow\SEOCore\Importer\Sources\SEOPress;
 use Mihdan\IndexNow\SEOCore\Importer\Sources\SlimSEO;
+use Mihdan\IndexNow\SEOCore\Importer\Sources\Redirection;
 use Mihdan\IndexNow\SEOCore\Importer\Sources\TheSEOFramework;
 use Mihdan\IndexNow\SEOCore\Importer\Sources\Yoast;
 
@@ -32,6 +33,7 @@ class Runner
 			new SEOPress(),
 			new TheSEOFramework(),
 			new SlimSEO(),
+			new Redirection(),
 		];
 	}
 
@@ -77,6 +79,7 @@ class Runner
 			'seopress' => defined('SEOPRESS_VERSION') || defined('SEOPRESS_PRO_VERSION'),
 			'tsf'      => defined('THE_SEO_FRAMEWORK_VERSION'),
 			'slimseo'  => defined('SLIM_SEO_VER'),
+			'redirection' => defined('REDIRECTION_VERSION'),
 		];
 
 		if (! empty($constants[$id])) {
@@ -95,6 +98,7 @@ class Runner
 				'seopress' => ['wp-seopress/seopress.php', 'wp-seopress-pro/seopress-pro.php'],
 				'tsf'      => ['autodescription/autodescription.php'],
 				'slimseo'  => ['slim-seo/slim-seo.php'],
+				'redirection' => ['redirection/redirection.php'],
 			];
 
 			foreach ($files[$id] ?? [] as $file) {
@@ -123,6 +127,7 @@ class Runner
 			'seopress' => ['wp-seopress/seopress.php', 'wp-seopress-pro/seopress-pro.php'],
 			'tsf'      => ['autodescription/autodescription.php'],
 			'slimseo'  => ['slim-seo/slim-seo.php'],
+			'redirection' => ['redirection/redirection.php'],
 		];
 
 		foreach ($files[$id] ?? [] as $file) {
