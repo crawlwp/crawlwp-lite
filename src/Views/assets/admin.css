@@ -881,6 +881,85 @@ body:not(.cwpWP7higher) .cwp-premium-sidebar-upsell-cta .button-primary {
 }
 
 
+/* Upsell / connect pages (also used by CrawlWP Premium's SEO Stats connect screens). */
+.crawlwp-full-feature-upsell-page-wrap {
+	background: #fff;
+	border: 1px solid #d6e2ed;
+	text-align: center;
+	margin-top: 25px;
+	margin-left: auto;
+	margin-right: auto;
+	max-width: 900px;
+}
+
+.crawlwp-full-feature-upsell-page-wrap a.bbtn {
+	border-style: solid;
+	border-width: 1px 1px 2px 1px;
+	border-radius: 3px;
+	cursor: pointer;
+	display: inline-block;
+	font-weight: 400;
+	text-decoration: none;
+	background: var(--wp-admin-theme-color, #2271b1);
+	border-color: var(--wp-admin-theme-color, #2271b1);
+	color: #fff;
+	font-size: 16px;
+	padding: 14px 27px;
+}
+
+.btn-higher-up {
+	position: absolute;
+	top: 0;
+	left: 50%;
+	transform: translate(-50%, -50%);
+}
+
+.crawlwp-upsell-top {
+	padding: 20px;
+}
+
+.crawlwp-upsell-featured-image {
+	padding: 10px 0;
+}
+
+.crawlwp-full-feature-upsell-page-wrap h2 {
+	font-size: 20px;
+	color: #000;
+	margin: 36px 0 14px;
+}
+
+.crawlwp-full-feature-upsell-page-wrap h4 {
+	font-size: 18px;
+	color: #4c6577;
+	font-weight: 400;
+	margin: 0;
+	line-height: 2;
+}
+
+.crawlwp-full-feature-upsell-page-wrap h3 {
+	font-size: 18px;
+	color: #000;
+	margin: 0 0 14px;
+}
+
+.crawlwp-upsell-bottom {
+	background: rgb(250 250 250 / 63%);
+	border-top: 1px solid #d6e2ed;
+	padding: 36px 50px 60px;
+	position: relative;
+}
+
+.crawlwp-upsell-featured-image img {
+	width: 100%;
+	height: auto;
+}
+
+.crawlwp-full-feature-upsell-page-wrap p {
+	font-size: 14px;
+	color: #4c6577;
+	padding: 6px 0;
+}
+
 /* "New" badge */
 .crawlwp-new-badge { display: inline-block; margin-right: 6px; padding: 1px 7px; border-radius: 999px; background: #e7f5ec; color: #00703c; font-size: 11px; font-weight: 600; line-height: 1.6; vertical-align: 1px; }
 
@@ -908,10 +987,6 @@ a.crawlwp-locked__button:hover, a.crawlwp-locked__button:focus { background: #21
 
 /* "New" marker in the Premium sidebar card */
 .cwp-premium-sidebar-upsell-li .crawlwp-new-badge { margin: 0 0 0 6px; font-size: 10px; }
-
-
-@media (max-width: 782px) {
-	}
 
 /* Site Verification: keep the long example <meta> tags inside the settings box. */
 #crawlwp_site_verification .description code {
