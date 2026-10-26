@@ -67,6 +67,8 @@ function crawlwp_lite_pro_owned_options()
 		'prefixes' => [
 			'crawlwp_pro_',
 			'crawlwp_alerts',
+			// Content Refresh: refreshed and hidden pages.
+			'crawlwp_content_refresh',
 			'crawlwp_license',
 		],
 	];
