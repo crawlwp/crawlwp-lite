@@ -15,6 +15,12 @@ namespace Mihdan\IndexNow\SEOCore\Integrations;
  */
 class PageBuilders
 {
+	/** The page's plain text, remembered until the post changes: ['modified' => post_modified_gmt, 'text' => …]. */
+	public const TEXT_META = '_crawlwp_builder_text';
+
+	/** Shortcode content beyond this is not scanned (and very long builder HTML is not sent to the editor script). */
+	private const MAX_BYTES = 300000;
+
 	/** Bricks' meta key for the page content (BRICKS_DB_PAGE_CONTENT). */
 	private const BRICKS_CONTENT = '_bricks_page_content_2';
 
@@ -22,6 +28,23 @@ class PageBuilders
 	{
 		add_filter('crawlwp_metabox_localize_data', [$this, 'localize'], 10, 2);
 		add_filter('crawlwp_post_content_for_text', [$this, 'content_for_text'], 10, 2);
+
+		/* Bricks saves its content as post meta, which may not change the post's modified date. */
+		foreach (['added_post_meta', 'updated_post_meta', 'deleted_post_meta'] as $hook) {
+			add_action($hook, [$this, 'forget_text'], 10, 3);
+		}
+	}
+
+	/**
+	 * @param mixed $meta_id
+	 * @param mixed $post_id
+	 * @param mixed $meta_key
+	 */
+	public function forget_text($meta_id, $post_id, $meta_key): void
+	{
+		if ($meta_key === self::BRICKS_CONTENT) {
+			delete_post_meta((int) $post_id, self::TEXT_META);
+		}
 	}
 
 	/**
@@ -38,24 +61,58 @@ class PageBuilders
 	{
 		$content = (string) $content;
 
-		if ($post instanceof \WP_Post) {
-			$builder = self::for_post($post);
-
-			if ($builder !== null) {
-				/* A space between elements, so a heading's last word doesn't run into the next paragraph. */
-				return str_replace('><', '> <', $builder['html']);
-			}
+		if (! $post instanceof \WP_Post) {
+			return self::shortcodes_to_text($content);
 		}
 
+		/*
+		 * The description runs on page views, but only needs the first words:
+		 * build the text once per change of the post and keep it (a page's
+		 * builder HTML can take tens of milliseconds and a query per image).
+		 */
+		$saved = get_post_meta($post->ID, self::TEXT_META, true);
+
+		if (is_array($saved) && ($saved['modified'] ?? '') === $post->post_modified_gmt && isset($saved['text']) && is_string($saved['text'])) {
+			return $saved['text'];
+		}
+
+		$builder = self::for_post($post);
+
+		if ($builder !== null) {
+			/* A space between elements, so a heading's last word doesn't run into the next paragraph. */
+			$text = str_replace('><', '> <', $builder['html']);
+		} elseif (strpos($content, '[et_pb_') !== false || strpos($content, '[fusion_') !== false) {
+			$text = self::shortcodes_to_text($content);
+		} else {
+			return $content; // Not a builder page: nothing to remember.
+		}
+
+		$text = wp_trim_words(wp_strip_all_tags(strip_shortcodes($text)), 100, '');
+
+		if (! wp_is_post_revision($post) && $post->post_status !== 'auto-draft') {
+			update_post_meta($post->ID, self::TEXT_META, ['modified' => $post->post_modified_gmt, 'text' => $text]);
+		}
+
+		return $text;
+	}
+
+	/**
+	 * Divi 4 or Avada content with the shortcode tags turned into text.
+	 */
+	private static function shortcodes_to_text(string $content): string
+	{
 		if (strpos($content, '[et_pb_') === false && strpos($content, '[fusion_') === false) {
 			return $content;
 		}
 
+		/* Only the start matters for a description, and it keeps the patterns below fast. */
+		$content = substr($content, 0, self::MAX_BYTES);
+
 		/* Avada: an image frame holds an image URL and a code block base64-encoded markup, neither of them text. */
-		$content = (string) preg_replace('/\[(fusion_imageframe|fusion_code)\b[^\]]*\][\s\S]*?\[\/\1\]/', ' ', $content);
+		$content = self::drop_tags_with_content($content, ['fusion_imageframe', 'fusion_code']);
 
 		/* Divi 4 keeps headings and button labels in the shortcode's settings, as the metabox script reads them. */
-		$content = (string) preg_replace_callback(
+		$content = preg_replace_callback(
 			'/\[et_pb_(heading|blurb|cta|button)\b([^\]]*)\]/',
 			static function (array $m): string {
 				$attrs = shortcode_parse_atts($m[2]);
@@ -72,9 +129,48 @@ class PageBuilders
 				return ' ' . implode('. ', $text) . ' ';
 			},
 			$content
-		);
+		) ?? $content;
 
-		return (string) preg_replace('/\[\/?(?:et_pb|fusion)_[^\]]*\]/', ' ', $content);
+		/* A pattern that hits PCRE's limits returns null: keep what we have rather than an empty description. */
+		return preg_replace('/\[\/?(?:et_pb|fusion)_[^\]]*\]/', ' ', $content) ?? $content;
+	}
+
+	/**
+	 * Remove [tag]…[/tag] blocks, content included. A linear scan: an unclosed
+	 * tag ends the search instead of making a pattern re-scan the rest each time.
+	 *
+	 * @param string[] $tags
+	 */
+	private static function drop_tags_with_content(string $content, array $tags): string
+	{
+		foreach ($tags as $tag) {
+			$out = '';
+			$pos = 0;
+
+			while (($start = strpos($content, '[' . $tag, $pos)) !== false) {
+				$next = $content[$start + strlen($tag) + 1] ?? '';
+
+				/* [fusion_code_x] is another shortcode. */
+				if ($next !== ']' && $next !== ' ') {
+					$out .= substr($content, $pos, $start + 1 - $pos);
+					$pos  = $start + 1;
+					continue;
+				}
+
+				$end = strpos($content, '[/' . $tag . ']', $start);
+
+				if ($end === false) {
+					break;
+				}
+
+				$out .= substr($content, $pos, $start - $pos) . ' ';
+				$pos  = $end + strlen($tag) + 3;
+			}
+
+			$content = $out . substr($content, $pos);
+		}
+
+		return $content;
 	}
 
 	/**
@@ -89,6 +185,12 @@ class PageBuilders
 			$builder = self::for_post($post);
 
 			if ($builder !== null) {
+				/* Very large pages: the start is enough for the analysis and keeps the editor page light. */
+				if (strlen($builder['html']) > self::MAX_BYTES) {
+					$cut             = strrpos(substr($builder['html'], 0, self::MAX_BYTES), '>');
+					$builder['html'] = substr($builder['html'], 0, $cut === false ? self::MAX_BYTES : $cut + 1);
+				}
+
 				$data['builder'] = $builder;
 			}
 		}

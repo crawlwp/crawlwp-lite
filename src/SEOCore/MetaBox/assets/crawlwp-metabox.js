@@ -1181,9 +1181,9 @@
       var img = function(src, alt) {
         return src ? '<img src="' + self.escAttr(src) + '" alt="' + self.escAttr(alt || '') + '">' : '';
       };
+      /* Avada: a code block holds base64-encoded markup, not text. (Only when one is closed: an unclosed one would make the pattern re-scan the rest of the page for every tag.) */
+      if (html.indexOf('[/fusion_code]') !== -1) html = html.replace(/\[fusion_code\b[^\]]*\][^\[]*(?:\[(?!\/fusion_code\])[^\[]*)*\[\/fusion_code\]/g, '');
       html = html
-        /* Avada (a code block holds base64-encoded markup, not text) */
-        .replace(/\[fusion_code\b[^\]]*\][\s\S]*?\[\/fusion_code\]/g, '')
         .replace(/\[fusion_title([^\]]*)\]([\s\S]*?)\[\/fusion_title\]/g, function(m, a, text) { return heading(attrs(a).size, self.escHtml($.trim(self.stripTags(text))), 2); })
         .replace(/\[fusion_button([^\]]*)\]([\s\S]*?)\[\/fusion_button\]/g, function(m, a, text) { return link(attrs(a).link, $.trim(self.stripTags(text))); })
         .replace(/\[fusion_imageframe([^\]]*)\]([\s\S]*?)\[\/fusion_imageframe\]/g, function(m, a, src) { a = attrs(a); return img($.trim(self.stripTags(src)) || a.src, a.alt); })
