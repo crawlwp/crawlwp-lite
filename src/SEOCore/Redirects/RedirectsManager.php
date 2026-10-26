@@ -254,6 +254,11 @@ class RedirectsManager
 	 */
 	public function record_hit(int $id): void
 	{
+		// The Site Audit's own link checks are not visits.
+		if (\Mihdan\IndexNow\Utils::is_site_audit_request()) {
+			return;
+		}
+
 		if ($id <= 0) {
 			return;
 		}

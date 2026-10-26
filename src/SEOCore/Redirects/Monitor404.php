@@ -58,7 +58,7 @@ class Monitor404
 
 	public function log(): void
 	{
-		if (is_admin() || wp_doing_ajax() || wp_doing_cron() || ! is_404()) {
+		if (is_admin() || wp_doing_ajax() || wp_doing_cron() || ! is_404() || Utils::is_site_audit_request()) {
 			return;
 		}
 

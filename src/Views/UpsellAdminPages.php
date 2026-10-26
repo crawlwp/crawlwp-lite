@@ -33,6 +33,12 @@ class UpsellAdminPages
 	 * @var WPOSA $wposa2
 	 */
 	public $wposa2;
+	/**
+	 * Site Audit upsell page (Premium feature).
+	 *
+	 * @var WPOSA $wposa3
+	 */
+	public $wposa3;
 
 	public function __construct()
 	{
@@ -55,6 +61,16 @@ class UpsellAdminPages
 		);
 
 		$this->wposa2->enable_blank_mode()->setup_hooks();
+
+		$this->wposa3 = new WPOSA(
+			Utils::get_plugin_name(),
+			Utils::get_plugin_version(),
+			Utils::get_plugin_slug(),
+			'crawlwp_upsell',
+			CRAWLWP_PRO_SITE_AUDIT_SLUG
+		);
+
+		$this->wposa3->enable_blank_mode()->setup_hooks();
 
 		add_action('init', [$this, 'setup_fields'], 110);
 		add_action('wp_dashboard_setup', [$this, 'dashboard_widget']);
@@ -205,6 +221,20 @@ class UpsellAdminPages
 
 		$this->wposa->sub_page_title  = esc_html__('SEO Indexing', 'mihdan-index-now');
 		$this->wposa2->sub_page_title = esc_html__('SEO Stats', 'mihdan-index-now');
+		$this->wposa3->sub_page_title = esc_html__('Site Audit', 'mihdan-index-now');
+
+		$this->wposa3->add_section([
+			'id' => 'site_audit_upsell',
+		]);
+
+		$this->wposa3->add_field(
+			'site_audit_upsell',
+			[
+				'id'   => 'pages3',
+				'type' => 'html',
+				'desc' => [$this, 'site_audit_upsell'],
+			]
+		);
 
 		$this->wposa->add_section([
 			'id' => 'seo_index_upsell',
@@ -246,5 +276,25 @@ class UpsellAdminPages
 				'desc' => $analytics_upsell
 			]
 		);
+	}
+
+	/**
+	 * Site Audit upsell: a blurred preview of the Premium page with an upgrade card on top.
+	 */
+	public function site_audit_upsell(): string
+	{
+		return self::locked_preview([
+			'image'    => 'upsell-audit-preview.jpg',
+			'title'    => __('Find and fix SEO problems across your whole site', 'mihdan-index-now'),
+			'text'     => __('CrawlWP Premium checks every page each week and lists what holds back your rankings, most serious first, with how to fix each one.', 'mihdan-index-now'),
+			'points'   => [
+				__('<b>A health score</b> for your site, checked automatically every week', 'mihdan-index-now'),
+				__('<b>Broken links, duplicate titles, orphan pages</b>, redirect chains and more', 'mihdan-index-now'),
+				__('<b>Fix problems in the list</b>: write a missing description or shorten a title, or use AI', 'mihdan-index-now'),
+				__('<b>An email</b> when new errors appear', 'mihdan-index-now'),
+			],
+			'note'     => __('Runs on its own after upgrading. Nothing to set up.', 'mihdan-index-now'),
+			'campaign' => 'crawlwp-site-audit-upsell-page',
+		]);
 	}
 }
