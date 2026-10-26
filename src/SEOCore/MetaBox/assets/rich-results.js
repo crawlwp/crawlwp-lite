@@ -87,7 +87,11 @@
         } else {
             var types = { url: 'url', number: 'number', minutes: 'number', datetime: 'datetime-local', date: 'date' };
             c = el('input', { className: 'cwp-input', id: id, type: types[field.type] || 'text' });
-            if (field.type === 'number') c.setAttribute('step', 'any');
+            if (field.type === 'number') {
+                c.setAttribute('step', 'any');
+                if (field.min !== undefined) c.setAttribute('min', String(field.min));
+                if (field.max !== undefined) c.setAttribute('max', String(field.max));
+            }
             if (field.type === 'minutes') { c.setAttribute('min', '0'); c.setAttribute('step', '1'); }
             if (field.type === 'currency') { c.setAttribute('maxlength', '3'); c.style.textTransform = 'uppercase'; }
             c.value = stored;

@@ -100,13 +100,21 @@ class RichResults
 	 * Sanitise the submitted JSON against the type's field definitions.
 	 * Unknown types and fields are dropped; an empty choice stores ''.
 	 */
-	public static function sanitize(string $json): string
+	public static function sanitize(string $json, string $current = ''): string
 	{
 		$data  = self::decode($json);
 		$types = self::types();
 
 		if (! isset($types[$data['type']])) {
 			return '';
+		}
+
+		/*
+		 * A locked type (Premium inactive) has no field definitions here, so the editor
+		 * can't send its values: keep what is stored instead of wiping it.
+		 */
+		if (! is_callable($types[$data['type']]['build'] ?? null)) {
+			return self::decode($current)['type'] === $data['type'] ? $current : '';
 		}
 
 		$clean = [];
@@ -145,7 +153,16 @@ class RichResults
 			case 'url':
 				return (string) esc_url_raw($raw, ['http', 'https']);
 			case 'number':
-				return is_numeric($raw) ? (string) (0 + $raw) : '';
+				/* Finite and within the field's range: "1e999" would be stored as INF and break the page. */
+				if (! is_numeric($raw) || ! is_finite((float) $raw)) {
+					return '';
+				}
+
+				if ((isset($field['min']) && (float) $raw < $field['min']) || (isset($field['max']) && (float) $raw > $field['max'])) {
+					return '';
+				}
+
+				return (string) self::number($raw);
 			case 'minutes':
 				return ctype_digit($raw) ? (string) (int) $raw : '';
 			case 'currency':
@@ -440,6 +457,24 @@ class RichResults
 	}
 
 	/**
+	 * A stored number as int or float for the JSON-LD; 0 for anything not finite.
+	 *
+	 * @param mixed $value
+	 *
+	 * @return int|float
+	 */
+	public static function number($value)
+	{
+		$value = trim((string) $value);
+
+		if (! is_numeric($value) || ! is_finite((float) $value)) {
+			return 0;
+		}
+
+		return 0 + $value;
+	}
+
+	/**
 	 * AggregateRating node, or [] without both value and count.
 	 */
 	public static function aggregate_rating(string $value, string $count): array
@@ -450,7 +485,7 @@ class RichResults
 
 		return [
 			'@type'       => 'AggregateRating',
-			'ratingValue' => 0 + $value,
+			'ratingValue' => self::number($value),
 			'ratingCount' => (int) $count,
 			'bestRating'  => 5,
 		];
@@ -467,7 +502,7 @@ class RichResults
 
 		return [
 			'@type'         => 'Offer',
-			'price'         => 0 + $price,
+			'price'         => self::number($price),
 			'priceCurrency' => $currency,
 			'availability'  => $availability !== '' ? 'https://schema.org/' . $availability : '',
 			'url'           => $url,

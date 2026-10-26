@@ -28,8 +28,8 @@ class RichResultTypes
 	private static function rating_fields(): array
 	{
 		return [
-			'rating_value' => ['label' => __('Average rating', 'mihdan-index-now'), 'type' => 'number', 'group' => __('Rating', 'mihdan-index-now'), 'hint' => __('Out of 5. Only use real ratings shown on this page.', 'mihdan-index-now')],
-			'rating_count' => ['label' => __('Number of ratings', 'mihdan-index-now'), 'type' => 'number', 'group' => __('Rating', 'mihdan-index-now')],
+			'rating_value' => ['label' => __('Average rating', 'mihdan-index-now'), 'type' => 'number', 'min' => 1, 'max' => 5, 'group' => __('Rating', 'mihdan-index-now'), 'hint' => __('Out of 5. Only use real ratings shown on this page.', 'mihdan-index-now')],
+			'rating_count' => ['label' => __('Number of ratings', 'mihdan-index-now'), 'type' => 'number', 'min' => 1, 'group' => __('Rating', 'mihdan-index-now')],
 		];
 	}
 
@@ -71,7 +71,7 @@ class RichResultTypes
 				'image'        => ['label' => __('Image URL', 'mihdan-index-now'), 'type' => 'url', 'default' => 'image', 'hint' => __('Defaults to the featured image.', 'mihdan-index-now')],
 				'brand'        => ['label' => __('Brand', 'mihdan-index-now'), 'type' => 'text'],
 				'sku'          => ['label' => __('SKU', 'mihdan-index-now'), 'type' => 'text'],
-				'price'        => ['label' => __('Price', 'mihdan-index-now'), 'type' => 'number', 'group' => __('Price', 'mihdan-index-now')],
+				'price'        => ['label' => __('Price', 'mihdan-index-now'), 'type' => 'number', 'min' => 0, 'group' => __('Price', 'mihdan-index-now')],
 				'currency'     => self::currency_field() + ['group' => __('Price', 'mihdan-index-now')],
 				'availability' => ['label' => __('Availability', 'mihdan-index-now'), 'type' => 'select', 'options' => self::availability_options(), 'group' => __('Price', 'mihdan-index-now')],
 			] + self::rating_fields(),
@@ -104,7 +104,7 @@ class RichResultTypes
 				'prep_time'    => ['label' => __('Prep time (minutes)', 'mihdan-index-now'), 'type' => 'minutes'],
 				'cook_time'    => ['label' => __('Cook time (minutes)', 'mihdan-index-now'), 'type' => 'minutes'],
 				'yield'        => ['label' => __('Serves', 'mihdan-index-now'), 'type' => 'text', 'placeholder' => __('e.g. 4 servings', 'mihdan-index-now')],
-				'calories'     => ['label' => __('Calories per serving', 'mihdan-index-now'), 'type' => 'number'],
+				'calories'     => ['label' => __('Calories per serving', 'mihdan-index-now'), 'type' => 'number', 'min' => 0],
 				'category'     => ['label' => __('Category', 'mihdan-index-now'), 'type' => 'text', 'placeholder' => __('e.g. Dinner, Dessert', 'mihdan-index-now')],
 				'cuisine'      => ['label' => __('Cuisine', 'mihdan-index-now'), 'type' => 'text', 'placeholder' => __('e.g. Nigerian, Italian', 'mihdan-index-now')],
 				'ingredients'  => ['label' => __('Ingredients', 'mihdan-index-now'), 'type' => 'list', 'hint' => __('One per line.', 'mihdan-index-now')],
@@ -169,7 +169,7 @@ class RichResultTypes
 				'image'       => ['label' => __('Image URL', 'mihdan-index-now'), 'type' => 'url', 'default' => 'image', 'hint' => __('Defaults to the featured image.', 'mihdan-index-now')],
 				'organizer'   => ['label' => __('Organiser', 'mihdan-index-now'), 'type' => 'text', 'default' => 'organization', 'hint' => __('Defaults to your organisation in Site Information.', 'mihdan-index-now')],
 				'performer'   => ['label' => __('Performer or speaker', 'mihdan-index-now'), 'type' => 'text'],
-				'price'       => ['label' => __('Price', 'mihdan-index-now'), 'type' => 'number', 'group' => $tickets, 'hint' => __('0 for a free event.', 'mihdan-index-now')],
+				'price'       => ['label' => __('Price', 'mihdan-index-now'), 'type' => 'number', 'min' => 0, 'group' => $tickets, 'hint' => __('0 for a free event.', 'mihdan-index-now')],
 				'currency'    => self::currency_field() + ['group' => $tickets],
 				'ticket_url'  => ['label' => __('Ticket link', 'mihdan-index-now'), 'type' => 'url', 'group' => $tickets],
 				'valid_from'  => ['label' => __('Tickets on sale from', 'mihdan-index-now'), 'type' => 'datetime', 'group' => $tickets],
@@ -268,10 +268,10 @@ class RichResultTypes
 					'WebApplication'           => __('Web app', 'mihdan-index-now'),
 				]],
 				'os'           => ['label' => __('Operating system', 'mihdan-index-now'), 'type' => 'text', 'placeholder' => __('e.g. Windows, macOS, Android, WordPress', 'mihdan-index-now')],
-				'price'        => ['label' => __('Price', 'mihdan-index-now'), 'type' => 'number', 'required' => true, 'hint' => __('0 if it is free.', 'mihdan-index-now')],
+				'price'        => ['label' => __('Price', 'mihdan-index-now'), 'type' => 'number', 'min' => 0, 'required' => true, 'hint' => __('0 if it is free.', 'mihdan-index-now')],
 				'currency'     => self::currency_field(),
-				'rating_value' => ['label' => __('Average rating', 'mihdan-index-now'), 'type' => 'number', 'required' => true, 'group' => __('Rating', 'mihdan-index-now'), 'hint' => __('Out of 5. Google needs a rating for app results. Only use real ratings shown on this page.', 'mihdan-index-now')],
-				'rating_count' => ['label' => __('Number of ratings', 'mihdan-index-now'), 'type' => 'number', 'required' => true, 'group' => __('Rating', 'mihdan-index-now')],
+				'rating_value' => ['label' => __('Average rating', 'mihdan-index-now'), 'type' => 'number', 'min' => 1, 'max' => 5, 'required' => true, 'group' => __('Rating', 'mihdan-index-now'), 'hint' => __('Out of 5. Google needs a rating for app results. Only use real ratings shown on this page.', 'mihdan-index-now')],
+				'rating_count' => ['label' => __('Number of ratings', 'mihdan-index-now'), 'type' => 'number', 'min' => 1, 'required' => true, 'group' => __('Rating', 'mihdan-index-now')],
 			],
 			'build'  => [__CLASS__, 'build_software'],
 		];
@@ -309,7 +309,7 @@ class RichResultTypes
 					'MusicRecording'      => __('Music recording', 'mihdan-index-now'),
 				]],
 				'item_name' => ['label' => __('Name of what is reviewed', 'mihdan-index-now'), 'type' => 'text', 'required' => true],
-				'rating'    => ['label' => __('Your rating', 'mihdan-index-now'), 'type' => 'number', 'required' => true, 'hint' => __('Out of 5.', 'mihdan-index-now')],
+				'rating'    => ['label' => __('Your rating', 'mihdan-index-now'), 'type' => 'number', 'min' => 1, 'max' => 5, 'required' => true, 'hint' => __('Out of 5.', 'mihdan-index-now')],
 				'author'    => ['label' => __('Reviewer', 'mihdan-index-now'), 'type' => 'text', 'required' => true, 'default' => 'author', 'hint' => __('Defaults to the post author.', 'mihdan-index-now')],
 				'body'      => ['label' => __('Summary', 'mihdan-index-now'), 'type' => 'textarea', 'default' => 'description'],
 			],
@@ -322,7 +322,7 @@ class RichResultTypes
 		return [
 			'@type'         => 'Review',
 			'itemReviewed'  => ['@type' => $v['item_type'], 'name' => $v['item_name']],
-			'reviewRating'  => ['@type' => 'Rating', 'ratingValue' => 0 + $v['rating'], 'bestRating' => 5, 'worstRating' => 1],
+			'reviewRating'  => ['@type' => 'Rating', 'ratingValue' => RichResults::number($v['rating']), 'bestRating' => 5, 'worstRating' => 1],
 			'author'        => ['@type' => 'Person', 'name' => $v['author']],
 			'reviewBody'    => $v['body'],
 			'datePublished' => $c['defaults']['date'],

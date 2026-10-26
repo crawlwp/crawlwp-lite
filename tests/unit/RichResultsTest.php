@@ -137,4 +137,54 @@ class RichResultsTest extends TestCase
 			RichResults::prune(['@type' => 'Event', 'name' => 'A', 'offers' => [], 'organizer' => ['@type' => 'Organization', 'name' => ''], 'image' => ''])
 		);
 	}
+
+	/**
+	 * The save path: sanitize, then wp_slash() before update_post_meta(), which unslashes.
+	 * Quotes and line breaks must survive.
+	 */
+	public function test_quotes_and_line_breaks_survive_the_save_path(): void
+	{
+		$posted = json_encode(['type' => 'Recipe', 'fields' => [
+			'ingredients'  => "1 cup flour\n2 eggs\nA 9\" pie dish",
+			'instructions' => "Mix \"well\".\nBake.",
+		]]);
+
+		$stored = wp_unslash(wp_slash(RichResults::sanitize($posted)));
+		$fields = RichResults::decode($stored)['fields'];
+
+		$this->assertSame('Recipe', RichResults::decode($stored)['type']);
+		$this->assertSame("1 cup flour\n2 eggs\nA 9\" pie dish", $fields['ingredients']);
+		$this->assertSame("Mix \"well\".\nBake.", $fields['instructions']);
+
+		/* Without the slash, the stored JSON breaks: this is what used to happen. */
+		$this->assertSame('', RichResults::decode(wp_unslash(RichResults::sanitize($posted)))['type']);
+	}
+
+	public function test_numbers_must_be_finite_and_in_range(): void
+	{
+		$field = ['type' => 'number', 'min' => 1, 'max' => 5];
+
+		$this->assertSame('', RichResults::clean_value('1e999', ['type' => 'number']));
+		$this->assertSame('', RichResults::clean_value('-1e999', ['type' => 'number']));
+		$this->assertSame('', RichResults::clean_value('7', $field));
+		$this->assertSame('', RichResults::clean_value('0', $field));
+		$this->assertSame('4.5', RichResults::clean_value('4.5', $field));
+		$this->assertSame('25', RichResults::clean_value('25', ['type' => 'number']));
+
+		/* Old stored values like "INF" no longer break the page. */
+		$this->assertSame(0, RichResults::number('INF'));
+		$this->assertSame(0, RichResults::number('abc'));
+		$this->assertSame(12.5, RichResults::number('12.5'));
+		$this->assertSame([], RichResults::aggregate_rating('4', '0'));
+
+		$offer = RichResults::offer('INF', 'USD');
+		$this->assertSame(0, $offer['price']);
+	}
+
+	public function test_rating_out_of_range_is_dropped_on_save(): void
+	{
+		$json = RichResults::sanitize(json_encode(['type' => 'SoftwareApplication', 'fields' => ['rating_value' => '7', 'rating_count' => '0', 'price' => '1e999']]));
+
+		$this->assertSame([], json_decode($json, true)['fields']);
+	}
 }

@@ -295,11 +295,15 @@ class MetaFields
 		}
 
 		if (isset($values[self::SCHEMA_RICH])) {
-			$values[self::SCHEMA_RICH] = RichResults::sanitize((string) $values[self::SCHEMA_RICH]);
+			$values[self::SCHEMA_RICH] = RichResults::sanitize((string) $values[self::SCHEMA_RICH], (string) get_post_meta($post_id, self::SCHEMA_RICH, true));
 		}
 
+		/*
+		 * The values are already unslashed; update_post_meta() unslashes again, which
+		 * would strip the backslashes JSON needs (\" and \n) and break the schema fields.
+		 */
 		foreach ($values as $key => $value) {
-			update_post_meta($post_id, $key, $value);
+			update_post_meta($post_id, $key, wp_slash($value));
 		}
 
 		self::store_defaults($post_id);
