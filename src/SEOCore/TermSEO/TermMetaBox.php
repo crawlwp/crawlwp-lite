@@ -65,6 +65,7 @@ class TermMetaBox
 				<textarea name="<?php echo esc_attr(MetaFields::SEO_DESCRIPTION); ?>" id="cwpTermDesc" rows="3" class="large-text"><?php echo esc_textarea($data['seo_description']); ?></textarea>
 			</td>
 		</tr>
+		<?php if (\Mihdan\IndexNow\SEOCore\Permissions::can(\Mihdan\IndexNow\SEOCore\Permissions::SEO_ADVANCED)) : ?>
 		<tr class="form-field">
 			<th scope="row"><label for="cwpTermCanonical"><?php esc_html_e('Canonical URL', 'mihdan-index-now'); ?></label></th>
 			<td>
@@ -86,6 +87,7 @@ class TermMetaBox
 				</select>
 			</td>
 		</tr>
+		<?php endif; ?>
 		<tr class="form-field">
 			<th scope="row"><label for="cwpTermOgTitle"><?php esc_html_e('Open Graph title', 'mihdan-index-now'); ?></label></th>
 			<td>

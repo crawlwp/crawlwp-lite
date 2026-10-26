@@ -89,7 +89,16 @@ class TermFields
 			return;
 		}
 
-		foreach (FieldProcessor::process(self::field_definitions(), $_POST) as $key => $value) {
+		$values = FieldProcessor::process(self::field_definitions(), $_POST);
+
+		/* Robots and canonical need the "Advanced SEO fields" permission, as on posts. */
+		if (! \Mihdan\IndexNow\SEOCore\Permissions::can(\Mihdan\IndexNow\SEOCore\Permissions::SEO_ADVANCED)) {
+			$values = array_filter($values, static function ($key) {
+				return ! MetaFields::is_advanced_field((string) $key);
+			}, ARRAY_FILTER_USE_KEY);
+		}
+
+		foreach ($values as $key => $value) {
 			update_term_meta($term_id, $key, $value);
 		}
 	}

@@ -178,6 +178,19 @@ class RedirectsSettings
 		$data['priority']       = (int) ($_POST['priority'] ?? RedirectsManager::DEFAULT_PRIORITY);
 		$data['allow_external'] = (int) ($_POST['allow_external'] ?? 0);
 
+		/*
+		 * Sending visitors to another site is for administrators, as in the SEO box
+		 * (crawlwp_allow_external_redirects). Other roles given the Redirects
+		 * permission can still save an existing external rule without changing where it goes.
+		 */
+		if ($data['allow_external'] && ! (bool) apply_filters('crawlwp_allow_external_redirects', current_user_can('manage_options'), 0)) {
+			$existing = $id > 0 ? $this->manager->get($id) : null;
+
+			if (! $existing || (int) ($existing->allow_external ?? 0) !== 1 || (string) $existing->to_url !== (string) $data['to_url']) {
+				$data['allow_external'] = 0;
+			}
+		}
+
 		if (empty($data['from_url'])) {
 			wp_send_json_error(['message' => __('From URL is required.', 'mihdan-index-now')]);
 		}

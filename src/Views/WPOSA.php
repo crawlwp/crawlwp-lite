@@ -594,8 +594,8 @@ class WPOSA
 
 			check_admin_referer($option_page . '-options');
 
-			// Only registered section ids may be saved through this handler.
-			$section_ids = array_flip(array_column($this->sections_array, 'id'));
+			// Only registered section ids the user may open can be saved through this handler.
+			$section_ids = array_flip(array_column((array) apply_filters('crawlwp_wposa_sections', $this->sections_array, $this->plugin_prefix, ! empty($this->sub_menu_slug) ? $this->sub_menu_slug : $this->plugin_slug), 'id'));
 
 			foreach ($_POST as $k => $v) {
 
