@@ -30,6 +30,11 @@ return [
 	// e.g. 'HTTP_CF_CONNECTING_IP' for Cloudflare. Leave empty otherwise (other headers can be faked).
 	'client_ip_header' => '',
 
+	// Leave true. Before handing tokens to a site, the proxy checks that the signed-in account has that site in
+	// Google Search Console / Bing Webmaster Tools, so a phishing link can't collect someone's tokens for another
+	// domain. Set false only in an emergency (e.g. the providers' site list API is down for everyone).
+	'verify_site_ownership' => true,
+
 	// Leave false. Set true only if live testing shows Bing does not return `state` on its callback.
 	// Without `state`, someone could trick a user mid-connect into linking their site to the wrong Bing account.
 	'bing_state_optional' => false,

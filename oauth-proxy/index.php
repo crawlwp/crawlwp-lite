@@ -33,12 +33,16 @@ $providers = [
 		'extra'     => ['access_type' => 'offline', 'prompt' => 'consent', 'include_granted_scopes' => 'true'],
 		// Optional permissions a site can ask for on top of the base scope.
 		'features'  => ['analytics' => 'https://www.googleapis.com/auth/analytics.readonly'],
+		'sites'     => 'https://www.googleapis.com/webmasters/v3/sites',
+		'required'  => 'https://www.googleapis.com/auth/webmasters.readonly',
 	],
 	'bing'   => [
 		'authorize' => 'https://www.bing.com/webmasters/oauth/authorize',
 		'token'     => 'https://www.bing.com/webmasters/oauth/token',
 		'scope'     => 'webmaster.manage',
 		'extra'     => [],
+		'sites'     => 'https://www.bing.com/webmaster/api.svc/json/GetUserSites',
+		'required'  => 'webmaster.manage',
 	],
 ];
 
@@ -243,6 +247,12 @@ function callback(array $providers, array $config): void
 		}
 	}
 
+	// Microsoft documents its "cancel" redirect as ?error=access_denied without `state`. No tokens are
+	// involved, so it is safe to send the user back to the Bing flow in this browser with the error.
+	if ( ! $flow && $state === null && isset($_GET['error'])) {
+		$flow = verify((string)($_COOKIE[COOKIE . '_bing'] ?? ''), $config);
+	}
+
 	if ( ! $flow || time() - (int)$flow['t'] > FLOW_TTL) {
 		fail(400, 'This connection request has expired. Go back to your WordPress dashboard and click Connect again.');
 	}
@@ -270,9 +280,18 @@ function callback(array $providers, array $config): void
 		$back(['crawlwp_oauth_error' => 'token_exchange_failed']);
 	}
 
+	// Only hand tokens to a site this account manages in Search Console / Bing Webmaster Tools. Anyone can
+	// build an authorize link to their own domain, so without this a phishing link could collect a victim's
+	// tokens through CrawlWP's verified app. The tokens are dropped, never written, when the check fails.
+	$owned = site_check($providers[$provider], $tokens, (string)parse_url($flow['r'], PHP_URL_HOST), $config);
+
+	if ($owned !== 'ok') {
+		$back(['crawlwp_oauth_error' => $owned]);
+	}
+
 	$handle = bin2hex(random_bytes(24));
 
-	file_put_contents(handoff_path($config['storage_dir'], $handle), json_encode([
+	$written = file_put_contents(handoff_path($config['storage_dir'], $handle), json_encode([
 		'state'   => $flow['s'],
 		'created' => time(),
 		'data'    => [
@@ -283,6 +302,11 @@ function callback(array $providers, array $config): void
 			'email'         => isset($tokens['id_token']) ? id_token_email($tokens['id_token']) : '',
 		],
 	]), LOCK_EX);
+
+	if ($written === false) {
+		$back(['crawlwp_oauth_error' => 'server_error']);
+	}
+
 	@chmod(handoff_path($config['storage_dir'], $handle), 0600);
 
 	$back(['crawlwp_oauth_handle' => $handle]);
@@ -400,11 +424,26 @@ function revoke(array $providers, array $config): void
 	$provider = (string)($_POST['provider'] ?? '');
 	$token    = (string)($_POST['refresh_token'] ?? '');
 
-	if ($_SERVER['REQUEST_METHOD'] !== 'POST' || ! isset($providers[$provider]) || $token === '') {
+	if ($_SERVER['REQUEST_METHOD'] !== 'POST' || ! isset($providers[$provider]) || $token === '' || strlen($token) > 2048) {
 		json(400, ['error' => 'invalid_request']);
 	}
 
-	file_put_contents(revoked_path($config, $provider, $token), (string)time(), LOCK_EX);
+	if (is_revoked($config, $provider, $token)) {
+		json(200, ['revoked' => true]);
+	}
+
+	// Only remember tokens the provider still accepts. A made-up or already dead token needs no entry, so
+	// unauthenticated callers can't fill the disk with deny-list files.
+	$tokens = post_form($providers[$provider]['token'], [
+		'grant_type'    => 'refresh_token',
+		'refresh_token' => $token,
+		'client_id'     => $config[$provider]['client_id'],
+		'client_secret' => $config[$provider]['client_secret'],
+	]);
+
+	if ( ! empty($tokens['access_token']) && file_put_contents(revoked_path($config, $provider, $token), (string)time(), LOCK_EX) === false) {
+		json(500, ['error' => 'storage_failed']);
+	}
 
 	json(200, ['revoked' => true]);
 }
@@ -420,6 +459,98 @@ function is_revoked(array $config, string $provider, string $token): bool
 function revoked_path(array $config, string $provider, string $token): string
 {
 	return rtrim($config['storage_dir'], '/') . '/revoked-' . hash_hmac('sha256', $provider . '|' . $token, (string)$config['secret']) . '.txt';
+}
+
+/* ---------- site ownership ---------- */
+
+/**
+ * Whether the signed-in account manages the site the tokens are for.
+ *
+ * @return string 'ok', or an error code for the site: no_site_access, site_check_failed, missing_scope.
+ */
+function site_check(array $provider, array $tokens, string $host, array $config): string
+{
+	// Kill switch for emergencies only (e.g. the provider's site list API is down for everyone).
+	if (array_key_exists('verify_site_ownership', $config) && ! $config['verify_site_ownership']) {
+		return 'ok';
+	}
+
+	// Without the Search Console / Webmaster scope the site list can't be read, and the connection would be useless.
+	// Bing may leave `scope` out of its token response; then the site list call below decides.
+	if (isset($tokens['scope']) && ! str_contains((string)$tokens['scope'], $provider['required'])) {
+		return 'missing_scope';
+	}
+
+	$list = get_json($provider['sites'], (string)$tokens['access_token']);
+
+	if ($list === null) {
+		return 'site_check_failed';
+	}
+
+	return site_matches(site_urls($list), $host) ? 'ok' : 'no_site_access';
+}
+
+/**
+ * Site addresses from a Google `sites.list` or Bing `GetUserSites` response. Unverified entries are left out.
+ *
+ * @return string[]
+ */
+function site_urls(array $list): array
+{
+	$urls = [];
+
+	// Google: {"siteEntry":[{"siteUrl":"sc-domain:example.com","permissionLevel":"siteOwner"}]}
+	foreach ((array)($list['siteEntry'] ?? []) as $site) {
+		if (is_array($site) && is_string($site['siteUrl'] ?? null) && ($site['permissionLevel'] ?? '') !== 'siteUnverifiedUser') {
+			$urls[] = $site['siteUrl'];
+		}
+	}
+
+	// Bing: {"d":[{"Url":"https://example.com/","IsVerified":true}]}
+	foreach ((array)($list['d'] ?? []) as $site) {
+		if (is_array($site) && is_string($site['Url'] ?? null) && ($site['IsVerified'] ?? true) !== false) {
+			$urls[] = $site['Url'];
+		}
+	}
+
+	return $urls;
+}
+
+/**
+ * Whether one of the account's properties covers $host: a domain property (sc-domain:example.com) for the
+ * host or a parent domain, or a URL property on the same host. "www." is ignored on both sides; ports aren't
+ * compared (whoever owns the host owns every port on it).
+ */
+function site_matches(array $site_urls, string $host): bool
+{
+	$bare = static fn(string $h): string => (string)preg_replace('/^www\./', '', rtrim(strtolower(trim($h)), '.'));
+	$host = $bare($host);
+
+	if ($host === '') {
+		return false;
+	}
+
+	foreach ($site_urls as $url) {
+		$url = trim((string)$url);
+
+		if (stripos($url, 'sc-domain:') === 0) {
+			$domain = $bare(substr($url, 10));
+
+			if ($domain !== '' && ($host === $domain || str_ends_with($host, '.' . $domain))) {
+				return true;
+			}
+
+			continue;
+		}
+
+		$property = parse_url($url, PHP_URL_HOST);
+
+		if (is_string($property) && $property !== '' && $bare($property) === $host) {
+			return true;
+		}
+	}
+
+	return false;
 }
 
 /* ---------- helpers ---------- */
@@ -455,6 +586,26 @@ function post_form(string $url, array $fields): array
 	curl_close($ch);
 
 	return is_string($body) ? (array)json_decode($body, true) : [];
+}
+
+/**
+ * GET a JSON API with a bearer token. Null on any failure (network, non-200, not JSON).
+ */
+function get_json(string $url, string $access_token): ?array
+{
+	$ch = curl_init($url);
+	curl_setopt_array($ch, [
+		CURLOPT_RETURNTRANSFER => true,
+		CURLOPT_TIMEOUT        => 15,
+		CURLOPT_HTTPHEADER     => ['Accept: application/json', 'Authorization: Bearer ' . $access_token],
+	]);
+	$body = curl_exec($ch);
+	$code = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+	curl_close($ch);
+
+	$data = is_string($body) ? json_decode($body, true) : null;
+
+	return $code === 200 && is_array($data) ? $data : null;
 }
 
 function id_token_email(string $jwt): string

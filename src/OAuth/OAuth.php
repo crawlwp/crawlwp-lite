@@ -23,6 +23,8 @@ final class OAuth
 	/** Each provider has its own option (crawlwp_oauth_google, crawlwp_oauth_bing) so saving one never overwrites the other. */
 	public const OPTION_PREFIX = 'crawlwp_oauth_';
 	public const DROPPED       = 'crawlwp_oauth_dropped';
+	/** One-time notice after connecting or disconnecting (user meta; removed on uninstall with the other _crawlwp_ meta). */
+	private const NOTICE_META  = '_crawlwp_oauth_notice';
 	public const PROVIDERS     = ['google', 'bing'];
 
 	private const BING_KEY_API   = 'https://ssl.bing.com/webmaster/api.svc/json/';
@@ -237,7 +239,8 @@ final class OAuth
 			unset($all[$provider]);
 		}
 
-		$all ? update_option(self::DROPPED, $all, false) : delete_option(self::DROPPED);
+		// Kept (empty when nothing dropped) and autoloaded, so the notice check on every admin page costs no query.
+		update_option(self::DROPPED, $all, true);
 	}
 
 	/* ---------- helpers for API callers (free and Premium) ---------- */
@@ -408,11 +411,7 @@ final class OAuth
 		}
 
 		if ($error !== '') {
-			self::finish('error', $error === 'access_denied'
-				/* translators: %s: Google or Bing */
-				? sprintf(__('%s connection was cancelled.', 'mihdan-index-now'), $label)
-				/* translators: 1: Google or Bing, 2: error code */
-				: sprintf(__('%1$s connection failed (%2$s). Please try again.', 'mihdan-index-now'), $label, $error), $back);
+			self::finish('error', self::error_message($provider, $error), $back);
 		}
 
 		$response = wp_remote_post(add_query_arg('action', 'fetch', self::proxy_url()), [
@@ -467,6 +466,41 @@ final class OAuth
 		self::finish('success', sprintf(__('Connected to %s.', 'mihdan-index-now'), $label), $back);
 	}
 
+	/**
+	 * Plain explanation of an error code the proxy sent back.
+	 */
+	private static function error_message(string $provider, string $error): string
+	{
+		$label   = self::label($provider);
+		$service = $provider === 'google' ? 'Google Search Console' : 'Bing Webmaster Tools';
+		$host    = (string)wp_parse_url(home_url('/'), PHP_URL_HOST);
+
+		switch ($error) {
+			case 'access_denied':
+				/* translators: %s: Google or Bing */
+				return sprintf(__('%s connection was cancelled.', 'mihdan-index-now'), $label);
+
+			case 'no_site_access':
+				/* translators: 1: Google or Bing, 2: Google Search Console or Bing Webmaster Tools, 3: this site's domain */
+				return sprintf(__('This %1$s account has no %2$s property for %3$s. Add and verify your site in %2$s (or sign in with the account that has it), then connect again.', 'mihdan-index-now'), $label, $service, $host);
+
+			case 'site_check_failed':
+				/* translators: 1: Google or Bing, 2: Google Search Console or Bing Webmaster Tools */
+				return sprintf(__('%1$s didn\'t answer while CrawlWP checked that your account has this site in %2$s. Please try connecting again in a few minutes.', 'mihdan-index-now'), $label, $service);
+
+			case 'missing_scope':
+				return $provider === 'google'
+					? __('Google was connected without access to Search Console. Please connect again and allow CrawlWP to view your Search Console data.', 'mihdan-index-now')
+					: __('Bing was connected without access to Bing Webmaster Tools. Please connect again and allow all requested permissions.', 'mihdan-index-now');
+
+			case 'server_error':
+				return __('The CrawlWP connection service had a problem. Please try again in a few minutes.', 'mihdan-index-now');
+		}
+
+		/* translators: 1: Google or Bing, 2: error code */
+		return sprintf(__('%1$s connection failed (%2$s). Please try again.', 'mihdan-index-now'), $label, $error);
+	}
+
 	public static function handle_disconnect(): void
 	{
 		$provider = self::request_provider();
@@ -511,7 +545,14 @@ final class OAuth
 			return;
 		}
 
-		foreach (array_keys((array)get_option(self::DROPPED, [])) as $provider) {
+		$dropped = get_option(self::DROPPED, null);
+
+		// Create it once (autoloaded): a missing option is looked up in the database on every request.
+		if ($dropped === null) {
+			add_option(self::DROPPED, [], '', true);
+		}
+
+		foreach (array_keys((array)$dropped) as $provider) {
 			// Nothing stopped working when a key is set: the key was in use, not the connection.
 			$has_key = $provider === 'google' ? self::google_json_key() !== '' : self::bing_api_key() !== '';
 
@@ -522,7 +563,9 @@ final class OAuth
 			printf(
 				'<div class="notice notice-error"><p>%s</p><p><a class="button button-primary" href="%s">%s</a> <a href="%s" style="margin-left:8px">%s</a></p></div>',
 				/* translators: %s: Google or Bing */
-				esc_html(sprintf(__('CrawlWP: your %1$s connection has stopped working because access was removed in your %1$s account. Reconnect to keep getting %1$s data.', 'mihdan-index-now'), self::label($provider))),
+				esc_html($provider === 'google'
+					? __('CrawlWP: your Google connection has stopped working. Google no longer accepts it: access may have been removed in the Google account, or the account was connected to more than 100 sites (Google keeps only the 100 most recent connections per account). Reconnect to keep getting Google data.', 'mihdan-index-now')
+					: __('CrawlWP: your Bing connection has stopped working. Microsoft no longer accepts it, usually because access was removed in the Microsoft account. Reconnect to keep getting Bing data.', 'mihdan-index-now')),
 				esc_url(self::connect_url($provider)),
 				/* translators: %s: Google or Bing */
 				esc_html(sprintf(__('Reconnect %s', 'mihdan-index-now'), self::label($provider))),
@@ -534,21 +577,27 @@ final class OAuth
 
 	private static function finish(string $type, string $message, string $return = ''): void
 	{
-		set_transient(self::notice_key(), [$type, $message], MINUTE_IN_SECONDS * 5);
+		update_user_meta(get_current_user_id(), self::NOTICE_META, [$type, $message, time() + 5 * MINUTE_IN_SECONDS]);
 		wp_safe_redirect($return !== '' ? $return : CRAWLWP_API_SETTINGS_URL);
 		exit;
 	}
 
 	public static function admin_notice(): void
 	{
-		$notice = get_transient(self::notice_key());
+		// User meta: the current user's meta is already loaded, so this check costs no query.
+		$notice = get_user_meta(get_current_user_id(), self::NOTICE_META, true);
 
-		if ( ! is_array($notice)) {
+		if ( ! is_array($notice) || count($notice) < 3) {
 			return;
 		}
 
-		delete_transient(self::notice_key());
-		printf('<div class="notice notice-%s is-dismissible"><p>%s</p></div>', esc_attr($notice[0]), esc_html($notice[1]));
+		delete_user_meta(get_current_user_id(), self::NOTICE_META);
+
+		if ((int)$notice[2] < time()) {
+			return;
+		}
+
+		printf('<div class="notice notice-%s is-dismissible"><p>%s</p></div>', esc_attr((string)$notice[0]), esc_html((string)$notice[1]));
 	}
 
 	/* ---------- settings UI ---------- */
@@ -615,8 +664,4 @@ final class OAuth
 		return 'crawlwp_oauth_state_' . $provider . '_' . get_current_user_id();
 	}
 
-	private static function notice_key(): string
-	{
-		return 'crawlwp_oauth_notice_' . get_current_user_id();
-	}
 }
