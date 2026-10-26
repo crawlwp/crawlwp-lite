@@ -8,6 +8,7 @@
 namespace Mihdan\IndexNow;
 
 use WP_Post;
+use WP_Term;
 
 /**
  * Reads whether another active SEO plugin hides a post from search results, so
@@ -21,6 +22,52 @@ use WP_Post;
  */
 final class ThirdPartyRobots
 {
+	/**
+	 * All in One SEO's per-post robots rows loaded by prime(), by post ID (false: no row).
+	 *
+	 * @var array<int, array|false>
+	 */
+	private static $aioseo_rows = [];
+
+	/**
+	 * Load what checking many posts needs in one query instead of one per post
+	 * (All in One SEO keeps its per-post settings in its own table).
+	 *
+	 * @param int[] $post_ids
+	 */
+	public static function prime(array $post_ids): void
+	{
+		global $wpdb;
+
+		if ( ! defined('AIOSEO_VERSION')) {
+			return;
+		}
+
+		$ids = array_values(array_diff(array_unique(array_map('intval', $post_ids)), array_keys(self::$aioseo_rows)));
+
+		if ($ids === []) {
+			return;
+		}
+
+		// Keep only what the current batch needs.
+		if (count(self::$aioseo_rows) > 2000) {
+			self::$aioseo_rows = [];
+		}
+
+		$table    = $wpdb->prefix . 'aioseo_posts';
+		$suppress = $wpdb->suppress_errors(true);
+		$rows     = $wpdb->get_results("SELECT post_id, robots_default, robots_noindex FROM {$table} WHERE post_id IN (" . implode(',', $ids) . ')', ARRAY_A); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- integers only
+		$wpdb->suppress_errors($suppress);
+
+		foreach ($ids as $id) {
+			self::$aioseo_rows[$id] = false;
+		}
+
+		foreach ((array) $rows as $row) {
+			self::$aioseo_rows[(int) $row['post_id']] = $row;
+		}
+	}
+
 	/**
 	 * Name of the active SEO plugin that sets the post to noindex, or empty.
 	 */
@@ -96,11 +143,15 @@ final class ThirdPartyRobots
 	{
 		global $wpdb;
 
-		$table = $wpdb->prefix . 'aioseo_posts';
+		if (array_key_exists($post->ID, self::$aioseo_rows)) {
+			$row = self::$aioseo_rows[$post->ID];
+		} else {
+			$table = $wpdb->prefix . 'aioseo_posts';
 
-		$suppress = $wpdb->suppress_errors(true);
-		$row      = $wpdb->get_row($wpdb->prepare("SELECT robots_default, robots_noindex FROM {$table} WHERE post_id = %d", $post->ID), ARRAY_A); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		$wpdb->suppress_errors($suppress);
+			$suppress = $wpdb->suppress_errors(true);
+			$row      = $wpdb->get_row($wpdb->prepare("SELECT robots_default, robots_noindex FROM {$table} WHERE post_id = %d", $post->ID), ARRAY_A); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$wpdb->suppress_errors($suppress);
+		}
 
 		// The per-post robots columns only apply when "use default settings" is off.
 		if (is_array($row) && empty($row['robots_default'])) {
@@ -150,5 +201,129 @@ final class ThirdPartyRobots
 		$settings = get_option('slim_seo');
 
 		return is_array($settings) && ! empty($settings[$post->post_type]['noindex']);
+	}
+
+	/**
+	 * Name of the active SEO plugin that sets a term archive to noindex, or empty.
+	 */
+	public static function term_noindex_source(WP_Term $term): string
+	{
+		$checks = [
+			'Yoast SEO'         => [defined('WPSEO_VERSION'), 'yoast_term'],
+			'Rank Math'         => [defined('RANK_MATH_VERSION'), 'rank_math_term'],
+			'All in One SEO'    => [defined('AIOSEO_VERSION'), 'aioseo_term'],
+			'SEOPress'          => [defined('SEOPRESS_VERSION'), 'seopress_term'],
+			'The SEO Framework' => [defined('THE_SEO_FRAMEWORK_VERSION'), 'the_seo_framework_term'],
+			'Slim SEO'          => [defined('SLIM_SEO_VER'), 'slim_seo_term'],
+		];
+
+		$source = '';
+
+		foreach ($checks as $label => [$active, $method]) {
+			if ($active && self::$method($term)) {
+				$source = $label;
+				break;
+			}
+		}
+
+		/**
+		 * Filter the SEO plugin that sets a term archive to noindex. Return a plugin
+		 * name to skip the term, or an empty string to submit it.
+		 *
+		 * @param string  $source Plugin name, empty when no plugin sets noindex.
+		 * @param WP_Term $term   Term object.
+		 */
+		return (string)apply_filters('crawlwp/third_party_term_noindex', $source, $term);
+	}
+
+	private static function yoast_term(WP_Term $term): bool
+	{
+		// wpseo_taxonomy_meta[taxonomy][term ID][wpseo_noindex]: 'noindex', 'index' or 'default'.
+		$meta  = get_option('wpseo_taxonomy_meta');
+		$value = is_array($meta) ? (string)($meta[$term->taxonomy][$term->term_id]['wpseo_noindex'] ?? '') : '';
+
+		if ($value === 'noindex' || $value === 'index') {
+			return $value === 'noindex';
+		}
+
+		$titles = get_option('wpseo_titles');
+
+		return is_array($titles) && ! empty($titles['noindex-tax-' . $term->taxonomy]);
+	}
+
+	private static function rank_math_term(WP_Term $term): bool
+	{
+		$robots = get_term_meta($term->term_id, 'rank_math_robots', true);
+
+		if (is_array($robots) && $robots !== []) {
+			return in_array('noindex', $robots, true);
+		}
+
+		$titles = get_option('rank-math-options-titles');
+
+		if ( ! is_array($titles)) {
+			return false;
+		}
+
+		$prefix = 'tax_' . $term->taxonomy;
+		$robots = ($titles[$prefix . '_custom_robots'] ?? '') === 'on'
+			? ($titles[$prefix . '_robots'] ?? [])
+			: ($titles['robots_global'] ?? []);
+
+		return is_array($robots) && in_array('noindex', $robots, true);
+	}
+
+	private static function aioseo_term(WP_Term $term): bool
+	{
+		global $wpdb;
+
+		// Per-term settings only exist in All in One SEO Pro, in its own table.
+		$table    = $wpdb->prefix . 'aioseo_terms';
+		$suppress = $wpdb->suppress_errors(true);
+		$row      = $wpdb->get_row($wpdb->prepare("SELECT robots_default, robots_noindex FROM {$table} WHERE term_id = %d", $term->term_id), ARRAY_A); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$wpdb->suppress_errors($suppress);
+
+		if (is_array($row) && empty($row['robots_default'])) {
+			return ! empty($row['robots_noindex']);
+		}
+
+		$dynamic = get_option('aioseo_options_dynamic');
+		$dynamic = is_string($dynamic) ? json_decode($dynamic, true) : $dynamic;
+		$robots  = $dynamic['searchAppearance']['taxonomies'][$term->taxonomy]['advanced']['robotsMeta'] ?? [];
+
+		return is_array($robots) && empty($robots['default']) && ! empty($robots['noindex']);
+	}
+
+	private static function seopress_term(WP_Term $term): bool
+	{
+		if ((string)get_term_meta($term->term_id, '_seopress_robots_index', true) === 'yes') {
+			return true;
+		}
+
+		$titles = get_option('seopress_titles_option_name');
+
+		return is_array($titles) && ! empty($titles['seopress_titles_tax_titles'][$term->taxonomy]['noindex']);
+	}
+
+	private static function the_seo_framework_term(WP_Term $term): bool
+	{
+		// 1 = noindex, -1 = index, 0 or empty = taxonomy default.
+		$meta  = get_term_meta($term->term_id, 'autodescription-term-settings', true);
+		$value = is_array($meta) ? (int)($meta['noindex'] ?? 0) : 0;
+
+		if ($value !== 0) {
+			return $value === 1;
+		}
+
+		$settings = get_option('autodescription-site-settings');
+
+		return is_array($settings) && ! empty($settings['noindex_taxonomies'][$term->taxonomy]);
+	}
+
+	private static function slim_seo_term(WP_Term $term): bool
+	{
+		$meta = get_term_meta($term->term_id, 'slim_seo', true);
+
+		return is_array($meta) && ! empty($meta['noindex']);
 	}
 }

@@ -25,10 +25,22 @@ class Hooks {
 	public const DELAYED_TERM_EVENT = 'crawlwp_delayed_term_ping';
 
 	/**
-	 * Single event sending a submission in the background, so saving a post,
+	 * Single event sending queued submissions in the background, so saving a post,
 	 * a term or a comment never waits for search engines to answer.
 	 */
 	public const BACKGROUND_EVENT = 'crawlwp_background_submission';
+
+	/**
+	 * Submissions waiting for the background event (not autoloaded). One queue and
+	 * one event, however many posts change: a bulk trash or an import of thousands
+	 * of posts doesn't fill the cron option with an event per post.
+	 */
+	public const QUEUE_OPTION = 'crawlwp_submission_queue';
+
+	/**
+	 * Submissions sent per background run; the rest wait for the next run.
+	 */
+	private const BATCH_SIZE = 200;
 
 	/**
 	 * Submission actions that may be sent in the background.
@@ -63,7 +75,7 @@ class Hooks {
 		add_action( 'crawlwp/index_pinged', [ $this, 'record_submission' ], 10, 2 );
 		add_action( self::DELAYED_POST_EVENT, [ $this, 'delayed_post_ping' ] );
 		add_action( self::DELAYED_TERM_EVENT, [ $this, 'delayed_term_ping' ], 10, 2 );
-		add_action( self::BACKGROUND_EVENT, [ $this, 'background_submission' ], 10, 2 );
+		add_action( self::BACKGROUND_EVENT, [ $this, 'run_queue' ], 10, 2 );
 		add_action( 'shutdown', [ $this, 'maybe_spawn_cron' ] );
 		add_action( 'admin_notices', [ Indexing::class, 'pause_admin_notice' ] );
 	}
@@ -425,9 +437,9 @@ class Hooks {
 	}
 
 	/**
-	 * Fire a submission action now, or queue it as a single WP-Cron event.
+	 * Fire a submission action now, or add it to the background queue.
 	 *
-	 * Only IDs and strings are queued; objects are loaded again when the event
+	 * Only IDs and strings are queued; objects are loaded again when the queue
 	 * runs, so the submission uses the post as it is then.
 	 *
 	 * @param string $action Submission action.
@@ -443,24 +455,125 @@ class Hooks {
 			return;
 		}
 
-		$queued = [ [ $action, $args ] ];
+		$queue = get_option( self::QUEUE_OPTION, [] );
+		$queue = is_array( $queue ) ? $queue : [];
+		$key   = self::queue_key( $action, $args );
 
-		// A post saved twice before the event runs is submitted once, as added or updated.
-		if ( $action === 'crawlwp/post_added' || $action === 'crawlwp/post_updated' ) {
-			$queued = [ [ 'crawlwp/post_added', $args ], [ 'crawlwp/post_updated', $args ] ];
+		/*
+		 * One entry per post: saved twice, or saved and then commented on, before the
+		 * queue runs still means one ping. "Added" wins over "updated", which wins over
+		 * a comment, so the post is announced the way it first changed.
+		 */
+		if ( ! isset( $queue[ $key ] ) || self::action_rank( $action ) > self::action_rank( (string) $queue[ $key ][0] ) ) {
+			$queue[ $key ] = [ $action, $args ];
 		}
 
-		foreach ( $queued as $event_args ) {
-			if ( wp_next_scheduled( self::BACKGROUND_EVENT, $event_args ) ) {
-				return;
-			}
+		update_option( self::QUEUE_OPTION, $queue, false );
+
+		if ( wp_next_scheduled( self::BACKGROUND_EVENT ) ) {
+			return;
 		}
 
-		if ( wp_schedule_single_event( time(), self::BACKGROUND_EVENT, [ $action, $args ] ) ) {
+		if ( wp_schedule_single_event( time(), self::BACKGROUND_EVENT ) ) {
 			$this->spawn_cron = true;
 		} else {
-			// Could not queue it: send it now rather than lose it.
-			$this->background_submission( $action, $args );
+			// Could not schedule the queue: send it now rather than lose it.
+			$this->run_queue();
+		}
+	}
+
+	/**
+	 * Queue key: one per post, term or removed URL.
+	 */
+	private static function queue_key( string $action, array $args ): string {
+
+		switch ( $action ) {
+			case 'crawlwp/post_added':
+			case 'crawlwp/post_updated':
+			case 'crawlwp/comment_updated':
+				return 'post:' . (int) ( $args[0] ?? 0 );
+
+			case 'crawlwp/post_deleted':
+				return 'deleted:' . (int) ( $args[0] ?? 0 );
+
+			default:
+				return 'term:' . (int) ( $args[0] ?? 0 ) . ':' . (string) ( $args[1] ?? '' );
+		}
+	}
+
+	private static function action_rank( string $action ): int {
+
+		$ranks = [
+			'crawlwp/comment_updated' => 1,
+			'crawlwp/post_updated'    => 2,
+			'crawlwp/post_added'      => 3,
+		];
+
+		return $ranks[ $action ] ?? 0;
+	}
+
+	/**
+	 * Send queued submissions: new and updated content first, removals last, so a
+	 * mass trash can't use up a search engine's quota before new posts are sent.
+	 *
+	 * IndexNow engines collect the URLs between crawlwp/submission_batch_start and
+	 * crawlwp/submission_batch_end and send them in one request (see IndexNowAbstract).
+	 *
+	 * Also accepts the action and arguments of events queued one by one by earlier
+	 * versions, so those still go out after an update.
+	 *
+	 * @param string|null $action Legacy single event: submission action.
+	 * @param array|null  $args   Legacy single event: its arguments.
+	 *
+	 * @return void
+	 */
+	public function run_queue( $action = null, $args = null ): void {
+
+		if ( is_string( $action ) && $action !== '' ) {
+			$this->background_submission( $action, (array) $args );
+
+			return;
+		}
+
+		$queue = get_option( self::QUEUE_OPTION, [] );
+		$queue = is_array( $queue ) ? $queue : [];
+
+		if ( $queue === [] ) {
+			delete_option( self::QUEUE_OPTION );
+
+			return;
+		}
+
+		uasort(
+			$queue,
+			static function ( $a, $b ) {
+				return ( (string) $a[0] === 'crawlwp/post_deleted' ) <=> ( (string) $b[0] === 'crawlwp/post_deleted' );
+			}
+		);
+
+		$batch = array_slice( $queue, 0, self::BATCH_SIZE, true );
+
+		// Claimed before sending, so an overlapping run can't send the same items again.
+		$current = get_option( self::QUEUE_OPTION, [] );
+		$rest    = array_diff_key( is_array( $current ) ? $current : [], $batch );
+
+		if ( $rest ) {
+			update_option( self::QUEUE_OPTION, $rest, false );
+			wp_schedule_single_event( time() + MINUTE_IN_SECONDS, self::BACKGROUND_EVENT );
+		} else {
+			delete_option( self::QUEUE_OPTION );
+		}
+
+		do_action( 'crawlwp/submission_batch_start' );
+
+		try {
+			foreach ( $batch as $item ) {
+				if ( is_array( $item ) && isset( $item[0] ) ) {
+					$this->background_submission( (string) $item[0], (array) ( $item[1] ?? [] ) );
+				}
+			}
+		} finally {
+			do_action( 'crawlwp/submission_batch_end' );
 		}
 	}
 

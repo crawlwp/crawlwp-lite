@@ -68,6 +68,64 @@ abstract class IndexNowAbstract implements SearchEngineInterface
 		return $api_key;
 	}
 
+	/**
+	 * While the background queue runs, URLs are collected here and sent together:
+	 * IndexNow takes up to 10,000 URLs a request, and one request per URL invites
+	 * rate limits. Each entry: [url, type ('post', 'taxonomy' or 'removed'), object ID].
+	 *
+	 * @var array<int, array{0:string, 1:string, 2:int}>|null Null when not collecting.
+	 */
+	private $batch = null;
+
+	/**
+	 * URLs per IndexNow request when sending a batch.
+	 */
+	private const BATCH_URLS = 500;
+
+	public function start_batch(): void
+	{
+		$this->batch = [];
+	}
+
+	/**
+	 * Send the URLs collected since start_batch(), and record each accepted one.
+	 */
+	public function send_batch(): void
+	{
+		$batch       = (array) $this->batch;
+		$this->batch = null;
+
+		foreach (array_chunk($batch, self::BATCH_URLS) as $chunk) {
+			if ( ! $this->push(array_values(array_unique(array_column($chunk, 0))))) {
+				continue;
+			}
+
+			foreach ($chunk as [$url, $type, $object_id]) {
+				if ($type === 'removed') {
+					do_action('crawlwp/index_removal_pinged', 'post', $object_id, $url);
+				} else {
+					do_action('crawlwp/index_pinged', $type, $object_id);
+				}
+			}
+		}
+	}
+
+	/**
+	 * Send one URL now, or add it to the batch being collected.
+	 *
+	 * @return bool|null Whether it was accepted; null when it was added to the batch.
+	 */
+	private function push_one(string $url, string $type, int $object_id): ?bool
+	{
+		if ($this->batch !== null) {
+			$this->batch[] = [$url, $type, $object_id];
+
+			return null;
+		}
+
+		return $this->push([$url]);
+	}
+
 	public function setup_hooks()
 	{
 		if ( ! $this->is_enabled()) {
@@ -79,6 +137,8 @@ abstract class IndexNowAbstract implements SearchEngineInterface
 		add_action('crawlwp/post_updated', [$this, 'ping_on_post_update'], 10, 2);
 		add_action('crawlwp/post_deleted', [$this, 'ping_on_post_delete'], 10, 2);
 		add_action('crawlwp/comment_updated', [$this, 'ping_on_comment_update'], 10, 2);
+		add_action('crawlwp/submission_batch_start', [$this, 'start_batch']);
+		add_action('crawlwp/submission_batch_end', [$this, 'send_batch']);
 
 		if ($this->is_ping_on_term()) {
 			add_action('crawlwp/term_updated', [$this, 'ping_on_insert_term'], 10, 2);
@@ -141,7 +201,7 @@ abstract class IndexNowAbstract implements SearchEngineInterface
 		}
 
 		// Removals must not move the "last submitted" dates forward, so they get their own action.
-		if ($this->push([$permalink])) {
+		if ($this->push_one($permalink, 'removed', $post_id)) {
 			do_action('crawlwp/index_removal_pinged', 'post', $post_id, $permalink);
 		}
 	}
@@ -177,7 +237,7 @@ abstract class IndexNowAbstract implements SearchEngineInterface
 			return;
 		}
 
-		if ($this->push([Utils::normalized_get_permalink($post_id)])) {
+		if ($this->push_one(Utils::normalized_get_permalink($post_id), 'post', $post_id)) {
 			do_action('crawlwp/index_pinged', 'post', $post_id);
 		}
 	}
@@ -192,7 +252,7 @@ abstract class IndexNowAbstract implements SearchEngineInterface
 			return;
 		}
 
-		if ($this->push([Utils::normalized_get_term_link($term_id, $taxonomy)])) {
+		if ($this->push_one(Utils::normalized_get_term_link($term_id, $taxonomy), 'taxonomy', $term_id)) {
 			do_action('crawlwp/index_pinged', 'taxonomy', $term_id);
 		}
 	}
