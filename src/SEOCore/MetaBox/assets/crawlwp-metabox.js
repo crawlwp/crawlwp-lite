@@ -1488,7 +1488,10 @@
       /* Chinese and Japanese have no spaces: quote the first dozen characters instead. */
       if (this.cjkCount(text.slice(0, 20)) > 5) return text.length > 12 ? text.slice(0, 12) + '\u2026' : text;
       var parts = text.split(/\s+/);
-      return parts.slice(0, words || 4).join(' ') + (parts.length > (words || 4) ? '\u2026' : '');
+      var start = parts.slice(0, words || 4).join(' ');
+      /* Thai and similar scripts put spaces only between phrases: keep the quote short. */
+      if (start.length > 40) return start.slice(0, 40) + '\u2026';
+      return start + (parts.length > (words || 4) ? '\u2026' : '');
     },
 
     /* Paragraph lengths, words between subheadings and repeated sentence openings. */
