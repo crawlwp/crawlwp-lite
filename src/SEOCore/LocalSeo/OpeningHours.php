@@ -82,6 +82,19 @@ class OpeningHours
 				$from = self::time(is_array($range) ? (string) ($range[0] ?? '') : '');
 				$to   = self::time(is_array($range) ? (string) ($range[1] ?? '') : '');
 
+				/*
+				 * Opening and closing at the same time: to Google, 00:00–00:00 means closed
+				 * all day, but people enter it to mean open 24 hours, so store it as that.
+				 * Any other zero-length range is dropped.
+				 */
+				if ($from !== '' && $from === $to) {
+					if ($from !== '00:00') {
+						continue;
+					}
+
+					$to = '23:59';
+				}
+
 				if ($from !== '' && $to !== '') {
 					$hours[$day][] = [$from, $to];
 					$any           = true;

@@ -149,9 +149,12 @@ class LocalSeo
 			$settings['legacy_hours'] = (string) $old['local_hours'];
 		}
 
-		/* Copy them over once: saving Site Information no longer keeps these keys. */
-		if ($settings !== [] && $saved === null) {
-			add_option(self::OPTION, $settings);
+		/*
+		 * Copy them over once: saving Site Information no longer keeps these keys.
+		 * Created even when empty, and autoloaded, so later requests don't query for a missing option.
+		 */
+		if ($saved === null) {
+			add_option(self::OPTION, $settings, '', true);
 		}
 
 		return $settings;
