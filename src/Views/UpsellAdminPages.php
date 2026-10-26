@@ -12,7 +12,7 @@ use Mihdan\IndexNow\Utils;
 class UpsellAdminPages
 {
 	/** User meta: the admin hid the dashboard upsell widget. */
-	public const HIDE_DASHBOARD_META = 'crawlwp_hide_dashboard_upsell';
+	public const HIDE_DASHBOARD_META = '_crawlwp_hide_dashboard_upsell';
 
 	/**
 	 * Analytics upsell page (Premium feature).
