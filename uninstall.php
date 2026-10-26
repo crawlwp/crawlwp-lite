@@ -187,6 +187,27 @@ function crawlwp_lite_mo_uninstall_function($force = false)
 		);
 	}
 
+	if ( ! $keep_pro) {
+		// Premium's automatic share images: the background queue and the image files.
+		wp_unschedule_hook('crawlwp_social_images_run');
+
+		$uploads    = wp_get_upload_dir();
+		$social_dir = trailingslashit($uploads['basedir']) . 'crawlwp-social';
+
+		if (is_dir($social_dir) && ! is_link($social_dir)) {
+			$files = new RecursiveIteratorIterator(
+				new RecursiveDirectoryIterator($social_dir, FilesystemIterator::SKIP_DOTS),
+				RecursiveIteratorIterator::CHILD_FIRST
+			);
+
+			foreach ($files as $file) {
+				$file->isDir() && ! $file->isLink() ? @rmdir($file->getPathname()) : @unlink($file->getPathname());
+			}
+
+			@rmdir($social_dir);
+		}
+	}
+
 	// Post, term, user and comment meta written by the plugin (see SEOCore\MetaBox\MetaFields),
 	// plus the unprefixed "last submission" meta (Indexing::LAST_UPDATE_META).
 	$meta_tables = [
