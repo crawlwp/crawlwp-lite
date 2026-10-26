@@ -1183,9 +1183,9 @@
       };
       html = html
         /* Avada */
-        .replace(/\[fusion_title([^\]]*)\]([\s\S]*?)\[\/fusion_title\]/g, function(m, a, text) { return heading(attrs(a).size, text, 2); })
+        .replace(/\[fusion_title([^\]]*)\]([\s\S]*?)\[\/fusion_title\]/g, function(m, a, text) { return heading(attrs(a).size, self.escHtml($.trim(self.stripTags(text))), 2); })
         .replace(/\[fusion_button([^\]]*)\]([\s\S]*?)\[\/fusion_button\]/g, function(m, a, text) { return link(attrs(a).link, $.trim(self.stripTags(text))); })
-        .replace(/\[fusion_imageframe([^\]]*)\]([\s\S]*?)\[\/fusion_imageframe\]/g, function(m, a, src) { return img($.trim(self.stripTags(src)), attrs(a).alt); })
+        .replace(/\[fusion_imageframe([^\]]*)\]([\s\S]*?)\[\/fusion_imageframe\]/g, function(m, a, src) { a = attrs(a); return img($.trim(self.stripTags(src)) || a.src, a.alt); })
         /* Divi 4 */
         .replace(/\[et_pb_(heading|blurb|cta|button|image)\b([^\]]*)\]/g, function(m, mod, a) {
           a = attrs(a);
@@ -1194,8 +1194,10 @@
           var out = heading(mod === 'heading' ? a.title_level : a.header_level, self.escHtml(a.title || ''), mod === 'blurb' ? 4 : 2);
           return mod === 'cta' ? out + link(a.button_url, a.button_text) : out;
         })
-        /* Every other Divi or Avada shortcode only wraps its content. */
-        .replace(/\[\/?(?:et_pb|fusion)_[^\]]*\]/g, '');
+        /* Every other Divi or Avada shortcode only wraps its content. They're all blocks, so each tag ends a paragraph. */
+        .replace(/\[\/?(?:et_pb|fusion)_[^\]]*\]/g, '\n\n');
+      /* Avada's text blocks are plain text with blank lines: add paragraphs the way WordPress does. */
+      if (typeof wp !== 'undefined' && wp.editor && typeof wp.editor.autop === 'function') html = wp.editor.autop(html);
       /* The visual editor puts the shortcodes in paragraphs of their own: drop the ones left empty. */
       var $root = $('<div>').html(html);
       $root.find('p').filter(function() { return !$.trim($(this).text()) && !$(this).find('img').length; }).remove();

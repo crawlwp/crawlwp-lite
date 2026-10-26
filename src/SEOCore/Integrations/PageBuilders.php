@@ -240,6 +240,27 @@ class PageBuilders
 	}
 
 	/**
+	 * Default tag of each Divi 5 module's title (its module.json tagName), for titles without a heading level.
+	 */
+	private const DIVI5_TITLE_TAGS = [
+		'heading'          => 'h1',
+		'fullwidth-header' => 'h1',
+		'contact-form'     => 'h1',
+		'blurb'            => 'h4',
+		'countdown-timer'  => 'h4',
+		'toggle'           => 'h5',
+		'accordion-item'   => 'h5',
+		'number-counter'   => 'h3',
+		'circle-counter'   => 'h3',
+		'timeline-item'    => 'h3',
+		'map-pin'          => 'h3',
+	];
+
+	/**
+	 * One Divi 5 module. Each field keeps its value in `<field>.innerContent.desktop.value`:
+	 * a string (text, HTML), or an object such as a button's {text, linkUrl},
+	 * an image's {src, alt} or a blurb title's {text}.
+	 *
 	 * @param array<string, mixed> $attrs
 	 */
 	private static function divi5_module(string $module, array $attrs): string
@@ -249,20 +270,21 @@ class PageBuilders
 		foreach ($attrs as $field => $value) {
 			$content = is_array($value) ? ($value['innerContent']['desktop']['value'] ?? null) : null;
 
-			if ($content === null) {
+			if ($content === null || $content === '' || $content === []) {
 				continue;
 			}
 
-			/* A button's or link's value holds its text and address. */
-			if (is_array($content)) {
-				$text = (string) ($content['text'] ?? '');
-				$url  = (string) ($content['linkUrl'] ?? ($content['url'] ?? ''));
+			$is_title = $field === 'title';
+			$link     = '';
 
-				if ($text !== '') {
-					$html .= $url !== '' ? '<p><a href="' . esc_url($url) . '">' . esc_html($text) . '</a></p>' : '<p>' . esc_html($text) . '</p>';
+			if (is_array($content)) {
+				if (! empty($content['src'])) {
+					$html .= '<img src="' . esc_url((string) $content['src']) . '" alt="' . esc_attr((string) ($content['alt'] ?? '')) . '">';
+					continue;
 				}
 
-				continue;
+				$link    = (string) ($content['linkUrl'] ?? '');
+				$content = (string) ($content['text'] ?? '');
 			}
 
 			$content = trim((string) $content);
@@ -271,10 +293,12 @@ class PageBuilders
 				continue;
 			}
 
-			/* The title of a heading module (and of blurbs, toggles, …) is a heading. */
-			if ($field === 'title') {
-				$tag   = self::heading_tag(self::find_key($value, 'headingLevel') ?? '', $module === 'heading' ? 'h2' : 'h3');
-				$html .= "<{$tag}>" . wp_kses_post($content) . "</{$tag}>";
+			if ($is_title) {
+				$tag     = self::heading_tag(self::find_key($value, 'headingLevel') ?? '', self::DIVI5_TITLE_TAGS[$module] ?? 'h2');
+				$content = $link !== '' ? '<a href="' . esc_url($link) . '">' . wp_kses_post($content) . '</a>' : wp_kses_post($content);
+				$html   .= "<{$tag}>{$content}</{$tag}>";
+			} elseif ($link !== '') {
+				$html .= '<p><a href="' . esc_url($link) . '">' . esc_html(wp_strip_all_tags($content)) . '</a></p>';
 			} else {
 				$html .= wpautop(wp_kses_post($content));
 			}
