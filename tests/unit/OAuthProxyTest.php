@@ -114,6 +114,60 @@ class OAuthProxyTest extends TestCase
 		rmdir($dir);
 	}
 
+	public function test_site_ownership_matches_domain_and_url_properties(): void
+	{
+		$domain = ['sc-domain:example.com'];
+		$prefix = ['https://www.example.com/'];
+
+		// Domain property: the domain itself, www and any subdomain.
+		$this->assertTrue(\site_matches($domain, 'example.com'));
+		$this->assertTrue(\site_matches($domain, 'www.example.com'));
+		$this->assertTrue(\site_matches($domain, 'blog.example.com'));
+		$this->assertTrue(\site_matches($domain, 'EXAMPLE.com'));
+		$this->assertTrue(\site_matches(['sc-domain:www.example.com'], 'example.com'));
+
+		// URL property: the same host, with or without www; ports are not compared.
+		$this->assertTrue(\site_matches($prefix, 'example.com'));
+		$this->assertTrue(\site_matches($prefix, 'www.example.com'));
+		$this->assertTrue(\site_matches(['http://example.com:8080/blog/'], 'example.com'));
+		$this->assertFalse(\site_matches($prefix, 'blog.example.com'));
+
+		// Lookalikes and other sites.
+		foreach (['example.com.evil.io', 'evil-example.com', 'notexample.com', 'example.co', 'www.example.com.evil.io', ''] as $host) {
+			$this->assertFalse(\site_matches($domain, $host), $host);
+			$this->assertFalse(\site_matches($prefix, $host), $host);
+		}
+
+		$this->assertFalse(\site_matches([], 'example.com'));
+		$this->assertFalse(\site_matches(['sc-domain:'], 'example.com'));
+		$this->assertFalse(\site_matches(['not a url'], 'example.com'));
+	}
+
+	public function test_site_urls_skip_unverified_entries(): void
+	{
+		$google = ['siteEntry' => [
+			['siteUrl' => 'sc-domain:mine.test', 'permissionLevel' => 'siteOwner'],
+			['siteUrl' => 'https://pending.test/', 'permissionLevel' => 'siteUnverifiedUser'],
+			['siteUrl' => ['bad']],
+		]];
+		$bing   = ['d' => [
+			['Url' => 'https://verified.test/', 'IsVerified' => true],
+			['Url' => 'https://unverified.test/', 'IsVerified' => false],
+		]];
+
+		$this->assertSame(['sc-domain:mine.test'], \site_urls($google));
+		$this->assertSame(['https://verified.test/'], \site_urls($bing));
+		$this->assertSame([], \site_urls(['error' => ['code' => 403]]));
+	}
+
+	public function test_site_check_needs_the_search_console_scope_and_honours_the_kill_switch(): void
+	{
+		$google = ['required' => 'https://www.googleapis.com/auth/webmasters.readonly', 'sites' => 'https://invalid.invalid/'];
+
+		$this->assertSame('missing_scope', \site_check($google, ['access_token' => 'x', 'scope' => 'openid email'], 'example.com', []));
+		$this->assertSame('ok', \site_check($google, ['access_token' => 'x', 'scope' => 'openid'], 'example.com', ['verify_site_ownership' => false]));
+	}
+
 	public function test_flow_cookies_use_the_host_prefix(): void
 	{
 		// __Host- cookies can't be set by sibling subdomains or over plain HTTP.
