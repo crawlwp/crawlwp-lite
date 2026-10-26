@@ -135,15 +135,21 @@ class SureRank extends Source
 			$data['x_card_type'] = $card;
 		}
 
-		if ($get('surerank_settings_post_no_index') === 'yes') {
-			$data['robots_index'] = 'noindex';
+		$no_index   = (string) $get('surerank_settings_post_no_index');
+		$no_follow  = (string) $get('surerank_settings_post_no_follow');
+		$no_archive = (string) $get('surerank_settings_post_no_archive');
+
+		/*
+		 * When any of the three is set (even to "no"), SureRank uses the post's own
+		 * values instead of the post type's defaults. Write both explicitly, so a page
+		 * kept indexable inside a noindexed post type stays indexable here too.
+		 */
+		if ($no_index !== '' || $no_follow !== '' || $no_archive !== '') {
+			$data['robots_index']  = $no_index === 'yes' ? 'noindex' : 'index';
+			$data['robots_follow'] = $no_follow === 'yes' ? 'nofollow' : 'follow';
 		}
 
-		if ($get('surerank_settings_post_no_follow') === 'yes') {
-			$data['robots_follow'] = 'nofollow';
-		}
-
-		if ($get('surerank_settings_post_no_archive') === 'yes') {
+		if ($no_archive === 'yes') {
 			$data['robots_advanced'] = ['noarchive'];
 		}
 
@@ -182,6 +188,8 @@ class SureRank extends Source
 				'%content%', '%excerpt%', '%term_description%',
 				$title, str_replace('%title%', '%term_title%', $title),
 				$description, str_replace('%excerpt%', '%term_description%', $description),
+				// SureRank turns %content% into %term_description% for terms.
+				str_replace('%content%', '%term_description%', $description),
 			])));
 		}
 
