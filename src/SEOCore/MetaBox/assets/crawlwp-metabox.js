@@ -1130,7 +1130,7 @@
     liveSitemapReason: function(status, password) {
       var pub = crawlwpSEO.sitemap.published;
       if (status !== 'publish' && status !== 'private') return { reason: 'draft', link: '' };
-      if (pub.reason === 'off' || pub.reason === 'type_noindex' || pub.reason === 'type') return pub;
+      if (pub.reason === 'off' || pub.reason === 'elsewhere' || pub.reason === 'type_noindex' || pub.reason === 'type' || pub.reason === 'type_filtered') return pub;
       if (status === 'private' || password) return { reason: 'protected', link: '' };
       return pub;
     },
@@ -1141,8 +1141,12 @@
       var canonical = $.trim($('#cwpCanonical').val() || '');
       var redirect = $.trim($('#cwpRedirectUrl').val() || '');
       var code = $('#cwpRedirectType').val() || '';
-      var norm = function(u) { return u.replace(/^https?:\/\/(www\.)?/i, '').replace(/[?#].*$/, '').replace(/\/+$/, '').toLowerCase(); };
+      /* Keep the query string: with plain permalinks (?p=12) it is what tells pages apart. */
+      var norm = function(u) { return u.replace(/^https?:\/\/(www\.)?/i, '').replace(/#.*$/, '').replace(/\/+(\?|$)/, '$1').toLowerCase(); };
+      var absolute = function(u) { return u.charAt(0) === '/' ? st.permalink.replace(/^(https?:\/\/[^\/]+).*$/, '$1') + u : u; };
 
+      /* Another SEO plugin makes the sitemap: nothing reliable to say. */
+      if (reason === 'elsewhere') { $box.empty().hide(); return; }
       if (reason === 'draft') reason = '';
 
       if (reason) {
@@ -1155,9 +1159,10 @@
         tone = 'info'; title = t.mixed;
         if (code === '410' || code === '451') {
           text = t.gone; goTo = 'cwpRedirectType'; label = t.toRedirect;
-        } else if (redirect) {
+        } else if (redirect && norm(absolute(redirect)) !== norm(st.permalink)) {
+          /* A redirect to the post's own address is ignored when the page loads. */
           text = t.redirect; goTo = 'cwpRedirectUrl'; label = t.toRedirect;
-        } else if (canonical && norm(canonical.charAt(0) === '/' ? st.permalink.replace(/^(https?:\/\/[^\/]+).*$/, '$1') + canonical : canonical) !== norm(st.permalink)) {
+        } else if (canonical && norm(absolute(canonical)) !== norm(st.permalink)) {
           text = t.canonical; goTo = 'cwpCanonical'; label = t.toCanonical;
         }
       }

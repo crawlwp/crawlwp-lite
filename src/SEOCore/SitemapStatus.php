@@ -29,6 +29,11 @@ class SitemapStatus
 		$provider = self::posts_provider();
 
 		if ($provider === null) {
+			// Another SEO plugin makes the sitemap: we can't tell what it lists, so say nothing.
+			if ((int) get_option('blog_public') !== 0 && \Mihdan\IndexNow\SEOCore\Notifications\Notifications::get_active_conflicting_plugin() !== null) {
+				return $status('elsewhere');
+			}
+
 			// "Discourage search engines" (Settings > Reading) turns WordPress sitemaps off.
 			return $status('off', (int) get_option('blog_public') === 0 ? admin_url('options-reading.php') : '');
 		}
@@ -38,7 +43,10 @@ class SitemapStatus
 		}
 
 		if (! array_key_exists($post->post_type, (array) $provider->get_object_subtypes())) {
-			return $status('type');
+			$type = get_post_type_object($post->post_type);
+
+			// A public type missing from the sitemap was removed by a filter (wp_sitemaps_post_types).
+			return $status($type && $type->public ? 'type_filtered' : 'type');
 		}
 
 		if ($post->post_status === 'private' || $post->post_password !== '') {
@@ -83,6 +91,8 @@ class SitemapStatus
 				'type_noindex' => sprintf(__('All %s are set to noindex in Title & Meta, so none of them are in the sitemap.', 'mihdan-index-now'), $plural),
 				/* translators: %s: post type name, plural */
 				'type'         => sprintf(__('%s aren\'t public, so WordPress doesn\'t list them in the sitemap.', 'mihdan-index-now'), $plural),
+				/* translators: %s: post type name, plural */
+				'type_filtered' => sprintf(__('Another plugin or a code snippet keeps %s out of the sitemap.', 'mihdan-index-now'), $plural),
 				'protected'    => __('Private and password-protected posts are left out of the sitemap.', 'mihdan-index-now'),
 				'excluded'     => __('A setting or another plugin keeps this page out of the sitemap. For example, WooCommerce leaves out the cart, checkout and account pages.', 'mihdan-index-now'),
 				'off'          => (int) get_option('blog_public') === 0
