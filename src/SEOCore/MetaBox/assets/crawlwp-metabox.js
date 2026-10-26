@@ -1147,8 +1147,32 @@
       return $('<div>').html(html).text();
     },
 
+    /* Chinese and Japanese characters (written without spaces between words). */
+    CJK_CHARS: /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff66-\uff9f]/g,
+
+    /* Length in words. Chinese and Japanese have no spaces between words, so two
+       characters count as one word: the ratio Yoast uses for its Japanese limits
+       (200 characters for 100 words, 40 for a 20-word sentence, 600 for 300 words).
+       Thai, Lao, Myanmar and Khmer words are found with the browser's word segmenter. */
     getWordCount: function(text) {
-      return text.split(/\s+/).filter(function(w) { return w.length > 0; }).length;
+      text = String(text || '');
+      var cjk = text.match(this.CJK_CHARS);
+      var rest = cjk ? text.replace(this.CJK_CHARS, ' ') : text;
+      var words = 0;
+      if (/[\u0e00-\u0eff\u1000-\u109f\u1780-\u17ff]/.test(rest) && window.Intl && typeof Intl.Segmenter === 'function') {
+        Array.prototype.forEach.call(Array.from(new Intl.Segmenter(undefined, { granularity: 'word' }).segment(rest)), function(s) {
+          if (s.isWordLike) words++;
+        });
+      } else {
+        words = rest.split(/\s+/).filter(function(w) { return w.length > 0; }).length;
+      }
+      return words + (cjk ? Math.round(cjk.length / 2) : 0);
+    },
+
+    /* Number of Chinese and Japanese characters, for messages in those languages. */
+    cjkCount: function(text) {
+      var cjk = String(text || '').match(this.CJK_CHARS);
+      return cjk ? cjk.length : 0;
     },
 
     getEditorContent: function() {
@@ -1460,7 +1484,10 @@
 
     /* First few words of a text, for pointing at a paragraph in a message. */
     textStart: function(text, words) {
-      var parts = $.trim(text).split(/\s+/);
+      text = $.trim(text);
+      /* Chinese and Japanese have no spaces: quote the first dozen characters instead. */
+      if (this.cjkCount(text.slice(0, 20)) > 5) return text.length > 12 ? text.slice(0, 12) + '\u2026' : text;
+      var parts = text.split(/\s+/);
       return parts.slice(0, words || 4).join(' ') + (parts.length > (words || 4) ? '\u2026' : '');
     },
 
@@ -1475,7 +1502,7 @@
       $root.find('script,style,pre,code,table').remove();
 
       var data = { paras: 0, longParas: [], sections: [], repeats: [] };
-      var section = { words: 0, heading: null };
+      var section = { words: 0, chars: 0, heading: null };
 
       $root.find('h1,h2,h3,h4,h5,h6,p,li').each(function() {
         var $el = $(this);
@@ -1488,16 +1515,18 @@
 
         if (tag.charAt(0) === 'h') {
           data.sections.push(section);
-          section = { words: 0, heading: text };
+          section = { words: 0, chars: 0, heading: text };
           return;
         }
 
         var words = self.getWordCount(text);
+        var chars = self.cjkCount(text);
         section.words += words;
+        section.chars += chars;
         if (tag !== 'p') return;
 
         data.paras++;
-        if (words > 150) data.longParas.push({ words: words, start: self.textStart(text) });
+        if (words > 150) data.longParas.push({ words: words, chars: chars, start: self.textStart(text) });
 
         /* Three or more sentences in a row that start with the same word. */
         var sentences = text.match(/[^.!?\u3002\uff01\uff1f]+[.!?\u3002\uff01\uff1f]*/g) || [];
@@ -1886,9 +1915,10 @@
       if (d.wordCount > 300) {
         if (st.longSections.length) {
           var longest = st.longSections[0];
-          addCheck('warn', this.plural(L.sectionsLong, st.longSections.length), longest.heading === null
-            ? this.fmt(L.sectionsIntroD, longest.words)
-            : this.fmt(L.sectionsLongD, longest.words, '\u201c' + longest.heading + '\u201d'));
+          var inChars = longest.chars > longest.words;
+          addCheck('warn', this.plural(inChars ? L.sectionsLongChars : L.sectionsLong, st.longSections.length), longest.heading === null
+            ? this.fmt(inChars ? L.sectionsIntroCharsD : L.sectionsIntroD, inChars ? longest.chars : longest.words)
+            : this.fmt(inChars ? L.sectionsLongCharsD : L.sectionsLongD, inChars ? longest.chars : longest.words, '\u201c' + longest.heading + '\u201d'));
         } else {
           addCheck('good', L.sectionsGood, '');
         }
@@ -1977,7 +2007,12 @@
       if (d.structure.paras > 0 && d.wordCount >= 50) {
         if (d.structure.longParas.length) {
           var lp = d.structure.longParas[0];
-          addCheck('warn', this.plural(L.parasLong, d.structure.longParas.length), this.fmt(L.parasLongD, lp.words, '\u201c' + lp.start + '\u201d'));
+          /* Mostly Chinese or Japanese: say it in characters, as writers in those languages count. */
+          if (lp.chars > lp.words) {
+            addCheck('warn', this.plural(L.parasLongChars, d.structure.longParas.length), this.fmt(L.parasLongCharsD, lp.chars, '\u201c' + lp.start + '\u201d'));
+          } else {
+            addCheck('warn', this.plural(L.parasLong, d.structure.longParas.length), this.fmt(L.parasLongD, lp.words, '\u201c' + lp.start + '\u201d'));
+          }
         } else {
           addCheck('good', L.parasGood, '');
         }

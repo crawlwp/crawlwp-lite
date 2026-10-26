@@ -807,6 +807,12 @@ class Assets
 			'sectionsLongD'    => __('The longest is %1$s words, under %2$s. Add an H2 or H3 about every 300 words so readers can scan the page.', 'mihdan-index-now'),
 			/* translators: %s: number of words */
 			'sectionsIntroD'   => __('The longest is %s words, before the first subheading. Add an H2 or H3 about every 300 words so readers can scan the page.', 'mihdan-index-now'),
+			/* Chinese and Japanese text is measured in characters (2 characters = 1 word). */
+			'sectionsLongChars' => self::plural(_n_noop('%s section has over 600 characters without a subheading.', '%s sections have over 600 characters without a subheading.', 'mihdan-index-now')),
+			/* translators: 1: number of characters, 2: subheading in quotes */
+			'sectionsLongCharsD' => __('The longest is %1$s characters, under %2$s. Add an H2 or H3 about every 600 characters so readers can scan the page.', 'mihdan-index-now'),
+			/* translators: %s: number of characters */
+			'sectionsIntroCharsD' => __('The longest is %s characters, before the first subheading. Add an H2 or H3 about every 600 characters so readers can scan the page.', 'mihdan-index-now'),
 			'sectionsGood'     => __('Subheadings are well spread out.', 'mihdan-index-now'),
 
 			/* Analysis: paragraph length */
@@ -814,6 +820,9 @@ class Assets
 			'parasLong'        => self::plural(_n_noop('%s paragraph is over 150 words.', '%s paragraphs are over 150 words.', 'mihdan-index-now')),
 			/* translators: 1: number of words, 2: first words of the paragraph in quotes */
 			'parasLongD'       => __('The longest has %1$s words and starts %2$s. Split it into shorter paragraphs; long blocks are hard to read on a phone.', 'mihdan-index-now'),
+			'parasLongChars'   => self::plural(_n_noop('%s paragraph is over 300 characters.', '%s paragraphs are over 300 characters.', 'mihdan-index-now')),
+			/* translators: 1: number of characters, 2: first words of the paragraph in quotes */
+			'parasLongCharsD'  => __('The longest has %1$s characters and starts %2$s. Split it into shorter paragraphs; long blocks are hard to read on a phone.', 'mihdan-index-now'),
 			'parasGood'        => __('Paragraphs are a good length.', 'mihdan-index-now'),
 
 			/* Analysis: sentences starting with the same word */
