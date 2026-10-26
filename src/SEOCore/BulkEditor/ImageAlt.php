@@ -41,6 +41,11 @@ class ImageAlt
 			$args['s'] = $search;
 		}
 
+		/* Users who can't edit other people's posts only see (and can only edit) their own uploads. */
+		if (! current_user_can('edit_others_posts')) {
+			$args['author'] = get_current_user_id();
+		}
+
 		if ($missing_only) {
 			$args['meta_query'] = [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
 				'relation' => 'OR',
@@ -82,7 +87,7 @@ class ImageAlt
 
 		$query = new \WP_Query(self::query_args($filter !== 'all', $search, $per_page, $page));
 
-		wp_send_json_success([
+		$response = [
 			'html'        => self::render_rows($query->posts),
 			'total'       => (int) $query->found_posts,
 			'total_label' => sprintf(
@@ -92,8 +97,14 @@ class ImageAlt
 			),
 			'page'        => $page,
 			'pages'       => max(1, (int) $query->max_num_pages),
-			'missing'     => self::count_missing(),
-		]);
+		];
+
+		/* The missing-alt list's total is the badge count; other views don't run a second query for it. */
+		if ($filter !== 'all' && $search === '') {
+			$response['missing'] = (int) $query->found_posts;
+		}
+
+		wp_send_json_success($response);
 	}
 
 	/**
@@ -145,7 +156,8 @@ class ImageAlt
 			$edit   = get_edit_post_link($id, 'raw');
 			$view   = wp_get_attachment_url($id);
 
-			if ($parent && get_post($parent)) {
+			/* The parent's title only when the user may see that post (drafts and private posts stay hidden). */
+			if ($parent && get_post($parent) && current_user_can('read_post', $parent)) {
 				$parent_link = get_edit_post_link($parent, 'raw');
 				$used        = sprintf(
 					/* translators: %s: post title */
