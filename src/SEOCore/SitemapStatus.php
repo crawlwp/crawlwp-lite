@@ -64,6 +64,15 @@ class SitemapStatus
 		$plural = $type ? $type->labels->name : $post->post_type;
 		$status = self::for_post($post);
 
+		/*
+		 * The reason it would have once published, public and without a password,
+		 * so the block editor can update the notice when those change.
+		 */
+		$public                = clone $post;
+		$public->post_status   = 'publish';
+		$public->post_password = '';
+		$status['published']   = self::for_post($public);
+
 		return $status + [
 			'permalink' => (string) get_permalink($post),
 			'text'      => [

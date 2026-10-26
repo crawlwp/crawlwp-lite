@@ -1103,6 +1103,20 @@
       $('#cwpIndex, #cwpCanonical, #cwpRedirectUrl, #cwpRedirectType').on('change input', function() {
         self.updateSitemapNotice();
       });
+      /* Block editor: publishing, making private or adding a password changes whether the post can be listed. */
+      if (typeof wp !== 'undefined' && wp.data && wp.data.subscribe && wp.data.select('core/editor') && crawlwpSEO.sitemap.published) {
+        var last = '';
+        wp.data.subscribe(function() {
+          var ed = wp.data.select('core/editor');
+          if (!ed || typeof ed.getEditedPostAttribute !== 'function') return;
+          var status = ed.getEditedPostAttribute('status') || '', pass = ed.getEditedPostAttribute('password') || '';
+          var key = status + '|' + (pass ? 1 : 0);
+          if (key === last) return;
+          last = key;
+          self.sitemapReason = self.liveSitemapReason(status, pass);
+          self.updateSitemapNotice();
+        });
+      }
       $('#cwpSitemapNotice').on('click', '[data-cwp-goto]', function(e) {
         e.preventDefault();
         var $target = $('#' + $(this).attr('data-cwp-goto'));
@@ -1112,8 +1126,17 @@
       this.updateSitemapNotice();
     },
 
+    /* The same order as SitemapStatus::for_post(). */
+    liveSitemapReason: function(status, password) {
+      var pub = crawlwpSEO.sitemap.published;
+      if (status !== 'publish' && status !== 'private') return { reason: 'draft', link: '' };
+      if (pub.reason === 'off' || pub.reason === 'type_noindex' || pub.reason === 'type') return pub;
+      if (status === 'private' || password) return { reason: 'protected', link: '' };
+      return pub;
+    },
+
     updateSitemapNotice: function() {
-      var st = crawlwpSEO.sitemap, t = st.text, $box = $('#cwpSitemapNotice');
+      var st = $.extend({}, crawlwpSEO.sitemap, this.sitemapReason || {}), t = st.text, $box = $('#cwpSitemapNotice');
       var reason = st.reason, link = '', label = '', goTo = '', tone = 'warn', title = t.out, text = '';
       var canonical = $.trim($('#cwpCanonical').val() || '');
       var redirect = $.trim($('#cwpRedirectUrl').val() || '');
@@ -1143,7 +1166,7 @@
 
       var html = '<div class="cwp-sitemap-notice is-' + tone + '"><span class="cwp-sitemap-icon" aria-hidden="true">' + (tone === 'warn' ? '!' : 'i') + '</span><div>'
         + '<b>' + this.escHtml(title) + '</b> ' + this.escHtml(text);
-      if (label && link) html += ' <a href="' + this.escHtml(link) + '">' + this.escHtml(label) + '</a>';
+      if (label && link) html += ' <a href="' + this.escAttr(link) + '">' + this.escHtml(label) + '</a>';
       else if (label && goTo) html += ' <a href="#" data-cwp-goto="' + goTo + '">' + this.escHtml(label) + '</a>';
       $box.html(html + '</div></div>').show();
     },
