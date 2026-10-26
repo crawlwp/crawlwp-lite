@@ -208,10 +208,16 @@ class LocalSeo
 					return null;
 				}
 
-				for ($i = array_search($a, $order, true); $i <= array_search($b, $order, true); $i++) {
-					if (count($hours[$order[$i]]) < 2) {
-						$hours[$order[$i]][] = [$from, $to];
-						$any                 = true;
+				/* Fr-Mo wraps past Sunday. */
+				$start = (int) array_search($a, $order, true);
+				$count = ((int) array_search($b, $order, true) - $start + 7) % 7 + 1;
+
+				for ($n = 0; $n < $count; $n++) {
+					$day = $order[($start + $n) % 7];
+
+					if (count($hours[$day]) < 2) {
+						$hours[$day][] = [$from, $to];
+						$any           = true;
 					}
 				}
 			}
@@ -259,8 +265,8 @@ class LocalSeo
 			'menu'         => in_array($type, self::FOOD_TYPES, true) ? esc_url_raw((string) ($s['local_menu'] ?? '')) : '',
 			'cuisine'      => in_array($type, self::FOOD_TYPES, true) ? trim((string) ($s['local_cuisine'] ?? '')) : '',
 			'hours'        => $hours,
-			/* Old free-text hours the editor couldn't read: still sent to Google until hours are saved in the editor. */
-			'legacy_hours' => $hours === null && ! isset($s['hours']) ? array_values(array_filter(array_map('trim', preg_split('/\r\n|\r|\n/', (string) ($s['legacy_hours'] ?? '')) ?: []))) : [],
+			/* Old free-text hours the editor couldn't read: still sent to Google until hours are entered in the editor. */
+			'legacy_hours' => $hours === null ? array_values(array_filter(array_map('trim', preg_split('/\r\n|\r|\n/', (string) ($s['legacy_hours'] ?? '')) ?: []))) : [],
 		];
 	}
 

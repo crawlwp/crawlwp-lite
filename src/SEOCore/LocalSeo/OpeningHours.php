@@ -249,6 +249,11 @@ class OpeningHours
 
 			for ($i = 0; $i < self::RANGES; $i++) {
 				$range = $ranges[$i] ?? null;
+
+				/* Time inputs can't show 24:00 and would empty it; 23:59 means the same here. */
+				if ($range !== null && $range[1] === '24:00') {
+					$range[1] = '23:59';
+				}
 				$html .= sprintf(
 					'<span class="cwp-hours__range"%1$s><input type="time" name="%2$s[ranges][%3$d][0]" value="%4$s" aria-label="%5$s"> – <input type="time" name="%2$s[ranges][%3$d][1]" value="%6$s" aria-label="%7$s">%8$s</span>',
 					$i > 0 && $range === null ? ' hidden' : '',

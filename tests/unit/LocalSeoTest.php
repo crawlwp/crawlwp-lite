@@ -56,5 +56,10 @@ class LocalSeoTest extends TestCase
 		$this->assertSame([['09:00', '17:00']], $hours['wed']);
 		$this->assertSame([['10:00', '14:00']], $hours['sun']);
 		$this->assertNull(LocalSeo::parse_legacy_hours('Weekdays from nine'), 'Text it can\'t read is left alone.');
+
+		$wrap = LocalSeo::parse_legacy_hours('Fr-Mo 09:00-17:00');
+		$this->assertSame([['09:00', '17:00']], $wrap['sun'], 'A range can wrap past Sunday.');
+		$this->assertSame([['09:00', '17:00']], $wrap['mon']);
+		$this->assertSame([], $wrap['tue']);
 	}
 }
