@@ -30,8 +30,9 @@ class ImageSitemap extends \WP_Sitemaps_Provider
 		add_action('init', [$this, 'register_provider'], 20);
 		add_action('template_redirect', [$this, 'maybe_render'], 1);
 
-		add_action('save_post', [$this, 'flush_cache']);
-		add_action('deleted_post', [$this, 'flush_cache']);
+		/* Only changes to published, public content can change the sitemap. */
+		add_action('transition_post_status', [$this, 'flush_on_status'], 10, 3);
+		add_action('deleted_post', [$this, 'flush_on_delete'], 10, 2);
 		add_action('crawlwp_sitemap_settings_saved', [$this, 'flush_cache']);
 	}
 
@@ -127,6 +128,28 @@ class ImageSitemap extends \WP_Sitemaps_Provider
 
 		_prime_post_caches($ids, false, true);
 
+		/* %product_cat% and similar permalinks read the post's terms. */
+		update_object_term_cache($ids, $post_type);
+
+		/* The featured and gallery images in one go, instead of a post and meta query for each. */
+		$attachments = [];
+
+		foreach ($ids as $id) {
+			$attachments[] = (int) get_post_meta((int) $id, '_thumbnail_id', true);
+
+			if ($post_type === 'product') {
+				foreach (explode(',', (string) get_post_meta((int) $id, '_product_image_gallery', true)) as $attachment) {
+					$attachments[] = absint($attachment);
+				}
+			}
+		}
+
+		$attachments = array_values(array_unique(array_filter($attachments)));
+
+		if ($attachments !== []) {
+			_prime_post_caches($attachments, false, true);
+		}
+
 		$entries = [];
 
 		foreach ($ids as $id) {
@@ -172,8 +195,10 @@ class ImageSitemap extends \WP_Sitemaps_Provider
 
 		$clean = [];
 
+		$base = (string) get_permalink($post_id);
+
 		foreach ($urls as $url) {
-			$url = is_string($url) ? self::absolute($url) : '';
+			$url = is_string($url) ? self::absolute($url, $base) : '';
 
 			if ($url !== '' && ! isset($clean[$url])) {
 				$clean[$url] = true;
@@ -203,15 +228,24 @@ class ImageSitemap extends \WP_Sitemaps_Provider
 
 	/**
 	 * An absolute http(s) URL, or '' for data URIs and anything else.
+	 *
+	 * Relative addresses are resolved the way a browser does on the post's page:
+	 * "/wp-content/x.jpg" against the site's scheme and host (it already holds any
+	 * subfolder WordPress is installed in), "x.jpg" against the post's address.
 	 */
-	private static function absolute(string $url): string
+	public static function absolute(string $url, string $base = ''): string
 	{
 		$url = trim($url);
 
+		if ($url === '' || preg_match('#^[a-z][a-z0-9+.-]*:#i', $url) && ! preg_match('#^https?://#i', $url)) {
+			return ''; // data:, javascript: and other schemes
+		}
+
 		if (strpos($url, '//') === 0) {
 			$url = (is_ssl() ? 'https:' : 'http:') . $url;
-		} elseif (strpos($url, '/') === 0) {
-			$url = home_url($url);
+		} elseif (! preg_match('#^https?://#i', $url)) {
+			$base = $base !== '' ? $base : home_url('/');
+			$url  = \WP_Http::make_absolute_url($url, $base);
 		}
 
 		return preg_match('#^https?://#i', $url) ? esc_url_raw($url) : '';
@@ -274,5 +308,47 @@ class ImageSitemap extends \WP_Sitemaps_Provider
 	public function flush_cache(): void
 	{
 		update_option(self::VERSION_OPTION, (string) time(), false);
+	}
+
+	/**
+	 * A post was saved: drop the cached pages if it is, or was, published public content.
+	 * Autosaves, revisions, drafts, menu items and the like change nothing in the sitemap.
+	 *
+	 * @param string $new_status
+	 * @param string $old_status
+	 * @param mixed  $post
+	 */
+	public function flush_on_status($new_status, $old_status, $post): void
+	{
+		if (($new_status === 'publish' || $old_status === 'publish') && self::listed_type($post)) {
+			$this->flush_cache();
+		}
+	}
+
+	/**
+	 * A post was deleted without being trashed first (trashing already flushed).
+	 *
+	 * @param int   $post_id
+	 * @param mixed $post
+	 */
+	public function flush_on_delete($post_id, $post = null): void
+	{
+		if ($post instanceof \WP_Post && $post->post_status === 'publish' && self::listed_type($post)) {
+			$this->flush_cache();
+		}
+	}
+
+	/**
+	 * Whether posts of this type can be in the image sitemap.
+	 *
+	 * @param mixed $post
+	 */
+	private static function listed_type($post): bool
+	{
+		return $post instanceof \WP_Post
+			&& ! wp_is_post_revision($post)
+			&& ! wp_is_post_autosave($post)
+			&& $post->post_type !== 'attachment'
+			&& is_post_type_viewable($post->post_type);
 	}
 }
