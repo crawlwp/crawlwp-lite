@@ -721,7 +721,7 @@ class Settings
 					'id'       => 'json_key',
 					'type'     => 'textarea',
 					'name'     => __('Service Account JSON Key', 'mihdan-index-now'),
-					'desc'     => __('Needed only to submit pages with the Google Indexing API, because Google accepts indexing requests from a service account only. Search Console data works with the Google account connection above. Paste the contents of the JSON key file from Google Cloud Console. When a key is set, it is used for all Google requests.', 'mihdan-index-now'),
+					'desc'     => __('Needed only to submit pages with the Google Indexing API, because Google accepts indexing requests from a service account only. Search Console data works with the Google account connection above. Agencies: a service account is also the way to connect many sites, because Google allows at most 100 account connections per Google account and service accounts have no limit. Paste the contents of the JSON key file from Google Cloud Console. When a key is set, it is used for all Google requests.', 'mihdan-index-now'),
 					'help_tab' => 'https://crawlwp.com/article/integrating-wordpress-with-google-search/?utm_source=wp_dashboard&utm_medium=api_settings_page&utm_campaign=google_api'
 				)
 			);
