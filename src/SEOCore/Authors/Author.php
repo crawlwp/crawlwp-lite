@@ -85,7 +85,7 @@ class Author
 		$data = [
 			'id'          => $user_id,
 			'name'        => (string) $user->display_name,
-			/* WordPress shows a 404 for the archive of someone with no published posts. */
+			/* Only linked once there are posts to show on the archive. */
 			'url'         => self::has_posts($user_id) ? (string) get_author_posts_url($user_id) : '',
 			'bio'         => trim(wp_strip_all_tags((string) get_user_meta($user_id, 'description', true))),
 			'job_title'   => (string) get_user_meta($user_id, self::META_JOB_TITLE, true),
@@ -179,6 +179,15 @@ class Author
 	 */
 	public static function person_node(int $user_id): ?array
 	{
+		/*
+		 * Only people who write. Author archives answer for any user (even with no
+		 * posts), and subscribers or customers can fill in social profile links:
+		 * those stay out of the structured data. Others keep the plain name.
+		 */
+		if (! user_can($user_id, 'edit_posts')) {
+			return null;
+		}
+
 		$author = self::get($user_id);
 
 		if ($author === null || $author['name'] === '') {
