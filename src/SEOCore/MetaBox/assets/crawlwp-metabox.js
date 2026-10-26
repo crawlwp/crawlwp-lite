@@ -1147,14 +1147,11 @@
       return $('<div>').html(html).text();
     },
 
-    /* Chinese and Japanese characters (written without spaces between words). */
-    CJK_CHARS: /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff66-\uff9f]/g,
-
-    /* Length in words. Chinese and Japanese have no spaces between words, so two
-       characters count as one word: the ratio Yoast uses for its Japanese limits
-       (200 characters for 100 words, 40 for a 20-word sentence, 600 for 300 words).
-       Thai, Lao, Myanmar and Khmer words are found with the browser's word segmenter. */
     getWordCount: function(text) {
+      /* Length in words. Chinese and Japanese have no spaces between words, so two
+         characters count as one word: the ratio Yoast uses for its Japanese limits
+         (200 characters for 100 words, 40 for a 20-word sentence, 600 for 300 words).
+         Thai, Lao, Myanmar and Khmer words are found with the browser's word segmenter. */
       text = String(text || '');
       var cjk = text.match(this.CJK_CHARS);
       var rest = cjk ? text.replace(this.CJK_CHARS, ' ') : text;
@@ -1168,6 +1165,9 @@
       }
       return words + (cjk ? Math.round(cjk.length / 2) : 0);
     },
+
+    /* Chinese and Japanese characters (written without spaces between words). */
+    CJK_CHARS: /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff66-\uff9f]/g,
 
     /* Number of Chinese and Japanese characters, for messages in those languages. */
     cjkCount: function(text) {
