@@ -22,6 +22,12 @@ class GoogleWebmaster extends WebmasterAbstract
 	/** Google's default Indexing API quota: publish requests a day. */
 	public const DAILY_LIMIT = 200;
 
+	/**
+	 * Removals sent to Google per day. Google's default quota is 200 notifications a
+	 * day for updates and removals together; this keeps most of it for new content.
+	 */
+	private const DAILY_REMOVALS = 50;
+
 	public function get_ping_endpoint(): string
 	{
 		return self::RECRAWL_ENDPOINT;
@@ -107,6 +113,26 @@ class GoogleWebmaster extends WebmasterAbstract
 		if ($post instanceof \WP_Post && $post->post_status !== 'trash' && ! doing_action('before_delete_post')) return;
 
 		if ($this->is_paused(self::RATE_LIMIT_OPTION, $permalink)) return;
+
+		/**
+		 * Filter how many removals are sent to Google per day (site time zone).
+		 *
+		 * @param int $limit Default 50.
+		 */
+		$limit = (int) apply_filters('crawlwp/google_daily_removals', self::DAILY_REMOVALS);
+		$key   = 'crawlwp_google_removals_' . wp_date('Ymd');
+		$sent  = (int) get_transient($key);
+
+		if ($sent >= $limit) {
+			/* translators: %d: number of removals */
+			$reason = sprintf(__('Not sent: the daily limit of %d removals sent to Google was reached, to keep Google\'s quota for new and updated content.', 'mihdan-index-now'), $limit);
+			/* translators: %s: URL */
+			$this->log_submission($permalink, sprintf(__('%s (removed)', 'mihdan-index-now'), $permalink), 0, $reason);
+
+			return;
+		}
+
+		set_transient($key, $sent + 1, DAY_IN_SECONDS);
 
 		$status_code = $this->notify($permalink, self::URL_DELETED, $message);
 

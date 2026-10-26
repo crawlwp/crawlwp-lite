@@ -145,21 +145,30 @@ class Indexing
 	}
 
 	/**
-	 * Whether a term archive is effectively noindex.
+	 * Whether a term archive is effectively noindex, by CrawlWP or another active SEO plugin.
 	 */
 	public static function is_term_noindex(WP_Term $term): bool
 	{
-		if ( ! FeatureGate::is_enabled()) {
-			return false;
+		return self::get_term_noindex_source($term) !== '';
+	}
+
+	/**
+	 * Name of the plugin that sets a term archive to noindex ("CrawlWP", "Yoast SEO"…), or empty.
+	 */
+	public static function get_term_noindex_source(WP_Term $term): string
+	{
+		if (FeatureGate::is_enabled()) {
+			$value   = (string)TermFields::get($term->term_id, MetaFields::ROBOTS_INDEX, '');
+			$noindex = $value !== ''
+				? $value === 'noindex'
+				: FrontendOutput::is_noindexed(Entities::taxonomy_key($term->taxonomy));
+
+			if ($noindex) {
+				return 'CrawlWP';
+			}
 		}
 
-		$value = (string)TermFields::get($term->term_id, MetaFields::ROBOTS_INDEX, '');
-
-		if ($value !== '') {
-			return $value === 'noindex';
-		}
-
-		return FrontendOutput::is_noindexed(Entities::taxonomy_key($term->taxonomy));
+		return ThirdPartyRobots::term_noindex_source($term);
 	}
 
 	/**
@@ -214,8 +223,11 @@ class Indexing
 			$reason = __('Term not found.', 'mihdan-index-now');
 		} elseif ( ! in_array($taxonomy, self::get_taxonomies(), true)) {
 			$reason = __('This taxonomy is not selected under Indexing > General > Taxonomies.', 'mihdan-index-now');
-		} elseif (self::is_term_noindex($term)) {
-			$reason = __('This term is set to noindex (hidden from search results), so it is not submitted to search engines.', 'mihdan-index-now');
+		} elseif (($source = self::get_term_noindex_source($term)) !== '') {
+			$reason = $source === 'CrawlWP'
+				? __('This term is set to noindex (hidden from search results), so it is not submitted to search engines.', 'mihdan-index-now')
+				/* translators: %s: SEO plugin name, e.g. Yoast SEO */
+				: sprintf(__('This term is set to noindex (hidden from search results) in %s, so it is not submitted to search engines.', 'mihdan-index-now'), $source);
 		} else {
 			$reason = '';
 		}
