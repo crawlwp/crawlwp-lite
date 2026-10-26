@@ -1151,7 +1151,58 @@
       return text.split(/\s+/).filter(function(w) { return w.length > 0; }).length;
     },
 
+    /* The post content as visitors see it, including page builder content. */
     getEditorContent: function() {
+      var builder = crawlwpSEO.builder;
+      /* Bricks and Divi 5 keep the text outside the editor (see Integrations/PageBuilders.php). */
+      if (builder && typeof builder.html === 'string') return builder.html;
+      var html = this.rawEditorContent();
+      return /\[\/?(?:et_pb|fusion)_/.test(html) ? this.unwrapBuilderShortcodes(html) : html;
+    },
+
+    /* Divi 4 and Avada wrap the text in shortcodes, with some of it (headings, buttons, images) in their settings. */
+    unwrapBuilderShortcodes: function(html) {
+      var self = this;
+      var attrs = function(str) {
+        var a = {}, m, re = /([\w-]+)="([^"]*)"/g;
+        /* Divi stores " [ ] inside settings as %22 %91 %93. */
+        while ((m = re.exec(str))) a[m[1]] = m[2].replace(/%22/g, '"').replace(/%91/g, '[').replace(/%93/g, ']');
+        return a;
+      };
+      var heading = function(level, text, fallback) {
+        var n = String(level || '').replace(/^h/i, '');
+        if (!/^[1-6]$/.test(n)) n = fallback;
+        return text ? '<h' + n + '>' + text + '</h' + n + '>' : '';
+      };
+      var link = function(url, text) {
+        if (!text) return '';
+        return '<p>' + (url ? '<a href="' + self.escAttr(url) + '">' + self.escHtml(text) + '</a>' : self.escHtml(text)) + '</p>';
+      };
+      var img = function(src, alt) {
+        return src ? '<img src="' + self.escAttr(src) + '" alt="' + self.escAttr(alt || '') + '">' : '';
+      };
+      html = html
+        /* Avada */
+        .replace(/\[fusion_title([^\]]*)\]([\s\S]*?)\[\/fusion_title\]/g, function(m, a, text) { return heading(attrs(a).size, text, 2); })
+        .replace(/\[fusion_button([^\]]*)\]([\s\S]*?)\[\/fusion_button\]/g, function(m, a, text) { return link(attrs(a).link, $.trim(self.stripTags(text))); })
+        .replace(/\[fusion_imageframe([^\]]*)\]([\s\S]*?)\[\/fusion_imageframe\]/g, function(m, a, src) { return img($.trim(self.stripTags(src)), attrs(a).alt); })
+        /* Divi 4 */
+        .replace(/\[et_pb_(heading|blurb|cta|button|image)\b([^\]]*)\]/g, function(m, mod, a) {
+          a = attrs(a);
+          if (mod === 'button') return link(a.button_url, a.button_text);
+          if (mod === 'image') return img(a.src, a.alt);
+          var out = heading(mod === 'heading' ? a.title_level : a.header_level, self.escHtml(a.title || ''), mod === 'blurb' ? 4 : 2);
+          return mod === 'cta' ? out + link(a.button_url, a.button_text) : out;
+        })
+        /* Every other Divi or Avada shortcode only wraps its content. */
+        .replace(/\[\/?(?:et_pb|fusion)_[^\]]*\]/g, '');
+      /* The visual editor puts the shortcodes in paragraphs of their own: drop the ones left empty. */
+      var $root = $('<div>').html(html);
+      $root.find('p').filter(function() { return !$.trim($(this).text()) && !$(this).find('img').length; }).remove();
+      return $root.html();
+    },
+
+    rawEditorContent: function() {
       /* Try TinyMCE first, then Gutenberg data store, then DOM fallbacks */
       if (typeof tinymce !== 'undefined') {
         var ed = tinymce.get('content');

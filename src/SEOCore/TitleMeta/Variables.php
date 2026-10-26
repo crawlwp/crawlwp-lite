@@ -768,8 +768,17 @@ class Variables
 			return self::$auto_descriptions[$post->ID];
 		}
 
+		/**
+		 * Filter the post content the automatic description is taken from, e.g.
+		 * to read a page builder's content (see Integrations\PageBuilders).
+		 *
+		 * @param string   $content The post content.
+		 * @param \WP_Post $post    The post.
+		 */
+		$content = (string) apply_filters('crawlwp_post_content_for_text', $post->post_content, $post);
+
 		$description = $post->post_excerpt
-			?: wp_trim_words(wp_strip_all_tags(strip_shortcodes($post->post_content)), 30, '...');
+			?: wp_trim_words(wp_strip_all_tags(strip_shortcodes($content)), 30, '...');
 
 		self::$auto_descriptions[$post->ID] = (string) $description;
 
