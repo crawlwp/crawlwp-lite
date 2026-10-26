@@ -5,7 +5,9 @@
 	var foodTypes = (window.crawlwpLocalSeo || {}).foodTypes || [];
 
 	function toggleFood($select) {
-		var isFood = $.inArray($select.val(), foodTypes) !== -1;
+		/* "Same as the main business" on a Premium location uses the main business's type. */
+		var type = $select.val() || $select.attr('data-cwp-inherit') || '';
+		var isFood = $.inArray(type, foodTypes) !== -1;
 		$select.closest('form').find('.cwp-local-food').toggle(isFood);
 	}
 
