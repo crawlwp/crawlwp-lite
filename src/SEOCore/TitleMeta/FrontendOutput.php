@@ -1136,7 +1136,7 @@ class FrontendOutput
 				$url = wp_get_attachment_image_url($image_id, 'full');
 
 				if ($url) {
-					return ['id' => $image_id, 'url' => (string) $url];
+					return $this->filter_image(['id' => $image_id, 'url' => (string) $url], 'post', $field, $post, $term);
 				}
 			}
 		}
@@ -1148,7 +1148,7 @@ class FrontendOutput
 				$url = wp_get_attachment_image_url($image_id, 'full');
 
 				if ($url) {
-					return ['id' => $image_id, 'url' => (string) $url];
+					return $this->filter_image(['id' => $image_id, 'url' => (string) $url], 'term', $field, $post, $term);
 				}
 			}
 		}
@@ -1160,10 +1160,10 @@ class FrontendOutput
 			[$global_id, $global_url] = $this->resolve_image_setting($global);
 
 			if ($global_url !== '') {
-				return ['id' => $global_id, 'url' => $global_url];
+				return $this->filter_image(['id' => $global_id, 'url' => $global_url], 'default', $field, $post, $term);
 			}
 
-			return ['id' => 0, 'url' => $global];
+			return $this->filter_image(['id' => 0, 'url' => $global], 'default', $field, $post, $term);
 		}
 
 		if ($post !== null && $featured_fallback) {
@@ -1174,12 +1174,38 @@ class FrontendOutput
 				$url = wp_get_attachment_image_url($thumbnail_id, 'full');
 
 				if ($url) {
-					return ['id' => $thumbnail_id, 'url' => (string) $url];
+					return $this->filter_image(['id' => $thumbnail_id, 'url' => (string) $url], 'featured', $field, $post, $term);
 				}
 			}
 		}
 
-		return ['id' => 0, 'url' => ''];
+		return $this->filter_image(['id' => 0, 'url' => ''], 'none', $field, $post, $term);
+	}
+
+	/**
+	 * @param array{id: int, url: string} $image
+	 *
+	 * @return array{id: int, url: string}
+	 */
+	private function filter_image(array $image, string $source, string $field, ?\WP_Post $post, ?\WP_Term $term): array
+	{
+		/**
+		 * Filter the social image chosen for a post or term. CrawlWP Premium's
+		 * share images use it to fill in posts that have no image.
+		 *
+		 * @param array{id: int, url: string} $image  Attachment id (0 when unknown, -1 when not an attachment, so it isn't looked up) and URL ('' for none).
+		 * @param string                      $source Where it came from: post, term, default (Title & Meta), featured or none.
+		 * @param string                      $field  og_image or x_image (an empty X image falls back to the Open Graph image).
+		 * @param \WP_Post|null               $post   Post, when the page is a post.
+		 * @param \WP_Term|null               $term   Term, when the page is a category, tag or other term.
+		 */
+		$filtered = apply_filters('crawlwp_social_image', $image, $source, $field, $post, $term);
+
+		if (! is_array($filtered) || ! isset($filtered['url'])) {
+			return $image;
+		}
+
+		return ['id' => (int) ($filtered['id'] ?? 0), 'url' => (string) $filtered['url']];
 	}
 
 	/**
@@ -1313,7 +1339,8 @@ class FrontendOutput
 			$og_tags['og:image'] = $og_image;
 
 			/* Image dimensions — the id is usually already known. */
-			$img_id = $og_image_id > 0 ? $og_image_id : $this->attachment_id_from_url($og_image);
+			/* -1: not an attachment (a generated image), so there is nothing to look up. */
+			$img_id = $og_image_id > 0 ? $og_image_id : ($og_image_id < 0 ? 0 : $this->attachment_id_from_url($og_image));
 
 			if ($img_id > 0) {
 				$img_meta = wp_get_attachment_metadata($img_id);
@@ -1520,7 +1547,7 @@ class FrontendOutput
 			}
 
 			if ($img_alt === '') {
-				$img_id = $x_image_id > 0 ? $x_image_id : $this->attachment_id_from_url($x_image);
+				$img_id = $x_image_id > 0 ? $x_image_id : ($x_image_id < 0 ? 0 : $this->attachment_id_from_url($x_image));
 
 				if ($img_id > 0) {
 					$img_alt = (string) get_post_meta($img_id, '_wp_attachment_image_alt', true);

@@ -537,7 +537,7 @@
 
     /* The social image the front end uses: the Facebook image, else the featured image. */
     schemaImage: function() {
-      if ($('#cwpOgImage').val()) {
+      if (this.imageSet($('#cwpOgImage'))) {
         var bg = $('#cwpOgImage').closest('.cwp-img-picker').find('.cwp-img-thumb').css('backgroundImage') || '';
         var m = bg.match(/url\(["']?(.*?)["']?\)/);
         if (m && m[1]) return m[1];
@@ -984,7 +984,7 @@
         var $thumbEl = $btn.closest('.cwp-img-picker').find('.cwp-img-thumb');
         $inputEl.val('');
         if ($thumbEl.length) {
-          var fi = crawlwpSEO.featuredImageUrl || '';
+          var fi = self.socialFallback();
           if (fi) {
             $thumbEl.css('backgroundImage', 'url(' + fi + ')').removeClass('cwp-thumb-empty');
           } else {
@@ -1005,7 +1005,7 @@
           if (imageUrl) {
             $fbCard.css('backgroundImage', 'url(' + imageUrl + ')').text('');
           } else {
-            var fiFb = crawlwpSEO.featuredImageUrl || '';
+            var fiFb = this.socialFallback();
             if (fiFb) {
               $fbCard.css('backgroundImage', 'url(' + fiFb + ')').text('');
             } else {
@@ -1015,13 +1015,13 @@
         }
         /* Also update X preview if X has no custom image */
         var $xInput = $('#cwpXImage');
-        if ($xInput.length && !$xInput.val()) {
+        if ($xInput.length && !this.imageSet($xInput)) {
           var $xCard = this.$mb.find('.cwp-x-card .cwp-og-img');
           if ($xCard.length) {
             if (imageUrl) {
               $xCard.css('backgroundImage', 'url(' + imageUrl + ')').text('');
             } else {
-              var fiX1 = crawlwpSEO.featuredImageUrl || '';
+              var fiX1 = this.socialFallback();
               if (fiX1) {
                 $xCard.css('backgroundImage', 'url(' + fiX1 + ')').text('');
               } else {
@@ -1043,7 +1043,7 @@
             if (fallback && fallback !== 'none') {
               $xCard2.text('');
             } else {
-              var fiX2 = crawlwpSEO.featuredImageUrl || '';
+              var fiX2 = this.socialFallback();
               if (fiX2) {
                 $xCard2.css('backgroundImage', 'url(' + fiX2 + ')').text('');
               } else {
@@ -1055,21 +1055,41 @@
       }
     },
 
-    /* ---------- featured image for social placeholders ---------- */
+    /*
+     * Image social networks get when the post has none of its own: the featured
+     * image, or the image CrawlWP Premium creates (socialFallback.always: even
+     * when there is a featured image).
+     */
+    /* An image field holds an attachment id; "0" or "" means none. */
+    imageSet: function($input) {
+      var v = $input.val();
+      return !!v && v !== '0';
+    },
+
+    socialFallback: function() {
+      var made = crawlwpSEO.socialFallback || {};
+      var featured = crawlwpSEO.featuredImageUrl || '';
+      return made.url && (made.always || !featured) ? made.url : featured;
+    },
+
+    /* ---------- fallback image for social placeholders ---------- */
     initSocialImagePlaceholders: function() {
-      var featuredUrl = crawlwpSEO.featuredImageUrl || '';
+      var self = this;
+      var featuredUrl = this.socialFallback();
       this.$mb.find('.cwp-img-picker').each(function() {
         var $picker = $(this);
         var $thumb = $picker.find('.cwp-img-thumb');
         var $input = $picker.find('input[type="hidden"]');
         if (!$thumb.length || !$input.length) return;
-        if ($input.val()) return;
+        if (self.imageSet($input)) return;
         if (featuredUrl) {
           $thumb.css('backgroundImage', 'url(' + featuredUrl + ')').removeClass('cwp-thumb-empty');
         } else {
           $thumb.css('backgroundImage', '').addClass('cwp-thumb-empty');
         }
       });
+      if (!this.imageSet($('#cwpOgImage'))) this.updateSocialPreviewImage('cwpOgImage', '');
+      if (!this.imageSet($('#cwpXImage'))) this.updateSocialPreviewImage('cwpXImage', '');
     },
 
     watchFeaturedImage: function() {

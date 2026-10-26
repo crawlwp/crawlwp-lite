@@ -328,6 +328,14 @@ $cwp_templates = \Mihdan\IndexNow\SEOCore\MetaBox\Assets::title_meta_templates($
           <div class="cwp-img-dimensions" id="cwpOgImgDimensions" hidden></div>
           </div>
         </div>
+        <?php
+        /**
+         * Below the Open Graph image field in the SEO box Social tab.
+         *
+         * @param \WP_Post $post Post being edited.
+         */
+        do_action('crawlwp_metabox_after_og_image', $post);
+        ?>
       </div>
 
       <div class="cwp-field">
