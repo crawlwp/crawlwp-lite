@@ -156,6 +156,7 @@ class Assets
 			'websiteId'        => home_url('/') . '#website',
 			'publisherId'      => home_url('/') . '#' . ((string) SiteInfoSettings::get('site_type', 'organization') === 'person' ? 'person' : 'organization'),
 			'slugStopWords'    => SeoSignals::slug_stop_words(),
+			'slugHints'        => SeoSignals::slug_hints($post instanceof \WP_Post ? $post->ID : 0),
 			'i18n'             => self::get_i18n_strings(),
 		];
 

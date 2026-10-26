@@ -633,6 +633,35 @@ class SeoSignals
 	}
 
 	/**
+	 * What the metabox script needs to turn a keyword into slug words the way
+	 * sanitize_title() does on this site, so its check agrees with keyword_in_slug().
+	 *
+	 * @return array{chars: array<string, string>, keywords: object}
+	 */
+	public static function slug_hints(int $post_id): array
+	{
+		/*
+		 * Letters WordPress spells out differently by language (German ä → ae,
+		 * Danish å → aa …), as this site's remove_accents() does them. The editor's
+		 * own slug function always uses the plain letter.
+		 */
+		$chars = [];
+
+		foreach (['ä', 'ö', 'ü', 'ß', 'æ', 'ø', 'å', 'đ', 'l·l'] as $char) {
+			$chars[$char] = mb_strtolower(remove_accents($char));
+		}
+
+		/* The saved keywords exactly as sanitize_title() makes them, including any transliteration plugin. */
+		$keywords = [];
+
+		foreach (MetaFields::keywords($post_id) as $keyword) {
+			$keywords[self::normalize_text($keyword)] = mb_strtolower(urldecode(sanitize_title(str_replace(["'", "\u{2018}", "\u{2019}"], '', $keyword))));
+		}
+
+		return ['chars' => $chars, 'keywords' => (object) $keywords];
+	}
+
+	/**
 	 * Small words people leave out of slugs ("best-plugin-seo" for "best plugin for seo").
 	 * Also sent to the metabox script so both checks agree.
 	 *

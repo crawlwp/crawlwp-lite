@@ -1168,7 +1168,17 @@
     keywordInSlug: function(keyword, slug) {
       var split = function(s) { return $.grep(String(s || '').toLowerCase().split('-'), function(w) { return w.length > 0; }); };
       var slugWords = split(slug);
-      var kwWords = split(this.decodeSlug(this.slugify(String(keyword || '').replace(/['\u2018\u2019]/g, ''))));
+      /* The saved keyword as the server slugs it (language rules, transliteration plugins);
+         else spell out the letters this site's language writes differently (German ä → ae). */
+      var hints = crawlwpSEO.slugHints || {};
+      var kwText = String(keyword || '').replace(/['\u2018\u2019]/g, '');
+      var serverSlug = hints.keywords && Object.prototype.hasOwnProperty.call(hints.keywords, keyword) ? hints.keywords[keyword] : '';
+      if (!serverSlug && hints.chars) {
+        for (var c in hints.chars) {
+          if (Object.prototype.hasOwnProperty.call(hints.chars, c)) kwText = kwText.split(c).join(hints.chars[c]);
+        }
+      }
+      var kwWords = split(serverSlug || this.decodeSlug(this.slugify(kwText)));
       if (!slugWords.length || !kwWords.length) return false;
 
       var joined = '-' + slugWords.join('-') + '-';
@@ -1613,7 +1623,9 @@
       var L = crawlwpSEO.i18n;
 
       /* always update readability badge regardless of keyword */
-      var html = this.getEditorContent();
+      /* Classic content without <p> tags (a legacy post or Classic block in the block
+         editor): add paragraphs the way WordPress does, so the first one can be found. */
+      var html = this.autop(this.getEditorContent());
       this.refreshLiveTokens();
       var plainText = this.normalizeText(this.stripTags(html)).toLowerCase();
       var wordCount = this.getWordCount(plainText);
