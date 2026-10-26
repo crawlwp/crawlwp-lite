@@ -307,7 +307,24 @@ class ImageSitemap extends \WP_Sitemaps_Provider
 
 	public function flush_cache(): void
 	{
+		global $wpdb;
+
+		/* A new version makes every cached page miss (this also covers persistent object caches). */
 		update_option(self::VERSION_OPTION, (string) time(), false);
+
+		/*
+		 * Without an object cache the old pages are rows in the options table: delete them now
+		 * rather than leave them until they expire a day later. One indexed prefix query.
+		 */
+		if (! wp_using_ext_object_cache()) {
+			$wpdb->query(
+				$wpdb->prepare(
+					"DELETE FROM {$wpdb->options} WHERE option_name LIKE %s OR option_name LIKE %s",
+					$wpdb->esc_like('_transient_crawlwp_imgsm_') . '%',
+					$wpdb->esc_like('_transient_timeout_crawlwp_imgsm_') . '%'
+				)
+			);
+		}
 	}
 
 	/**
