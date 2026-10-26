@@ -235,7 +235,8 @@ XSL;
 
 		$xsl_content = apply_filters('crawlwp_sitemaps_custom_stylesheet_content', $xsl_content);
 
-		return (string) apply_filters('wp_sitemaps_stylesheet_content', $xsl_content);
+		// WordPress 7.2 deprecated this core filter: only run it where WordPress still uses it.
+		return \Mihdan\IndexNow\SEOCore\Sitemap::has_xsl_stylesheets() ? (string) apply_filters('wp_sitemaps_stylesheet_content', $xsl_content) : (string) $xsl_content;
 	}
 
 	/**
@@ -353,7 +354,8 @@ XSL;
 
 		$xsl_content = apply_filters('crawlwp_sitemaps_video_stylesheet_content', $xsl_content);
 
-		return (string) apply_filters('wp_sitemaps_stylesheet_content', $xsl_content);
+		// WordPress 7.2 deprecated this core filter: only run it where WordPress still uses it.
+		return \Mihdan\IndexNow\SEOCore\Sitemap::has_xsl_stylesheets() ? (string) apply_filters('wp_sitemaps_stylesheet_content', $xsl_content) : (string) $xsl_content;
 	}
 
 	/**
@@ -472,7 +474,8 @@ XSL;
 
 		$xsl_content = apply_filters('crawlwp_sitemaps_news_stylesheet_content', $xsl_content);
 
-		return (string) apply_filters('wp_sitemaps_stylesheet_content', $xsl_content);
+		// WordPress 7.2 deprecated this core filter: only run it where WordPress still uses it.
+		return \Mihdan\IndexNow\SEOCore\Sitemap::has_xsl_stylesheets() ? (string) apply_filters('wp_sitemaps_stylesheet_content', $xsl_content) : (string) $xsl_content;
 	}
 
 	/**

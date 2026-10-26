@@ -30,12 +30,16 @@ class Sitemap
 		add_filter('wp_sitemaps_add_provider', [$this, 'filter_providers'], 10, 2);
 		add_filter('wp_sitemaps_posts_query_args', [$this, 'filter_posts_query_args']);
 
-		/* Brand the sitemap stylesheet description (works for any site language). */
-		add_filter('wp_sitemaps_stylesheet_content', [$this, 'brand_stylesheet']);
-		add_filter('wp_sitemaps_stylesheet_index_content', [$this, 'brand_stylesheet']);
-
-		/* Inject additional CSS into the sitemap stylesheet. */
-		add_filter('wp_sitemaps_stylesheet_css', [$this, 'enhance_stylesheet_css']);
+		/*
+		 * Brand the sitemap stylesheet and add CSS to it. WordPress 7.2 removed sitemap
+		 * stylesheets (browsers are dropping XSLT) and deprecated these filters: they are
+		 * only added on older versions, so 7.2+ logs no deprecation notices.
+		 */
+		if (self::has_xsl_stylesheets()) {
+			add_filter('wp_sitemaps_stylesheet_content', [$this, 'brand_stylesheet']);
+			add_filter('wp_sitemaps_stylesheet_index_content', [$this, 'brand_stylesheet']);
+			add_filter('wp_sitemaps_stylesheet_css', [$this, 'enhance_stylesheet_css']);
+		}
 
 		/*
 		 * Always store a value for the robots-index meta key so the sitemap
@@ -387,6 +391,16 @@ class Sitemap
 	// -------------------------------------------------------------------------
 	// Stylesheet branding
 	// -------------------------------------------------------------------------
+
+	/**
+	 * Whether WordPress still serves XSL stylesheets for its sitemaps. WordPress 7.2
+	 * removed them and deprecated the wp_sitemaps_stylesheet_* filters
+	 * (https://core.trac.wordpress.org/ticket/65593).
+	 */
+	public static function has_xsl_stylesheets(): bool
+	{
+		return version_compare((string) ($GLOBALS['wp_version'] ?? '0'), '7.2-alpha', '<');
+	}
 
 	/**
 	 * Replace the generic WordPress description in the sitemap XSL stylesheet
