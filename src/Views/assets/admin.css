@@ -857,39 +857,6 @@ body:not(.cwpWP7higher) .cwp-premium-sidebar-upsell-cta .button-primary {
 	margin-right: 6px;
 }
 
-/* upsell page */
-.crawlwp-full-feature-upsell-page-wrap {
-	background: #fff;
-	border: 1px solid #d6e2ed;
-	text-align: center;
-	margin-top: 25px;
-	margin-left: auto;
-	margin-right: auto;
-	max-width: 900px;
-}
-
-.crawlwp-full-feature-upsell-page-wrap a.bbtn {
-	border-style: solid;
-	border-width: 1px 1px 2px 1px;
-	border-radius: 3px;
-	cursor: pointer;
-	display: inline-block;
-	font-weight: 400;
-	text-decoration: none;
-	background: var(--wp-admin-theme-color, #2271b1);
-	border-color: var(--wp-admin-theme-color, #2271b1);
-	color: #fff;
-	font-size: 16px;
-	padding: 14px 27px;
-}
-
-.btn-higher-up {
-	position: absolute;
-	top: 0;
-	left: 50%;
-	transform: translate(-50%, -50%);
-}
-
 .cwp-upsell-notice {
 	background:#fff;
 	border:1px solid #c3c4c7;
@@ -913,41 +880,6 @@ body:not(.cwpWP7higher) .cwp-premium-sidebar-upsell-cta .button-primary {
 	line-height:1.5  !important;
 }
 
-
-.crawlwp-upsell-top {
-	padding: 20px;
-}
-
-.crawlwp-upsell-featured-image {
-	padding: 10px 0;
-}
-
-.crawlwp-full-feature-upsell-page-wrap h2 {
-	font-size: 20px;
-	color: #000;
-	margin: 36px 0 14px;
-}
-
-.crawlwp-full-feature-upsell-page-wrap h4 {
-	font-size: 18px;
-	color: #4c6577;
-	font-weight: 400;
-	margin: 0;
-	line-height: 2;
-}
-
-.crawlwp-full-feature-upsell-page-wrap h3 {
-	font-size: 18px;
-	color: #000;
-	margin: 0 0 14px;
-}
-
-.crawlwp-upsell-bottom {
-	background: rgb(250 250 250 / 63%);
-	border-top: 1px solid #d6e2ed;
-	padding: 36px 50px 60px;
-	position: relative;
-}
 
 /* "New" badge */
 .crawlwp-new-badge { display: inline-block; margin-right: 6px; padding: 1px 7px; border-radius: 999px; background: #e7f5ec; color: #00703c; font-size: 11px; font-weight: 600; line-height: 1.6; vertical-align: 1px; }
@@ -978,47 +910,8 @@ a.crawlwp-locked__button:hover, a.crawlwp-locked__button:focus { background: #21
 .cwp-premium-sidebar-upsell-li .crawlwp-new-badge { margin: 0 0 0 6px; font-size: 10px; }
 
 
-.crawlwp-upsell-featured-image img {
-	width: 100%;
-	height: auto;
-}
-
-.crawlwp-full-feature-upsell-page-wrap p {
-	font-size: 14px;
-	color: #4c6577;
-	padding: 6px 0;
-}
-
-/* Site Audit upsell: what gets checked. */
-.crawlwp-upsell-checklist {
-	display: grid;
-	grid-template-columns: repeat(2, minmax(0, 1fr));
-	gap: 8px 24px;
-	max-width: 720px;
-	margin: 16px auto 28px;
-	padding: 0;
-	list-style: none;
-	text-align: left;
-}
-
-.crawlwp-upsell-checklist li {
-	display: flex;
-	gap: 6px;
-	margin: 0;
-	font-size: 14px;
-	color: #3c434a;
-}
-
-.crawlwp-upsell-checklist .dashicons {
-	color: #00a32a;
-	flex: 0 0 auto;
-}
-
 @media (max-width: 782px) {
-	.crawlwp-upsell-checklist {
-		grid-template-columns: 1fr;
 	}
-}
 
 /* Site Verification: keep the long example <meta> tags inside the settings box. */
 #crawlwp_site_verification .description code {

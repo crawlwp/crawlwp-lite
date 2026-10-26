@@ -279,50 +279,22 @@ class UpsellAdminPages
 	}
 
 	/**
-	 * Site Audit upsell: what the Premium feature does, with screenshots and upgrade buttons.
+	 * Site Audit upsell: a blurred preview of the Premium page with an upgrade card on top.
 	 */
 	public function site_audit_upsell(): string
 	{
-		$upgrade_url = 'https://crawlwp.com/pricing/?utm_source=wp_dashboard&utm_medium=upgrade&utm_campaign=crawlwp-site-audit-upsell-page';
-		$button      = sprintf('<a class="bbtn" target="_blank" href="%s">%s</a>', esc_url($upgrade_url), esc_html__('Upgrade to CrawlWP Premium', 'mihdan-index-now'));
-
-		$checks = [
-			__('Broken internal and outbound links', 'mihdan-index-now'),
-			__('Duplicate titles, and missing or duplicate meta descriptions', 'mihdan-index-now'),
-			__('Orphan pages no other page links to', 'mihdan-index-now'),
-			__('Canonical URLs that point to a redirect or a missing page', 'mihdan-index-now'),
-			__('404 errors without a redirect, and redirect chains', 'mihdan-index-now'),
-			__('Images without alt text, thin content and missing focus keywords', 'mihdan-index-now'),
-			__('Sitemap, robots.txt and other site-wide settings', 'mihdan-index-now'),
-			__('Pages Google has not indexed', 'mihdan-index-now'),
-		];
-
-		$html  = '<div class="crawlwp-full-feature-upsell-page-wrap crawlwp-site-audit-upsell">';
-		$html .= '<div class="crawlwp-upsell-top">';
-		$html .= sprintf('<h2>%s</h2>', esc_html__('Find and Fix SEO Problems Across Your Whole Site', 'mihdan-index-now'));
-		$html .= sprintf('<p>%s</p>', esc_html__('CrawlWP Premium checks every page on your site each week and lists the problems that hold back your search rankings, with the most serious first. Each problem explains why it matters and how to fix it.', 'mihdan-index-now'));
-		$html .= '<div class="crawlwp-upsell-featured-image">';
-		$html .= '<img src="' . esc_url(Utils::get_plugin_asset_url('images/crawlwp-site-audit-overview.png')) . '" alt="' . esc_attr__('Site Audit overview with a health score and a list of SEO issues', 'mihdan-index-now') . '">';
-		$html .= '</div>';
-		$html .= '<ul class="crawlwp-upsell-checklist">';
-
-		foreach ($checks as $check) {
-			$html .= '<li><span class="dashicons dashicons-yes" aria-hidden="true"></span>' . esc_html($check) . '</li>';
-		}
-
-		$html .= '</ul>';
-		$html .= $button;
-		$html .= '</div>';
-		$html .= '<div class="crawlwp-upsell-bottom">';
-		$html .= '<div class="crawlwp-upsell-featured-image">';
-		$html .= '<img src="' . esc_url(Utils::get_plugin_asset_url('images/crawlwp-site-audit-issue.png')) . '" alt="' . esc_attr__('Fixing missing meta descriptions directly from the Site Audit', 'mihdan-index-now') . '">';
-		$html .= '</div>';
-		$html .= sprintf('<h3>%s</h3>', esc_html__('Fix Problems Where You Find Them', 'mihdan-index-now'));
-		$html .= sprintf('<p>%s</p>', esc_html__('Write a missing meta description or shorten a long title right in the list, or generate it with AI, without opening each post. Ignore what doesn\'t apply, watch your health score rise as you fix things, and get an email when new errors appear.', 'mihdan-index-now'));
-		$html .= $button;
-		$html .= '</div>';
-		$html .= '</div>';
-
-		return $html;
+		return self::locked_preview([
+			'image'    => 'upsell-audit-preview.jpg',
+			'title'    => __('Find and fix SEO problems across your whole site', 'mihdan-index-now'),
+			'text'     => __('CrawlWP Premium checks every page each week and lists what holds back your rankings, most serious first, with how to fix each one.', 'mihdan-index-now'),
+			'points'   => [
+				__('<b>A health score</b> for your site, checked automatically every week', 'mihdan-index-now'),
+				__('<b>Broken links, duplicate titles, orphan pages</b>, redirect chains and more', 'mihdan-index-now'),
+				__('<b>Fix problems in the list</b>: write a missing description or shorten a title, or use AI', 'mihdan-index-now'),
+				__('<b>An email</b> when new errors appear', 'mihdan-index-now'),
+			],
+			'note'     => __('Runs on its own after upgrading. Nothing to set up.', 'mihdan-index-now'),
+			'campaign' => 'crawlwp-site-audit-upsell-page',
+		]);
 	}
 }
