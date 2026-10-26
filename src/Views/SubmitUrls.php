@@ -262,7 +262,10 @@ class SubmitUrls
 			wp_send_json_error(['message' => __('You are not allowed to do this.', 'mihdan-index-now')], 403);
 		}
 
-		$urls     = array_slice(array_values(array_unique(array_map('esc_url_raw', array_map('trim', (array)wp_unslash($_POST['urls'] ?? []))))), 0, self::CHUNK); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- esc_url_raw.
+		// Results are keyed by the line as the user typed it, which is how the page looks them up.
+		$input    = array_slice(array_values(array_unique(array_map('trim', array_filter((array)wp_unslash($_POST['urls'] ?? []), 'is_string')))), 0, self::CHUNK); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- each line is cleaned with esc_url_raw() below.
+		$map      = array_combine($input, array_map('esc_url_raw', $input)) ?: [];
+		$urls     = array_values(array_unique(array_filter($map)));
 		$removed  = ! empty($_POST['removed']);
 		$wanted   = array_map('sanitize_key', (array)wp_unslash($_POST['services'] ?? []));
 		$services = $this->services(false);
@@ -292,6 +295,14 @@ class SubmitUrls
 				if ($engine === null) continue;
 				$result = $engine->submit_urls($valid);
 				foreach ($valid as $url) $results[$url]['engines'][$id] = self::outcome($result);
+
+				// Like the other services, a post's URL updates its Last Submitted date.
+				if ( ! $removed && Utils::is_response_code_success($result['status'])) {
+					foreach ($valid as $url) {
+						$post_id = url_to_postid($url);
+						if ($post_id > 0) do_action('crawlwp/index_pinged', 'post', $post_id);
+					}
+				}
 				continue;
 			}
 
@@ -302,7 +313,15 @@ class SubmitUrls
 			}
 		}
 
-		wp_send_json_success(['results' => $results]);
+		$out = [];
+
+		foreach ($map as $typed => $url) {
+			$out[$typed] = $url === ''
+				? ['skipped' => __('Not a valid web address.', 'mihdan-index-now')]
+				: $results[$url];
+		}
+
+		wp_send_json_success(['results' => $out]);
 	}
 
 	/**
