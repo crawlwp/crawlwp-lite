@@ -94,6 +94,7 @@ class Notifications
 		'autodescription/autodescription.php',
 		'slim-seo/slim-seo.php',
 		'slim-seo-pro/slim-seo-pro.php',
+		'surerank/surerank.php',
 		'squirrly-seo/squirrly.php',
 		'wp-seopress/seopress.php',
 		'wp-seopress-pro/seopress-pro.php',
