@@ -1500,7 +1500,7 @@
         if (words > 150) data.longParas.push({ words: words, start: self.textStart(text) });
 
         /* Three or more sentences in a row that start with the same word. */
-        var sentences = text.match(/[^.!?]+[.!?]*/g) || [];
+        var sentences = text.match(/[^.!?\u3002\uff01\uff1f]+[.!?\u3002\uff01\uff1f]*/g) || [];
         var prev = '', run = 0;
         var flush = function() {
           if (run >= 3) data.repeats.push({ count: run, word: prev, start: self.textStart(text) });
@@ -1534,8 +1534,10 @@
       var bare = function(u) { return String(u || '').split('#')[0].replace(/\/+$/, '').toLowerCase(); };
       var key = $.trim(norm(kw));
       if (!key) return [];
-      /* Match whole words, except in scripts written without spaces between words. */
-      var whole = /[a-z0-9\u00c0-\u024f\u0400-\u04ff]/.test(key);
+      /* Match whole words, except in scripts written without spaces between words
+         (Chinese, Japanese, Thai, Lao, Myanmar, Khmer). Korean, Greek, Arabic, Hebrew,
+         Hindi and others use spaces, so "서울" doesn't match inside "서울대학교". */
+      var whole = !/[\u0e00-\u0eff\u1000-\u109f\u1780-\u17ff\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/.test(key);
       var selfUrl = bare(crawlwpSEO.permalink);
       var found = [];
       /* Internal links first: those compete with this page on the same site. */
