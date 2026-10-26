@@ -59,7 +59,7 @@ class AuthorSchema
 		}
 
 		$reviewer = self::reviewer($post->ID);
-		$node     = $reviewer > 0 ? Author::person_node($reviewer) : null;
+		$node     = $reviewer > 0 && user_can($reviewer, 'edit_posts') ? Author::person_node($reviewer) : null;
 
 		if ($node !== null) {
 			Graph::add_node($node);
@@ -141,6 +141,13 @@ class AuthorSchema
 	 */
 	private static function reviewer_options(int $current): array
 	{
+		/* Writers can only name themselves; editors anyone who writes. */
+		if (! self::can_choose_anyone()) {
+			$ids = array_values(array_unique(array_filter([get_current_user_id(), $current])));
+
+			return array_combine($ids, array_map([self::class, 'label'], $ids)) ?: [];
+		}
+
 		$users = get_users([
 			'capability' => 'edit_posts',
 			'orderby'    => 'display_name',
@@ -166,6 +173,14 @@ class AuthorSchema
 		}
 
 		return $options;
+	}
+
+	/**
+	 * Whether the current user may name anyone as a post's reviewer.
+	 */
+	private static function can_choose_anyone(): bool
+	{
+		return current_user_can('edit_others_posts');
 	}
 
 	/**
@@ -228,7 +243,7 @@ class AuthorSchema
 				</div>
 				<div class="cwp-field">
 					<div class="cwp-label-row"><label class="cwp-label" for="cwpReviewedBy"><?php esc_html_e('Reviewed by', 'mihdan-index-now'); ?></label></div>
-					<select class="cwp-select" id="cwpReviewedBy" name="<?php echo esc_attr(self::META_REVIEWED_BY); ?>">
+					<select class="cwp-select" id="cwpReviewedBy" name="<?php echo esc_attr(self::META_REVIEWED_BY); ?>" <?php disabled(! self::can_choose_anyone() && ! in_array($reviewer, [0, get_current_user_id()], true)); ?>>
 						<option value=""><?php esc_html_e('Nobody', 'mihdan-index-now'); ?></option>
 						<?php foreach (self::reviewer_options($reviewer) as $id => $label) : ?>
 							<option value="<?php echo (int) $id; ?>" <?php selected($reviewer, $id); ?>><?php echo esc_html($label); ?></option>
@@ -266,12 +281,23 @@ class AuthorSchema
 		}
 
 		$reviewer = absint(wp_unslash($_POST[self::META_REVIEWED_BY]));
+		$current  = self::reviewer($post_id);
+
+		if ($reviewer === $current) {
+			return;
+		}
 
 		if ($reviewer > 0 && ! user_can($reviewer, 'edit_posts')) {
-			/* Keep a saved reviewer who has since lost the role; reject anyone else. */
-			if ($reviewer !== self::reviewer($post_id)) {
-				return;
-			}
+			return;
+		}
+
+		/* Naming someone else as the reviewer, or removing them, is for editors. */
+		if (! self::can_choose_anyone() && ! in_array($reviewer, [0, get_current_user_id()], true)) {
+			return;
+		}
+
+		if (! self::can_choose_anyone() && ! in_array($current, [0, get_current_user_id()], true)) {
+			return;
 		}
 
 		if ($reviewer > 0) {

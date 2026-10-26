@@ -73,9 +73,13 @@ class Author
 		$photo_id = (int) get_user_meta($user_id, self::META_PHOTO, true);
 		$photo    = $photo_id > 0 ? (string) wp_get_attachment_image_url($photo_id, 'medium') : '';
 
+		/*
+		 * Only a photo the author chose. A Gravatar URL would publish a hash of
+		 * their email address, and for most people it's the generic placeholder.
+		 * (The author box still shows the Gravatar, following Settings › Discussion.)
+		 */
 		if ($photo === '') {
 			$photo_id = 0;
-			$photo    = (string) get_avatar_url($user_id, ['size' => 256]);
 		}
 
 		$data = [
@@ -112,10 +116,6 @@ class Author
 	public static function works_for(int $user_id): ?array
 	{
 		$choice = (string) get_user_meta($user_id, self::META_WORKS_FOR, true);
-
-		if ($choice === '') {
-			$choice = self::site_is_organization() ? 'site' : 'none';
-		}
 
 		if ($choice === 'site' && self::site_is_organization()) {
 			return ['name' => self::site_name(), 'url' => home_url('/'), 'site' => true];

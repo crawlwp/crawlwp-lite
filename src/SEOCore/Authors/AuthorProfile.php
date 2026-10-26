@@ -68,8 +68,9 @@ class AuthorProfile
 		$is_org      = Author::site_is_organization();
 		$can_upload  = current_user_can('upload_files');
 
+		/* Nobody until the author says otherwise: an employer is a claim only they can make. */
 		if ($works_for === '' || ($works_for === 'site' && ! $is_org)) {
-			$works_for = $is_org ? 'site' : 'none';
+			$works_for = 'none';
 		}
 
 		wp_nonce_field('crawlwp_author_profile', '_crawlwp_author_nonce');
@@ -146,8 +147,8 @@ class AuthorProfile
 					</div>
 					<p class="description"><?php
 						echo $can_upload
-							? esc_html__('Leave empty to use the Gravatar. Square, at least 256 × 256 px.', 'mihdan-index-now')
-							: esc_html__('Uses the Gravatar for this email address.', 'mihdan-index-now');
+							? esc_html__('Shown in the author box and given to search engines. Square, at least 256 × 256 px. Without one, the author box shows the Gravatar and search engines get no photo.', 'mihdan-index-now')
+							: esc_html__('The author box shows the Gravatar for this email address.', 'mihdan-index-now');
 					?></p>
 				</td>
 			</tr>

@@ -196,6 +196,11 @@ class AuthorBox
 			return $content;
 		}
 
+		/* The post places the box itself. */
+		if (has_shortcode($post->post_content, 'crawlwp_author_box')) {
+			return $content;
+		}
+
 		return $content . self::render((int) $post->post_author);
 	}
 
@@ -206,15 +211,20 @@ class AuthorBox
 	 */
 	public function shortcode($atts): string
 	{
-		$atts = shortcode_atts(['user' => 0], (array) $atts, 'crawlwp_author_box');
-		$user = (int) $atts['user'];
+		$atts   = shortcode_atts(['user' => 0], (array) $atts, 'crawlwp_author_box');
+		$post   = get_post();
+		$author = $post instanceof \WP_Post ? (int) $post->post_author : 0;
+		$user   = (int) $atts['user'];
 
-		if ($user <= 0) {
-			$post = get_post();
-			$user = $post instanceof \WP_Post ? (int) $post->post_author : 0;
+		/*
+		 * Another user's box only in posts by editors and admins, and only for
+		 * people who write: a subscriber's or customer's name and photo stay private.
+		 */
+		if ($user > 0 && $user !== $author && (! user_can($author, 'edit_others_posts') || ! user_can($user, 'edit_posts'))) {
+			return '';
 		}
 
-		return self::render($user);
+		return self::render($user > 0 ? $user : $author);
 	}
 
 	/**
