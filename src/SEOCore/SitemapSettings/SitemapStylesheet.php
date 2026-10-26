@@ -14,6 +14,14 @@ class SitemapStylesheet
 	const VIDEO_TYPE  = 'video';
 	const NEWS_TYPE   = 'news';
 
+	/**
+	 * Whether WordPress still serves XSL sitemap stylesheets (removed in 7.2, see Sitemap::has_xsl_stylesheets()).
+	 */
+	private static function core_uses_xsl(): bool
+	{
+		return version_compare((string) ($GLOBALS['wp_version'] ?? '0'), '7.2-alpha', '<');
+	}
+
 	public function __construct()
 	{
 		add_action('init', [$this, 'add_rewrite_rules']);
@@ -236,7 +244,7 @@ XSL;
 		$xsl_content = apply_filters('crawlwp_sitemaps_custom_stylesheet_content', $xsl_content);
 
 		// WordPress 7.2 deprecated this core filter: only run it where WordPress still uses it.
-		return \Mihdan\IndexNow\SEOCore\Sitemap::has_xsl_stylesheets() ? (string) apply_filters('wp_sitemaps_stylesheet_content', $xsl_content) : (string) $xsl_content;
+		return self::core_uses_xsl() ? (string) apply_filters('wp_sitemaps_stylesheet_content', $xsl_content) : (string) $xsl_content;
 	}
 
 	/**
@@ -355,7 +363,7 @@ XSL;
 		$xsl_content = apply_filters('crawlwp_sitemaps_video_stylesheet_content', $xsl_content);
 
 		// WordPress 7.2 deprecated this core filter: only run it where WordPress still uses it.
-		return \Mihdan\IndexNow\SEOCore\Sitemap::has_xsl_stylesheets() ? (string) apply_filters('wp_sitemaps_stylesheet_content', $xsl_content) : (string) $xsl_content;
+		return self::core_uses_xsl() ? (string) apply_filters('wp_sitemaps_stylesheet_content', $xsl_content) : (string) $xsl_content;
 	}
 
 	/**
@@ -475,7 +483,7 @@ XSL;
 		$xsl_content = apply_filters('crawlwp_sitemaps_news_stylesheet_content', $xsl_content);
 
 		// WordPress 7.2 deprecated this core filter: only run it where WordPress still uses it.
-		return \Mihdan\IndexNow\SEOCore\Sitemap::has_xsl_stylesheets() ? (string) apply_filters('wp_sitemaps_stylesheet_content', $xsl_content) : (string) $xsl_content;
+		return self::core_uses_xsl() ? (string) apply_filters('wp_sitemaps_stylesheet_content', $xsl_content) : (string) $xsl_content;
 	}
 
 	/**
