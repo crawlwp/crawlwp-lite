@@ -28,7 +28,7 @@ Every OAuth-connected site depends on this app: if it is down for more than an h
 
 ## Limits to know
 
-- Google keeps at most 100 refresh tokens per Google account for one OAuth client, and every connect (including a reconnect) issues a new one. An agency connecting more than 100 sites with the same Google account silently loses the oldest connections. Those sites show "your Google connection has stopped working", which names this limit as a possible cause; they must reconnect or use a service account key.
+- Google keeps at most 100 refresh tokens per Google account for one OAuth client, and every connect (including a reconnect) issues a new one. An agency connecting more than 100 sites with the same Google account silently loses the oldest connections. Those sites show "your Google connection has stopped working", which names this limit as a possible cause; they must reconnect or use a service account key. Service accounts are exempt from the limit, so the plugin points agencies to them on the API Settings screen and in the "stopped working" notice. Disconnecting can't free a slot: revoking a token at Google cancels the user's whole grant for the CrawlWP app, which would disconnect every other site connected with that account, so the plugin deliberately doesn't revoke. Unused tokens expire after six months.
 - While the Google consent screen is in **Testing** mode, Google expires refresh tokens after 7 days: test sites will see the "connection stopped working" notice weekly until the app is published and verified.
 - Disconnecting in WordPress only deletes the site's tokens. It does not revoke them at Google/Bing, because a revoke cancels the account's grant for the whole CrawlWP app and would disconnect every other site using that account.
 

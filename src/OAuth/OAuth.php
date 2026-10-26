@@ -76,8 +76,11 @@ final class OAuth
 	/**
 	 * A valid access token, refreshed through the proxy when it is about to expire. Empty when not connected
 	 * or when the token has expired and can't be refreshed right now (see unavailable_reason()).
+	 *
+	 * @param string $rejected An access token the provider just refused (HTTP 401): it is refreshed now
+	 *                         instead of being used until its expiry time.
 	 */
-	public static function get_access_token(string $provider): string
+	public static function get_access_token(string $provider, string $rejected = ''): string
 	{
 		$conn = self::get_connection($provider);
 
@@ -85,9 +88,10 @@ final class OAuth
 			return '';
 		}
 
-		$current = (int)$conn['expires_at'] > time() ? (string)$conn['access_token'] : '';
+		$refused = $rejected !== '' && hash_equals((string)$conn['access_token'], $rejected);
+		$current = (int)$conn['expires_at'] > time() && ! $refused ? (string)$conn['access_token'] : '';
 
-		if ((int)$conn['expires_at'] > time() + 60) {
+		if ((int)$conn['expires_at'] > time() + 60 && ! $refused) {
 			return $current;
 		}
 
@@ -109,7 +113,8 @@ final class OAuth
 				return '';
 			}
 
-			if ((int)$conn['expires_at'] > time() + 60) {
+			// Still valid, and not the token that was just refused (another request may have refreshed it).
+			if ((int)$conn['expires_at'] > time() + 60 && ($rejected === '' || ! hash_equals((string)$conn['access_token'], $rejected))) {
 				return (string)$conn['access_token'];
 			}
 
@@ -464,7 +469,8 @@ final class OAuth
 		check_admin_referer('crawlwp_oauth_disconnect_' . $provider);
 
 		// Tokens are not revoked at Google/Bing: a revoke cancels the whole grant for the shared CrawlWP app,
-		// which would also disconnect every other site connected with the same account. Instead the proxy is
+		// which would also disconnect every other site connected with the same account. (So disconnecting
+		// can't free one of Google's 100 connection slots per account; unused tokens expire after 6 months.) Instead the proxy is
 		// told to refuse this refresh token, so a copy left in a database backup stops working.
 		$conn = self::get_connection($provider, true);
 
@@ -521,7 +527,7 @@ final class OAuth
 				'<div class="notice notice-error"><p>%s</p><p><a class="button button-primary" href="%s">%s</a> <a href="%s" style="margin-left:8px">%s</a></p></div>',
 				/* translators: %s: Google or Bing */
 				esc_html($provider === 'google'
-					? __('CrawlWP: your Google connection has stopped working. Google no longer accepts it: access may have been removed in the Google account, or the account was connected to more than 100 sites (Google keeps only the 100 most recent connections per account). Reconnect to keep getting Google data.', 'mihdan-index-now')
+					? __('CrawlWP: your Google connection has stopped working. Google no longer accepts it: access may have been removed in the Google account, or the account was connected to more than 100 sites (Google keeps only the 100 most recent connections per account). Reconnect to keep getting Google data. If you manage many sites with one Google account, use a service account JSON key in CrawlWP\'s API Settings instead: it has no such limit.', 'mihdan-index-now')
 					: __('CrawlWP: your Bing connection has stopped working. Microsoft no longer accepts it, usually because access was removed in the Microsoft account. Reconnect to keep getting Bing data.', 'mihdan-index-now')),
 				esc_url(self::connect_url($provider)),
 				/* translators: %s: Google or Bing */
@@ -594,7 +600,7 @@ final class OAuth
 			return $button . '<p class="description">' . ($provider === 'google'
 					? esc_html__('Sign in with the Google account that has access to this site in Google Search Console. No Google Cloud project is needed.', 'mihdan-index-now')
 					: esc_html__('Sign in with the Microsoft account that has this site in Bing Webmaster Tools. No API key is needed.', 'mihdan-index-now')
-				) . '</p>';
+				) . '</p>' . self::agency_note($provider);
 		}
 
 		$who = $conn['email'] !== ''
@@ -608,7 +614,22 @@ final class OAuth
 			$who,
 			esc_url(self::disconnect_url($provider)),
 			esc_html__('Disconnect', 'mihdan-index-now')
-		) . $key_note;
+		) . $key_note . ($has_key ? '' : self::agency_note($provider));
+	}
+
+	/**
+	 * Google keeps only the 100 most recent connections per Google account for one app (CrawlWP's,
+	 * shared by every site), so agencies with many sites on one account should use a service account,
+	 * which has no such limit. Revoking old connections can't free slots: Google revokes the whole
+	 * grant, which would disconnect every other site connected with that account.
+	 */
+	private static function agency_note(string $provider): string
+	{
+		if ($provider !== 'google') {
+			return '';
+		}
+
+		return '<p class="description">' . esc_html__('Managing many sites with one Google account? Google keeps only the 100 most recent "Connect with Google" connections per account, so older sites stop working once you pass 100. Use a service account JSON key (below) on those sites instead: service accounts have no such limit.', 'mihdan-index-now') . '</p>';
 	}
 
 	private static function label(string $provider): string

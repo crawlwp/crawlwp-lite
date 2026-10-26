@@ -113,6 +113,24 @@ class OAuthTest extends TestCase
 		$this->assertSame(0, $this->proxy_calls());
 	}
 
+	public function test_refused_token_is_refreshed_before_its_expiry(): void
+	{
+		$this->connect_bing(3000);
+		$this->proxy_replies(['access_token' => 'new-access', 'expires_in' => 3600]);
+
+		$this->assertSame('new-access', OAuth::get_access_token('bing', 'old-access'));
+		$this->assertSame(1, $this->proxy_calls());
+		$this->assertSame([], $this->db->rows, 'lock is released');
+	}
+
+	public function test_refused_token_that_was_already_replaced_is_not_refreshed_again(): void
+	{
+		$this->connect_bing(3000);
+
+		$this->assertSame('old-access', OAuth::get_access_token('bing', 'some-older-token'));
+		$this->assertSame(0, $this->proxy_calls());
+	}
+
 	public function test_token_close_to_expiry_is_refreshed_and_saved(): void
 	{
 		$this->connect_bing(30);
