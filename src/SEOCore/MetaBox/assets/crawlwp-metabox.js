@@ -1182,7 +1182,8 @@
         return src ? '<img src="' + self.escAttr(src) + '" alt="' + self.escAttr(alt || '') + '">' : '';
       };
       html = html
-        /* Avada */
+        /* Avada (a code block holds base64-encoded markup, not text) */
+        .replace(/\[fusion_code\b[^\]]*\][\s\S]*?\[\/fusion_code\]/g, '')
         .replace(/\[fusion_title([^\]]*)\]([\s\S]*?)\[\/fusion_title\]/g, function(m, a, text) { return heading(attrs(a).size, self.escHtml($.trim(self.stripTags(text))), 2); })
         .replace(/\[fusion_button([^\]]*)\]([\s\S]*?)\[\/fusion_button\]/g, function(m, a, text) { return link(attrs(a).link, $.trim(self.stripTags(text))); })
         .replace(/\[fusion_imageframe([^\]]*)\]([\s\S]*?)\[\/fusion_imageframe\]/g, function(m, a, src) { a = attrs(a); return img($.trim(self.stripTags(src)) || a.src, a.alt); })
@@ -1197,7 +1198,7 @@
         /* Every other Divi or Avada shortcode only wraps its content. They're all blocks, so each tag ends a paragraph. */
         .replace(/\[\/?(?:et_pb|fusion)_[^\]]*\]/g, '\n\n');
       /* Avada's text blocks are plain text with blank lines: add paragraphs the way WordPress does. */
-      if (typeof wp !== 'undefined' && wp.editor && typeof wp.editor.autop === 'function') html = wp.editor.autop(html);
+      html = this.wpautop(html);
       /* The visual editor puts the shortcodes in paragraphs of their own: drop the ones left empty. */
       var $root = $('<div>').html(html);
       $root.find('p').filter(function() { return !$.trim($(this).text()) && !$(this).find('img').length; }).remove();
@@ -1248,6 +1249,11 @@
     /* The Classic editor textarea stores paragraphs as blank lines, without <p>. */
     autop: function(text) {
       if (!text || /<p[\s>]/i.test(text)) return text;
+      return this.wpautop(text);
+    },
+
+    /* WordPress's wpautop(), with a simple blank-line split when neither editor script is loaded. */
+    wpautop: function(text) {
       if (typeof wp !== 'undefined' && wp.editor && typeof wp.editor.autop === 'function') {
         return wp.editor.autop(text);
       }
@@ -1257,7 +1263,7 @@
       return $.map(String(text).split(/\n\s*\n/), function(block) {
         block = $.trim(block);
         if (!block) return null;
-        return /^<(?:h[1-6]|ul|ol|div|blockquote|figure|table|pre|hr)/i.test(block) ? block : '<p>' + block + '</p>';
+        return /^<(?:p|h[1-6]|ul|ol|div|blockquote|figure|table|pre|hr|img)[\s>]/i.test(block) ? block : '<p>' + block + '</p>';
       }).join('\n');
     },
 

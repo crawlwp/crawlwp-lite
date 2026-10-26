@@ -47,6 +47,33 @@ class PageBuilders
 			}
 		}
 
+		if (strpos($content, '[et_pb_') === false && strpos($content, '[fusion_') === false) {
+			return $content;
+		}
+
+		/* Avada: an image frame holds an image URL and a code block base64-encoded markup, neither of them text. */
+		$content = (string) preg_replace('/\[(fusion_imageframe|fusion_code)\b[^\]]*\][\s\S]*?\[\/\1\]/', ' ', $content);
+
+		/* Divi 4 keeps headings and button labels in the shortcode's settings, as the metabox script reads them. */
+		$content = (string) preg_replace_callback(
+			'/\[et_pb_(heading|blurb|cta|button)\b([^\]]*)\]/',
+			static function (array $m): string {
+				$attrs = shortcode_parse_atts($m[2]);
+				$attrs = is_array($attrs) ? $attrs : [];
+				$text  = [];
+
+				foreach ($m[1] === 'button' ? ['button_text'] : ['title', 'button_text'] as $key) {
+					if (isset($attrs[$key]) && is_string($attrs[$key]) && $attrs[$key] !== '') {
+						/* Divi stores " [ ] inside settings as %22 %91 %93. */
+						$text[] = str_replace(['%22', '%91', '%93'], ['"', '[', ']'], $attrs[$key]);
+					}
+				}
+
+				return ' ' . implode('. ', $text) . ' ';
+			},
+			$content
+		);
+
 		return (string) preg_replace('/\[\/?(?:et_pb|fusion)_[^\]]*\]/', ' ', $content);
 	}
 
@@ -91,7 +118,11 @@ class PageBuilders
 		 * @param array{name:string, html:string}|null $builder Null when the editor content is used.
 		 * @param \WP_Post                             $post    The post being edited.
 		 */
-		return apply_filters('crawlwp_page_builder_content', $builder, $post);
+		$builder = apply_filters('crawlwp_page_builder_content', $builder, $post);
+
+		return is_array($builder) && isset($builder['html']) && is_string($builder['html'])
+			? ['name' => self::str($builder['name'] ?? ''), 'html' => $builder['html']]
+			: null;
 	}
 
 	// -------------------------------------------------------------------------
@@ -109,14 +140,14 @@ class PageBuilders
 		$roots = [];
 
 		foreach ($elements as $element) {
-			if (! is_array($element) || empty($element['id'])) {
+			if (! is_array($element) || self::str($element['id'] ?? '') === '') {
 				continue;
 			}
 
-			$by_id[(string) $element['id']] = $element;
+			$by_id[self::str($element['id'])] = $element;
 
 			if (empty($element['parent'])) {
-				$roots[] = (string) $element['id'];
+				$roots[] = self::str($element['id']);
 			}
 		}
 
@@ -130,8 +161,8 @@ class PageBuilders
 			$seen[$id] = true;
 			$html     .= self::bricks_element($by_id[$id]);
 
-			foreach ((array) ($by_id[$id]['children'] ?? []) as $child) {
-				$walk((string) $child);
+			foreach ((is_array($by_id[$id]['children'] ?? null) ? $by_id[$id]['children'] : []) as $child) {
+				$walk(self::str($child));
 			}
 		};
 
@@ -149,13 +180,13 @@ class PageBuilders
 	 */
 	private static function bricks_element(array $element): string
 	{
-		$settings = (array) ($element['settings'] ?? []);
+		$settings = is_array($element['settings'] ?? null) ? $element['settings'] : [];
 		$text     = isset($settings['text']) && is_string($settings['text']) ? $settings['text'] : '';
 
-		switch ((string) ($element['name'] ?? '')) {
+		switch (self::str($element['name'] ?? '')) {
 			case 'heading':
 				/* Bricks' heading element defaults to h3. */
-				$tag = self::heading_tag((string) ($settings['tag'] ?? 'h3'), 'h3');
+				$tag = self::heading_tag(self::str($settings['tag'] ?? 'h3'), 'h3');
 
 				return $text !== '' ? "<{$tag}>" . wp_kses_post($text) . "</{$tag}>" : '';
 
@@ -175,11 +206,11 @@ class PageBuilders
 					: '<p>' . esc_html(wp_strip_all_tags($text)) . '</p>');
 
 			case 'image':
-				$image = (array) ($settings['image'] ?? []);
-				$id    = (int) ($image['id'] ?? 0);
-				$url   = (string) ($image['url'] ?? ($id > 0 ? wp_get_attachment_url($id) : ''));
+				$image = is_array($settings['image'] ?? null) ? $settings['image'] : [];
+				$id    = (int) self::str($image['id'] ?? 0);
+				$url   = self::str($image['url'] ?? '') ?: ($id > 0 ? (string) wp_get_attachment_url($id) : '');
 				/* A custom alt text, else the one saved on the image in the media library. */
-				$alt = isset($settings['altText']) ? (string) $settings['altText'] : ($id > 0 ? (string) get_post_meta($id, '_wp_attachment_image_alt', true) : '');
+				$alt = isset($settings['altText']) ? self::str($settings['altText']) : ($id > 0 ? (string) get_post_meta($id, '_wp_attachment_image_alt', true) : '');
 
 				return $url !== '' ? '<img src="' . esc_url($url) . '" alt="' . esc_attr($alt) . '">' : '';
 		}
@@ -221,17 +252,17 @@ class PageBuilders
 		$html = '';
 
 		foreach ($blocks as $block) {
-			$name  = (string) ($block['blockName'] ?? '');
-			$attrs = (array) ($block['attrs'] ?? []);
+			$name  = self::str($block['blockName'] ?? '');
+			$attrs = is_array($block['attrs'] ?? null) ? $block['attrs'] : [];
 
 			if (strpos($name, 'divi/') === 0) {
 				$html .= self::divi5_module(substr($name, 5), $attrs);
 			} elseif (empty($block['innerBlocks'])) {
 				/* A core block placed between Divi modules: its saved HTML (not rendered, so no queries). */
-				$html .= (string) ($block['innerHTML'] ?? '');
+				$html .= self::str($block['innerHTML'] ?? '');
 			}
 
-			if (! empty($block['innerBlocks'])) {
+			if (! empty($block['innerBlocks']) && is_array($block['innerBlocks'])) {
 				$html .= self::divi5_html($block['innerBlocks']);
 			}
 		}
@@ -279,15 +310,15 @@ class PageBuilders
 
 			if (is_array($content)) {
 				if (! empty($content['src'])) {
-					$html .= '<img src="' . esc_url((string) $content['src']) . '" alt="' . esc_attr((string) ($content['alt'] ?? '')) . '">';
+					$html .= '<img src="' . esc_url(self::str($content['src'])) . '" alt="' . esc_attr(self::str($content['alt'] ?? '')) . '">';
 					continue;
 				}
 
-				$link    = (string) ($content['linkUrl'] ?? '');
-				$content = (string) ($content['text'] ?? '');
+				$link    = self::str($content['linkUrl'] ?? '');
+				$content = self::str($content['text'] ?? '');
 			}
 
-			$content = trim((string) $content);
+			$content = trim(self::str($content));
 
 			if ($content === '') {
 				continue;
@@ -331,6 +362,16 @@ class PageBuilders
 		}
 
 		return null;
+	}
+
+	/**
+	 * A builder setting as a string; arrays and objects (bad or unexpected data) become ''.
+	 *
+	 * @param mixed $value
+	 */
+	private static function str($value): string
+	{
+		return is_scalar($value) ? (string) $value : '';
 	}
 
 	/**
