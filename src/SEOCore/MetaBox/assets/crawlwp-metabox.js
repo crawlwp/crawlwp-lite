@@ -1218,19 +1218,20 @@
         var $a = $(this);
         var href = $.trim($a.attr('href') || '');
         if (!href || href.charAt(0) === '#') return;
-        var text = $.trim($a.text()) || href;
+        var label = $.trim($a.text());
+        var text = label || href;
         try {
           var url = new URL(href, crawlwpSEO.siteUrl);
           /* mailto:, tel:, javascript: … are not links to a page. */
           if (url.protocol !== 'http:' && url.protocol !== 'https:') return;
-          var item = { href: url.href, text: text };
+          var item = { href: url.href, text: text, hasText: !!label };
           if (bareHost(url.hostname) === siteHost) {
             internal.push(item);
           } else {
             external.push(item);
           }
         } catch(e) {
-          external.push({ href: href, text: text });
+          external.push({ href: href, text: text, hasText: !!label });
         }
       });
       return { internal: internal, external: external };
@@ -1537,10 +1538,12 @@
       var whole = /[a-z0-9\u00c0-\u024f\u0400-\u04ff]/.test(key);
       var selfUrl = bare(crawlwpSEO.permalink);
       var found = [];
+      /* Internal links first: those compete with this page on the same site. */
       $.each(parsed.internal.concat(parsed.external), function(i, link) {
-        if (bare(link.href) === selfUrl || link.text === link.href) return;
+        /* Image-only links have no text to compete with. */
+        if (bare(link.href) === selfUrl || !link.hasText) return;
         var text = norm(link.text);
-        if (whole ? text.indexOf(' ' + key + ' ') !== -1 : text.indexOf(key) !== -1) found.push(link);
+        if (whole ? text.indexOf(' ' + key + ' ') !== -1 : text.indexOf(key) !== -1) found.push($.extend({ internal: i < parsed.internal.length }, link));
       });
       return found;
     },
@@ -1922,7 +1925,8 @@
         if (competing.length) {
           var path = competing[0].href;
           try { var u = new URL(path); if (u.origin === new URL(crawlwpSEO.siteUrl).origin) path = u.pathname + u.search; } catch (e) {}
-          addCheck('bad', this.fmt(L.competingBad, '\u201c' + competing[0].text + '\u201d'),
+          /* Linking out to a source with the keyword is common and less harmful than linking to your own competing page. */
+          addCheck(competing[0].internal ? 'bad' : 'warn', this.fmt(L.competingBad, '\u201c' + competing[0].text + '\u201d'),
             this.fmt(L.competingBadD, path) + (competing.length > 1 ? ' ' + this.plural(L.competingMore, competing.length - 1) : ''));
         } else {
           addCheck('good', L.competingGood, '');
