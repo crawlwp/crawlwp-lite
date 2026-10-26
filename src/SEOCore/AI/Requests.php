@@ -10,9 +10,11 @@ class Requests
 {
 	/**
 	 * Per-user rate limit for AI generation: by default at most 20 generated
-	 * values per 5 minutes. Only successful generations count (see
-	 * count_request()), so provider errors or missing content never lock a
-	 * user out.
+	 * values per 5 minutes, plus a site-wide daily cap. A slot is reserved when
+	 * the limit is checked (so requests sent in parallel can't all slip through
+	 * while the provider works) and given back at the end of the request unless
+	 * count_request() confirmed it, so provider errors or missing content never
+	 * lock a user out.
 	 *
 	 * @param bool $batch Whether the request is part of a "Write with AI" run in the Bulk Editor.
 	 */
@@ -26,25 +28,91 @@ class Requests
 		 */
 		$limit = (int) apply_filters('crawlwp_ai_rate_limit', 20, $batch);
 
-		if ($limit <= 0) {
-			return false;
+		if ($limit > 0 && (int) self::state($batch)['count'] >= $limit) {
+			return true;
 		}
 
-		return (int) self::state($batch)['count'] >= $limit;
+		$daily = self::daily_limit();
+
+		if ($daily > 0 && (int) get_transient(self::daily_key()) >= $daily) {
+			return true;
+		}
+
+		self::add($batch, 1);
+
+		if (! self::$pending) {
+			register_shutdown_function([__CLASS__, 'refund_unused']);
+		}
+
+		self::$pending[] = $batch;
+
+		return false;
 	}
 
 	/**
-	 * Count a successful generation. Bulk Editor runs have their own counter,
-	 * so a long run doesn't lock the AI buttons in the post editor.
+	 * Keep the slot rate_limited() reserved for a successful generation.
+	 * Bulk Editor runs have their own counter, so a long run doesn't lock the
+	 * AI buttons in the post editor.
 	 */
 	public static function count_request(bool $batch = false): void
 	{
-		$state = self::state($batch);
+		$index = array_search($batch, self::$pending, true);
 
-		$state['count'] = (int) $state['count'] + 1;
+		if ($index !== false) {
+			unset(self::$pending[$index]);
+
+			return;
+		}
+
+		/* Called without checking the limit first: count it now. */
+		self::add($batch, 1);
+	}
+
+	/**
+	 * Give back the slots of requests that didn't produce anything.
+	 *
+	 * @internal Runs at shutdown.
+	 */
+	public static function refund_unused(): void
+	{
+		foreach (self::$pending as $batch) {
+			self::add($batch, -1);
+		}
+
+		self::$pending = [];
+	}
+
+	/** @var bool[] Reserved slots not yet used, one entry per reservation (the batch flag). */
+	private static $pending = [];
+
+	/**
+	 * Generations allowed per day on the whole site, for every user together.
+	 */
+	private static function daily_limit(): int
+	{
+		/**
+		 * Filter the number of AI generations the whole site may make per day.
+		 *
+		 * @param int $limit Default 2000. 0 or less turns the cap off.
+		 */
+		return (int) apply_filters('crawlwp_ai_daily_limit', 2000);
+	}
+
+	private static function daily_key(): string
+	{
+		return 'crawlwp_ai_daily_' . gmdate('Ymd');
+	}
+
+	private static function add(bool $batch, int $amount): void
+	{
+		$state          = self::state($batch);
+		$state['count'] = max(0, (int) $state['count'] + $amount);
 		$remaining      = self::window() - (time() - (int) $state['start']);
 
 		set_transient(self::key($batch), $state, max(1, $remaining));
+
+		$key = self::daily_key();
+		set_transient($key, max(0, (int) get_transient($key) + $amount), DAY_IN_SECONDS);
 	}
 
 	private static function key(bool $batch): string
