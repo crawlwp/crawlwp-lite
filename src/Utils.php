@@ -312,6 +312,8 @@ class Utils
 			CRAWLWP_PRO_SITE_AUDIT_SLUG,
 		];
 
+		$pages[] = CRAWLWP_PRO_ANALYTICS_SLUG;
+
 		return (isset($_GET['page']) && in_array($_GET['page'], $pages));
 	}
 

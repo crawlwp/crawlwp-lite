@@ -949,6 +949,35 @@ body:not(.cwpWP7higher) .cwp-premium-sidebar-upsell-cta .button-primary {
 	position: relative;
 }
 
+/* "New" badge */
+.crawlwp-new-badge { display: inline-block; margin-right: 6px; padding: 1px 7px; border-radius: 999px; background: #e7f5ec; color: #00703c; font-size: 11px; font-weight: 600; line-height: 1.6; vertical-align: 1px; }
+
+/* Lite's SEO Indexing, SEO Stats and Analytics pages: a blurred preview of the Premium screen behind an upgrade card */
+.crawlwp-locked { position: relative; max-height: 860px; margin-top: 4px; overflow: hidden; border-radius: 6px; background: #fff; }
+.crawlwp-locked__preview { display: block; width: 100%; height: auto; opacity: .9; user-select: none; pointer-events: none; }
+.crawlwp-locked__preview.is-blurred { filter: blur(4px); }
+.crawlwp-locked__card { position: absolute; top: 110px; left: 50%; width: min(520px, calc(100% - 32px)); box-sizing: border-box; padding: 28px 32px; transform: translateX(-50%); background: #fff; border: 1px solid #dcdcde; border-radius: 12px; box-shadow: 0 12px 40px rgba(0, 0, 0, .14); color: #1d2327; font-size: 14px; line-height: 1.55; }
+.crawlwp-locked__tag { display: inline-block; margin-bottom: 10px; padding: 2px 8px; border-radius: 99px; background: #eef2ff; color: #3858e9; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.crawlwp-locked__card h2 { margin: 0 0 8px; padding: 0; font-size: 20px; line-height: 1.3; }
+.crawlwp-locked__card p { margin: 0 0 14px; color: #50575e; font-size: 14px; }
+.crawlwp-locked__card ul { margin: 0 0 20px; padding: 0; list-style: none; }
+.crawlwp-locked__card li { position: relative; margin: 0 0 8px; padding-left: 24px; }
+.crawlwp-locked__card li::before { content: ""; position: absolute; top: 4px; left: 0; width: 14px; height: 14px; border-radius: 50%; background: #00a32a url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%23fff' stroke-width='2.2' d='M4 8.5l2.5 2.5L12 5.5'/%3E%3C/svg%3E") center / 12px no-repeat; }
+.crawlwp-locked__card li b { font-weight: 600; }
+.crawlwp-locked__new { margin-left: 4px; padding: 1px 6px; border-radius: 4px; background: #fcf0e3; color: #9a5a00; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+a.crawlwp-locked__button { display: inline-block; padding: 11px 20px; border-radius: 6px; background: #3858e9; color: #fff; font-weight: 600; text-decoration: none; }
+a.crawlwp-locked__button:hover, a.crawlwp-locked__button:focus { background: #2145e6; color: #fff; }
+.crawlwp-locked__note { display: block; margin-top: 12px; color: #787c82; font-size: 12px; }
+@media (max-width: 782px) {
+	.crawlwp-locked { max-height: none; }
+	.crawlwp-locked__preview { max-height: 180px; object-fit: cover; object-position: top left; }
+	.crawlwp-locked__card { position: relative; top: auto; left: auto; width: auto; margin: -40px 12px 12px; padding: 20px; transform: none; }
+}
+
+/* "New" marker in the Premium sidebar card */
+.cwp-premium-sidebar-upsell-li .crawlwp-new-badge { margin: 0 0 0 6px; font-size: 10px; }
+
+
 .crawlwp-upsell-featured-image img {
 	width: 100%;
 	height: auto;
