@@ -56,6 +56,25 @@ class AdvancedSettings
 			'default' => 'off',
 			'std'     => 'off',
 		]);
+
+		$wposa->add_field(self::SECTION, [
+			'id'      => 'keyword_suggestions',
+			'type'    => 'switch',
+			'name'    => __('Keyword Suggestions', 'mihdan-index-now'),
+			'desc'    => __('Suggest related Google searches as you type a focus keyword in the SEO box. To do this, the keyword you type is sent from your site to Google\'s search suggestion service. Turn this off if you don\'t want that.', 'mihdan-index-now'),
+			'default' => 'on',
+			'std'     => 'on',
+		]);
+	}
+
+	/**
+	 * Keyword suggestions are on unless turned off here (sites that never saved this section included).
+	 */
+	public static function is_keyword_suggestions_enabled(): bool
+	{
+		$options = get_option('crawlwp_' . self::SECTION, []);
+
+		return ! is_array($options) || ! isset($options['keyword_suggestions']) || self::is_switch_on('keyword_suggestions');
 	}
 
 	public static function is_remove_data_on_uninstall(): bool

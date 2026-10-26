@@ -1131,7 +1131,7 @@ class Assets
 		 *
 		 * @param bool $enabled Default true.
 		 */
-		return (bool) apply_filters('crawlwp_keyword_suggestions', true);
+		return (bool) apply_filters('crawlwp_keyword_suggestions', \Mihdan\IndexNow\SEOCore\AdvancedSettings::is_keyword_suggestions_enabled());
 	}
 
 	/**
@@ -1141,7 +1141,13 @@ class Assets
 	{
 		check_ajax_referer('crawlwp_keyword_suggestions', 'nonce');
 
-		if (! current_user_can('edit_posts') || ! self::keyword_suggestions_enabled()) {
+		$permissions = '\Mihdan\IndexNow\SEOCore\Permissions';
+
+		if (
+			! current_user_can('edit_posts')
+			|| ! self::keyword_suggestions_enabled()
+			|| (class_exists($permissions) && ! $permissions::can($permissions::SEO_BOX))
+		) {
 			wp_send_json_error(['message' => __('You are not allowed to do this.', 'mihdan-index-now')], 403);
 		}
 
@@ -1156,6 +1162,25 @@ class Assets
 		$list = get_transient($key);
 
 		if (! is_array($list)) {
+			$list = wp_cache_get($key, 'crawlwp');
+		}
+
+		if (! is_array($list)) {
+			/*
+			 * Each lookup the cache can't answer is a request from this server to
+			 * Google. The editor waits between keystrokes; this stops a script from
+			 * looping (default 60 lookups a minute per user).
+			 */
+			$limit = (int) apply_filters('crawlwp_keyword_suggestions_rate_limit', 60);
+			$rl    = 'crawlwp_kw_rl_' . get_current_user_id();
+			$count = (int) get_transient($rl);
+
+			if ($limit > 0 && $count >= $limit) {
+				wp_send_json_success(['suggestions' => []]);
+			}
+
+			set_transient($rl, $count + 1, MINUTE_IN_SECONDS);
+
 			$list     = [];
 			$response = wp_remote_get(add_query_arg([
 				'client' => 'firefox',
@@ -1179,8 +1204,12 @@ class Assets
 
 			$list = array_slice(array_values(array_unique($list)), 0, 8);
 
-			// Keep a failed or empty lookup for an hour only.
-			set_transient($key, $list, $list === [] ? HOUR_IN_SECONDS : DAY_IN_SECONDS);
+			// Suggestions are kept for a day. A failed or empty lookup only in the object cache, so misses don't fill the options table.
+			if ($list === []) {
+				wp_cache_set($key, $list, 'crawlwp', HOUR_IN_SECONDS);
+			} else {
+				set_transient($key, $list, DAY_IN_SECONDS);
+			}
 		}
 
 		wp_send_json_success(['suggestions' => $list]);
