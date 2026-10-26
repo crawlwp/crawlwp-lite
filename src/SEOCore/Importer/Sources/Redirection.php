@@ -31,6 +31,12 @@ class Redirection extends Source
 		return 'Redirection';
 	}
 
+	/** Only redirects: never the "main" SEO plugin, and not one to deactivate after importing. */
+	public function redirects_only(): bool
+	{
+		return true;
+	}
+
 	public function is_available(): bool
 	{
 		return defined('REDIRECTION_VERSION') || $this->table_exists($this->items_table());
@@ -82,12 +88,23 @@ class Redirection extends Source
 		$skipped    = 0;
 
 		foreach ($rows as $row) {
-			$redirect = self::map_row($row, $group_info[(int) ($row['group_id'] ?? 0)] ?? null, $this->default_query_flag());
+			$group = $group_info[(int) ($row['group_id'] ?? 0)] ?? null;
+
+			// Redirection only runs items whose group exists: an item left in a deleted group was never live.
+			if ($group === null && $group_info !== []) {
+				$skipped++;
+				continue;
+			}
+
+			$redirect = self::map_row($row, $group, $this->default_query_flag());
 
 			if ($redirect === null || $manager->exists_from_url($redirect['from_url'], 0, $redirect['match_type'])) {
 				$skipped++;
 				continue;
 			}
+
+			// The redirect was already live in Redirection, so a destination on another site keeps working.
+			$redirect['allow_external'] = $redirect['to_url'] !== '' && $manager->is_external_destination($redirect['to_url']) ? 1 : 0;
 
 			$redirect['note'] = $redirect['note'] !== ''
 				/* translators: %s: the redirect's title in Redirection */
@@ -138,6 +155,12 @@ class Redirection extends Source
 
 		$data  = json_decode((string) ($row['match_data'] ?? ''), true);
 		$query = is_array($data) && isset($data['source']['flag_query']) ? (string) $data['source']['flag_query'] : $default_query_flag;
+		$regex = ! empty($row['regex']);
+
+		// Redirection matches a regex against the whole address, query string included (its regex flag forces "exact").
+		if ($regex) {
+			$query = 'exact';
+		}
 
 		$enabled = ($row['status'] ?? 'enabled') === 'enabled' && ($group === null || $group['enabled']);
 
@@ -145,7 +168,7 @@ class Redirection extends Source
 			'from_url'            => $from,
 			'to_url'              => $to,
 			'redirect_type'       => $type,
-			'match_type'          => ! empty($row['regex']) ? 'regex' : 'exact',
+			'match_type'          => $regex ? 'regex' : 'exact',
 			'note'                => trim((string) ($row['title'] ?? '')),
 			'ignore_query_string' => in_array($query, ['ignore', 'pass'], true) ? 1 : 0,
 			'enabled'             => $enabled ? 1 : 0,

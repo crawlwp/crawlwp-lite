@@ -17,6 +17,17 @@ abstract class Source
 	abstract public function is_available(): bool;
 
 	/**
+	 * Whether the plugin only holds redirects (no titles or settings). Such a
+	 * source is never shown as the site's main SEO plugin, and isn't offered
+	 * for deactivation after importing, since rules it couldn't import still
+	 * run there.
+	 */
+	public function redirects_only(): bool
+	{
+		return false;
+	}
+
+	/**
 	 * @return array{posts:int,terms:int,users:int,redirects:int}
 	 */
 	abstract public function counts(): array;

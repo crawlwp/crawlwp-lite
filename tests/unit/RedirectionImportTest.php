@@ -49,8 +49,18 @@ class RedirectionImportTest extends TestCase
 		$this->assertSame('regex', $r['match_type']);
 		$this->assertSame(301, $r['redirect_type']);
 		$this->assertSame('/news/$1', $r['to_url']);
-		$this->assertSame(1, $r['ignore_query_string']);
+		// Redirection matches regexes against the whole address, query string included.
+		$this->assertSame(0, $r['ignore_query_string']);
 		$this->assertSame(0, $r['enabled']);
+	}
+
+	public function test_plain_rule_uses_site_default_query_flag_but_regex_does_not(): void
+	{
+		$plain = Redirection::map_row($this->row(), ['module' => 1, 'enabled' => true], 'ignore');
+		$regex = Redirection::map_row($this->row(['url' => '^/index\\.php\\?page_id=(\\d+)', 'regex' => 1]), ['module' => 1, 'enabled' => true], 'ignore');
+
+		$this->assertSame(1, $plain['ignore_query_string']);
+		$this->assertSame(0, $regex['ignore_query_string']);
 	}
 
 	public function test_410_error_keeps_no_target(): void

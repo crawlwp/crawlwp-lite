@@ -160,10 +160,14 @@ class Runner
 				'terms'     => (int) $counts['terms'],
 				'users'     => (int) $counts['users'],
 				'redirects' => (int) $counts['redirects'],
+				'redirects_only' => $source->redirects_only(),
 			];
 		}
 
-		return $out;
+		// Plugins that only hold redirects come last, after the SEO plugins.
+		$seo = array_filter($out, static fn(array $src): bool => ! $src['redirects_only']);
+
+		return array_merge(array_values($seo), array_values(array_diff_key($out, $seo)));
 	}
 
 	/**
