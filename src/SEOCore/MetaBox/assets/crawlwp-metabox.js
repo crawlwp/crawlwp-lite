@@ -51,6 +51,7 @@
       this.cacheElements();
       this.bindEventBus();
       this.bindUi();
+      this.bindKeywordSuggest();
       this.watchPostTitle();
       this.watchPostSlug();
       this.watchPostContent();
@@ -1112,6 +1113,120 @@
       var str = forms;
       if (forms && typeof forms === 'object') str = (n === 1 ? forms.one : forms.other);
       return this.fmt(str || '', n);
+    },
+
+    /* ---------- focus keyword suggestions (related Google searches) ---------- */
+    bindKeywordSuggest: function() {
+      var self = this;
+      var $input = $('#cwpKeyword');
+      var $menu = $('#cwpKwSuggest');
+      var timer = null;
+      var seq = 0;
+      var items = [];
+      var active = -1;
+      var chosen = false;
+
+      if (!$input.length || !$menu.length || !crawlwpSEO.kwSuggestNonce) return;
+
+      /* The keyword being typed: the text after the last comma. */
+      function current() {
+        var parts = ($input.val() || '').split(',');
+        return $.trim(parts[parts.length - 1]);
+      }
+
+      function close() {
+        $menu.hide().empty();
+        $input.attr('aria-expanded', 'false').removeAttr('aria-activedescendant');
+        items = [];
+        active = -1;
+      }
+
+      function highlight(index) {
+        active = index;
+        $menu.find('.cwp-kw-suggest-item').each(function(i) {
+          $(this).toggleClass('is-active', i === index).attr('aria-selected', i === index ? 'true' : 'false');
+        });
+        if (index >= 0) $input.attr('aria-activedescendant', 'cwpKwSuggest-' + index);
+      }
+
+      function choose(index) {
+        if (!items[index]) return;
+        var parts = ($input.val() || '').split(',');
+        parts[parts.length - 1] = (parts.length > 1 ? ' ' : '') + items[index];
+        close();
+        chosen = true; /* the input event below shouldn't look up the chosen text */
+        $input.val(parts.join(',')).trigger('focus').trigger('input');
+
+        /* Keep the cursor at the end, ready for ", next keyword". */
+        var el = $input[0], end = el.value.length;
+        if (el.setSelectionRange) el.setSelectionRange(end, end);
+      }
+
+      function render(query, list) {
+        var taken = {};
+        $.each(self.parseKeywords($input.val()), function(i, kw) { taken[kw.toLowerCase()] = true; });
+        items = $.grep(list, function(s) { return !taken[s.toLowerCase()]; });
+
+        if (!items.length) { close(); return; }
+
+        var lower = query.toLowerCase();
+        var html = '<div class="cwp-kw-suggest-title">' + self.escHtml(crawlwpSEO.i18n.kwSuggestTitle) + '</div>';
+        $.each(items, function(i, s) {
+          /* Bold the part Google added, like a search box does. */
+          var text = s.toLowerCase().indexOf(lower) === 0
+            ? self.escHtml(s.substr(0, query.length)) + '<b>' + self.escHtml(s.substr(query.length)) + '</b>'
+            : self.escHtml(s);
+          html += '<div class="cwp-kw-suggest-item" role="option" aria-selected="false" id="cwpKwSuggest-' + i + '" data-index="' + i + '">' + text + '</div>';
+        });
+
+        $menu.html(html).show();
+        $input.attr('aria-expanded', 'true');
+        active = -1;
+      }
+
+      $input.on('input', function() {
+        var query = current();
+        clearTimeout(timer);
+
+        if (chosen) { chosen = false; return; }
+        if (query.length < 2) { close(); return; }
+
+        timer = setTimeout(function() {
+          var mine = ++seq;
+          $.post(crawlwpSEO.ajaxUrl, {
+            action: 'crawlwp_keyword_suggestions',
+            nonce: crawlwpSEO.kwSuggestNonce,
+            q: query
+          }).done(function(res) {
+            /* Ignore answers to older keystrokes, and to text that has changed since. */
+            if (mine !== seq || current() !== query) return;
+            render(query, res && res.success && res.data.suggestions ? res.data.suggestions : []);
+          });
+        }, 300);
+      });
+
+      $input.on('keydown', function(e) {
+        if (!$menu.is(':visible') || !items.length) return;
+
+        if (e.key === 'ArrowDown') { e.preventDefault(); highlight((active + 1) % items.length); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); highlight(active <= 0 ? items.length - 1 : active - 1); }
+        else if (e.key === 'Enter' && active >= 0) { e.preventDefault(); choose(active); }
+        else if (e.key === 'Escape') { e.preventDefault(); close(); }
+      });
+
+      /* One highlight for mouse and keyboard. */
+      $menu.on('mousemove', '.cwp-kw-suggest-item', function() {
+        var index = parseInt($(this).attr('data-index'), 10);
+        if (index !== active) highlight(index);
+      });
+
+      /* mousedown, so the field doesn't lose focus (and close the menu) first. */
+      $menu.on('mousedown', '.cwp-kw-suggest-item', function(e) {
+        e.preventDefault();
+        choose(parseInt($(this).attr('data-index'), 10));
+      });
+
+      $input.on('blur', function() { setTimeout(close, 150); });
     },
 
     escHtml: function(str) {

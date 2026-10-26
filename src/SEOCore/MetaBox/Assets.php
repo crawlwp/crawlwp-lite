@@ -16,6 +16,7 @@ class Assets
 	public function __construct()
 	{
 		add_action('admin_enqueue_scripts', [$this, 'enqueue']);
+		add_action('wp_ajax_crawlwp_keyword_suggestions', [$this, 'ajax_keyword_suggestions']);
 		add_action('wp_ajax_crawlwp_ai_generate', [$this, 'ajax_ai_generate']);
 		add_action('wp_ajax_crawlwp_submit_indexnow', [$this, 'ajax_submit_indexnow']);
 		add_action('wp_ajax_crawlwp_check_duplicate_keyword', [$this, 'ajax_check_duplicate_keyword']);
@@ -146,6 +147,7 @@ class Assets
 			'dateModified'     => $post instanceof \WP_Post ? (string) get_the_modified_date('c', $post) : '',
 			'breadcrumbs'      => self::get_breadcrumb_trail($post),
 			'ajaxUrl'          => admin_url('admin-ajax.php'),
+			'kwSuggestNonce'   => self::keyword_suggestions_enabled() ? wp_create_nonce('crawlwp_keyword_suggestions') : '',
 			'aiNonce'          => wp_create_nonce('crawlwp_ai_generate'),
 			'aiReady'          => Generator::is_ready(),
 			'indexNowNonce'    => wp_create_nonce('crawlwp_submit_indexnow'),
@@ -667,6 +669,7 @@ class Assets
 	private static function get_i18n_strings(): array
 	{
 		return [
+			'kwSuggestTitle'   => __('Related Google searches', 'mihdan-index-now'),
 			/* Pixel meter labels */
 			'meterTooShort'    => __('Too short', 'mihdan-index-now'),
 			'meterGoodLength'  => __('Good length', 'mihdan-index-now'),
@@ -1117,6 +1120,101 @@ class Assets
 	/**
 	 * AJAX: Check if any focus keyword is already used by another published post.
 	 */
+	/**
+	 * Whether the focus keyword field suggests related Google searches.
+	 */
+	public static function keyword_suggestions_enabled(): bool
+	{
+		/**
+		 * Filter whether the focus keyword field shows Google search suggestions.
+		 * The typed keyword is sent from this site to Google's autocomplete service.
+		 *
+		 * @param bool $enabled Default true.
+		 */
+		return (bool) apply_filters('crawlwp_keyword_suggestions', \Mihdan\IndexNow\SEOCore\AdvancedSettings::is_keyword_suggestions_enabled());
+	}
+
+	/**
+	 * Google autocomplete suggestions for the keyword being typed, cached for a day.
+	 */
+	public function ajax_keyword_suggestions(): void
+	{
+		check_ajax_referer('crawlwp_keyword_suggestions', 'nonce');
+
+		$permissions = '\Mihdan\IndexNow\SEOCore\Permissions';
+
+		if (
+			! current_user_can('edit_posts')
+			|| ! self::keyword_suggestions_enabled()
+			|| (class_exists($permissions) && ! $permissions::can($permissions::SEO_BOX))
+		) {
+			wp_send_json_error(['message' => __('You are not allowed to do this.', 'mihdan-index-now')], 403);
+		}
+
+		$query = trim(sanitize_text_field(wp_unslash($_POST['q'] ?? '')));
+
+		if (mb_strlen($query) < 2 || mb_strlen($query) > 100) {
+			wp_send_json_success(['suggestions' => []]);
+		}
+
+		$lang = strtolower(substr((string) get_locale(), 0, 2));
+		$key  = 'crawlwp_kw_suggest_' . md5($lang . '|' . mb_strtolower($query));
+		$list = get_transient($key);
+
+		if (! is_array($list)) {
+			$list = wp_cache_get($key, 'crawlwp');
+		}
+
+		if (! is_array($list)) {
+			/*
+			 * Each lookup the cache can't answer is a request from this server to
+			 * Google. The editor waits between keystrokes; this stops a script from
+			 * looping (default 60 lookups a minute per user).
+			 */
+			$limit = (int) apply_filters('crawlwp_keyword_suggestions_rate_limit', 60);
+			$rl    = 'crawlwp_kw_rl_' . get_current_user_id();
+			$count = (int) get_transient($rl);
+
+			if ($limit > 0 && $count >= $limit) {
+				wp_send_json_success(['suggestions' => []]);
+			}
+
+			set_transient($rl, $count + 1, MINUTE_IN_SECONDS);
+
+			$list     = [];
+			$response = wp_remote_get(add_query_arg([
+				'client' => 'firefox',
+				'ie'     => 'utf-8',
+				'oe'     => 'utf-8',
+				'hl'     => $lang,
+				'q'      => rawurlencode($query),
+			], 'https://suggestqueries.google.com/complete/search'), ['timeout' => 5]);
+
+			$body = is_wp_error($response) || (int) wp_remote_retrieve_response_code($response) !== 200
+				? null
+				: json_decode(wp_remote_retrieve_body($response), true);
+
+			foreach ((array) ($body[1] ?? []) as $suggestion) {
+				$suggestion = trim(sanitize_text_field((string) $suggestion));
+
+				if ($suggestion !== '' && mb_strtolower($suggestion) !== mb_strtolower($query)) {
+					$list[] = $suggestion;
+				}
+			}
+
+			$list = array_slice(array_values(array_unique($list)), 0, 8);
+
+			// Suggestions are kept for a day. A failed or empty lookup only in the object cache, so misses don't fill the options table.
+			if ($list === []) {
+				wp_cache_set($key, $list, 'crawlwp', HOUR_IN_SECONDS);
+			} else {
+				set_transient($key, $list, DAY_IN_SECONDS);
+			}
+		}
+
+		wp_send_json_success(['suggestions' => $list]);
+	}
+
 	public function ajax_check_duplicate_keyword(): void
 	{
 		check_ajax_referer('crawlwp_check_keyword', 'nonce');
