@@ -1147,6 +1147,62 @@
       return $('<div>').html(html).text();
     },
 
+    /* Non-breaking spaces, line breaks and curly apostrophes would stop a keyword from matching. */
+    normalizeText: function(text) {
+      return $.trim(String(text || '').replace(/[\u2018\u2019]/g, "'").replace(/[\s\u00a0]+/g, ' '));
+    },
+
+    /* Text of the opening paragraph: skips empty paragraph blocks and paragraphs
+       inside quotes, captions, tables, lists and similar blocks. */
+    firstParagraph: function($root) {
+      var $filled = $root.find('p').filter(function() { return $.trim($(this).text()).length > 0; });
+      var $intro = $filled.filter(function() {
+        return !$(this).closest('blockquote, figure, table, li, nav, aside, details').length;
+      }).first();
+      return ($intro.length ? $intro : $filled.first()).text() || '';
+    },
+
+    /* Mirrors SeoSignals::keyword_in_slug(); keep the two in step. Words may be in
+       any order; small words may be left out when two other words remain; words of
+       3+ letters may start a longer slug word, shorter ones must match a whole word. */
+    keywordInSlug: function(keyword, slug) {
+      var split = function(s) { return $.grep(String(s || '').toLowerCase().split('-'), function(w) { return w.length > 0; }); };
+      var slugWords = split(slug);
+      /* The saved keyword as the server slugs it (language rules, transliteration plugins);
+         else spell out the letters this site's language writes differently (German ä → ae). */
+      var hints = crawlwpSEO.slugHints || {};
+      var kwText = String(keyword || '').replace(/['\u2018\u2019]/g, '');
+      var serverSlug = hints.keywords && Object.prototype.hasOwnProperty.call(hints.keywords, keyword) ? hints.keywords[keyword] : '';
+      if (!serverSlug && hints.chars) {
+        for (var c in hints.chars) {
+          if (Object.prototype.hasOwnProperty.call(hints.chars, c)) kwText = kwText.split(c).join(hints.chars[c]);
+        }
+      }
+      var kwWords = split(serverSlug || this.decodeSlug(this.slugify(kwText)));
+      if (!slugWords.length || !kwWords.length) return false;
+
+      var joined = '-' + slugWords.join('-') + '-';
+      var phrases = [[kwWords.join('-'), kwWords[kwWords.length - 1]]];
+      if (kwWords.length > 1) phrases.push([kwWords.join(''), kwWords.join('')]);
+      for (var p = 0; p < phrases.length; p++) {
+        var tail = phrases[p][1].length >= 3 ? '' : '-';
+        if (joined.indexOf('-' + phrases[p][0] + tail) !== -1) return true;
+      }
+
+      var stop = crawlwpSEO.slugStopWords || [];
+      var meaningful = $.grep(kwWords, function(w) { return $.inArray(w, stop) === -1; });
+      if (meaningful.length < 2) meaningful = kwWords;
+
+      for (var i = 0; i < meaningful.length; i++) {
+        var word = meaningful[i], long = word.length >= 3, found = false;
+        for (var j = 0; j < slugWords.length; j++) {
+          if (slugWords[j] === word || (long && slugWords[j].indexOf(word) === 0)) { found = true; break; }
+        }
+        if (!found) return false;
+      }
+      return true;
+    },
+
     getWordCount: function(text) {
       return text.split(/\s+/).filter(function(w) { return w.length > 0; }).length;
     },
@@ -1567,9 +1623,11 @@
       var L = crawlwpSEO.i18n;
 
       /* always update readability badge regardless of keyword */
-      var html = this.getEditorContent();
+      /* Classic content without <p> tags (a legacy post or Classic block in the block
+         editor): add paragraphs the way WordPress does, so the first one can be found. */
+      var html = this.autop(this.getEditorContent());
       this.refreshLiveTokens();
-      var plainText = this.stripTags(html).toLowerCase();
+      var plainText = this.normalizeText(this.stripTags(html)).toLowerCase();
       var wordCount = this.getWordCount(plainText);
       var sentences = plainText.split(/[.!?]+/).filter(function(s) { return $.trim(s).length > 5; });
       this.updateReadability(plainText, wordCount, sentences);
@@ -1607,8 +1665,7 @@
         if (!alt) imagesNoAlt++;
       });
 
-      var $paragraphs = $tmp.find('p');
-      var firstParaText = $paragraphs.length > 0 ? ($paragraphs.first().text() || '').toLowerCase() : '';
+      var firstParaText = this.normalizeText(this.firstParagraph($tmp)).toLowerCase();
       var avgSentenceLen = sentences.length > 0 ? Math.round(wordCount / sentences.length) : 0;
 
       var sharedData = {
@@ -1669,7 +1726,7 @@
     evaluateKeyword: function(kw, isPrimary, d) {
       var self = this;
       var L = crawlwpSEO.i18n;
-      var kwLower = kw.toLowerCase();
+      var kwLower = this.normalizeText(kw).toLowerCase();
       var checks = [];
       var passed = 0;
       var total = 0;
@@ -1712,8 +1769,7 @@
         }
 
         /* 2. Keyword in URL slug */
-        var kwSlug = this.decodeSlug(this.slugify(kwLower));
-        if (d.slugVal.indexOf(kwLower.replace(/\s+/g, '-')) !== -1 || d.slugVal.indexOf(kwLower.replace(/\s+/g, '')) !== -1 || (kwSlug && d.slugVal.indexOf(kwSlug) !== -1)) {
+        if (this.keywordInSlug(kwLower, d.slugVal)) {
           addCheck('good', L.kwInSlugGood, '');
         } else {
           addCheck('bad', L.kwInSlugBad, L.kwInSlugFix);

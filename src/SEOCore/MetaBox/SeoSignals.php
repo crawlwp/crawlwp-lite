@@ -59,7 +59,7 @@ class SeoSignals
 	public const CACHE_META = '_crawlwp_seo_signals';
 
 	/** Bumped whenever the cached payload shape or the signal logic changes. */
-	private const CACHE_VERSION = 3;
+	private const CACHE_VERSION = 4;
 
 	/**
 	 * Every signal for a post, in display order.
@@ -310,12 +310,11 @@ class SeoSignals
 		$primary     = $keywords[0];
 		$secondaries = array_slice($keywords, 1);
 
-		$needle  = mb_strtolower($primary);
-		$content = mb_strtolower(wp_strip_all_tags(strip_shortcodes((string) $post->post_content)));
-		$slug    = str_replace('-', ' ', mb_strtolower(urldecode(self::slug($post))));
+		$needle  = self::normalize_text($primary);
+		$content = self::normalize_text(wp_strip_all_tags(strip_shortcodes((string) $post->post_content)));
 
-		$in_title   = mb_stripos($resolved_title, $needle) !== false;
-		$in_slug    = $slug !== '' && mb_stripos($slug, $needle) !== false;
+		$in_title   = mb_stripos(self::normalize_text($resolved_title), $needle) !== false;
+		$in_slug    = self::keyword_in_slug($primary, self::slug($post));
 		$in_content = $content !== '' && mb_stripos($content, $needle) !== false;
 
 		$hits    = (int) $in_title + (int) $in_slug + (int) $in_content;
@@ -335,7 +334,7 @@ class SeoSignals
 		$sec_found = 0;
 		if ($sec_total > 0 && $content !== '') {
 			foreach ($secondaries as $sec) {
-				if (mb_stripos($content, mb_strtolower($sec)) !== false) {
+				if (mb_stripos($content, self::normalize_text($sec)) !== false) {
 					$sec_found++;
 				}
 			}
@@ -622,9 +621,128 @@ class SeoSignals
 	}
 
 	/**
+	 * Lowercase text with entities decoded, curly apostrophes made straight and
+	 * runs of spaces, non-breaking spaces and line breaks made single spaces.
+	 */
+	public static function normalize_text(string $text): string
+	{
+		$text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+		$text = str_replace(["\u{2018}", "\u{2019}"], "'", $text);
+
+		return trim(mb_strtolower((string) preg_replace('/[\s\x{00A0}]+/u', ' ', $text)));
+	}
+
+	/**
+	 * What the metabox script needs to turn a keyword into slug words the way
+	 * sanitize_title() does on this site, so its check agrees with keyword_in_slug().
+	 *
+	 * @return array{chars: array<string, string>, keywords: object}
+	 */
+	public static function slug_hints(int $post_id): array
+	{
+		/*
+		 * Letters WordPress spells out differently by language (German ä → ae,
+		 * Danish å → aa …), as this site's remove_accents() does them. The editor's
+		 * own slug function always uses the plain letter.
+		 */
+		$chars = [];
+
+		foreach (['ä', 'ö', 'ü', 'ß', 'æ', 'ø', 'å', 'đ', 'l·l'] as $char) {
+			$chars[$char] = mb_strtolower(remove_accents($char));
+		}
+
+		/* The saved keywords exactly as sanitize_title() makes them, including any transliteration plugin. */
+		$keywords = [];
+
+		foreach (MetaFields::keywords($post_id) as $keyword) {
+			$keywords[self::normalize_text($keyword)] = mb_strtolower(urldecode(sanitize_title(str_replace(["'", "\u{2018}", "\u{2019}"], '', $keyword))));
+		}
+
+		return ['chars' => $chars, 'keywords' => (object) $keywords];
+	}
+
+	/**
+	 * Small words people leave out of slugs ("best-plugin-seo" for "best plugin for seo").
+	 * Also sent to the metabox script so both checks agree.
+	 *
+	 * @return string[]
+	 */
+	public static function slug_stop_words(): array
+	{
+		$words = [
+			'a', 'an', 'and', 'are', 'as', 'at', 'be', 'by', 'can', 'do', 'does', 'for', 'from', 'how', 'i',
+			'in', 'is', 'it', 'my', 'of', 'on', 'or', 'that', 'the', 'this', 'to', 'vs', 'what', 'when',
+			'where', 'which', 'who', 'why', 'with', 'you', 'your',
+		];
+
+		return array_values(array_filter(array_map('strval', (array) apply_filters('crawlwp_slug_stop_words', $words))));
+	}
+
+	/**
+	 * Whether a keyword is in a slug. Words may be in any order, and small words
+	 * may be left out when at least two other words remain ("best plugin for seo"
+	 * matches "best-plugin-seo", but "vitamin a" needs the "a"). A word of three
+	 * or more letters may start a longer slug word ("plugin" matches "plugins");
+	 * shorter words must match a whole slug word.
+	 *
+	 * Mirrored by keywordInSlug() in crawlwp-metabox.js; keep the two in step.
+	 */
+	public static function keyword_in_slug(string $keyword, string $slug): bool
+	{
+		$keyword    = str_replace(["'", "\u{2018}", "\u{2019}"], '', $keyword);
+		$slug_words = array_values(array_filter(explode('-', mb_strtolower(urldecode($slug))), static fn(string $w): bool => $w !== ''));
+		$kw_words   = array_values(array_filter(explode('-', mb_strtolower(urldecode(sanitize_title($keyword)))), static fn(string $w): bool => $w !== ''));
+
+		if ( ! $slug_words || ! $kw_words) {
+			return false;
+		}
+
+		// The whole keyword as a run of slug words, or written as one word ("word press" in "wordpress-tips").
+		$joined  = '-' . implode('-', $slug_words) . '-';
+		$phrases = [implode('-', $kw_words) => end($kw_words)];
+
+		if (count($kw_words) > 1) {
+			$phrases[implode('', $kw_words)] = implode('', $kw_words);
+		}
+
+		foreach ($phrases as $phrase => $last_word) {
+			$tail = mb_strlen((string) $last_word) >= 3 ? '' : '-';
+
+			if (mb_strpos($joined, '-' . $phrase . $tail) !== false) {
+				return true;
+			}
+		}
+
+		$meaningful = array_values(array_diff($kw_words, self::slug_stop_words()));
+
+		if (count($meaningful) < 2) {
+			$meaningful = $kw_words;
+		}
+
+		foreach ($meaningful as $word) {
+			$long  = mb_strlen($word) >= 3;
+			$found = false;
+
+			foreach ($slug_words as $slug_word) {
+				if ($slug_word === $word || ($long && str_starts_with($slug_word, $word))) {
+					$found = true;
+					break;
+				}
+			}
+
+			if ( ! $found) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	/**
 	 * The URL slug of a post. Drafts have no post_name yet, so fall back to
 	 * the slug WordPress will generate from the title on publish.
 	 */
+
 	private static function slug(\WP_Post $post): string
 	{
 		if ((string) $post->post_name !== '') {
