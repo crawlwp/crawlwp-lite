@@ -457,6 +457,14 @@ abstract class IndexNowAbstract implements SearchEngineInterface
 			return ['status' => 200, 'message' => ''];
 		}
 
-		return ['status' => 0, 'message' => $this->last_error !== '' ? $this->last_error : __('Unknown error', 'mihdan-index-now')];
+		return ['status' => 0, 'message' => $this->last_error() !== '' ? $this->last_error() : __('Unknown error', 'mihdan-index-now')];
+	}
+
+	/**
+	 * The error push() recorded (read through a method so static analysis doesn't assume it is still empty).
+	 */
+	private function last_error(): string
+	{
+		return (string) $this->last_error;
 	}
 }
