@@ -25,7 +25,6 @@ class SiteInfoSettings
 	public function __construct()
 	{
 		add_action('crawlwp_setup_fields', [$this, 'settings_fields'], 5, 2);
-		add_filter('crawlwp_site_graph', [$this, 'add_local_business_node']);
 	}
 
 	public function settings_fields(WPOSA $wposa, $settingsInstance): void
@@ -42,7 +41,6 @@ class SiteInfoSettings
 
 		$this->add_site_type_fields($wposa);
 		$this->add_identity_fields($wposa);
-		$this->add_local_seo_fields($wposa);
 		$this->add_social_profiles_fields($wposa);
 	}
 
@@ -117,163 +115,6 @@ class SiteInfoSettings
 			'default' => 'on',
 			'desc'    => $this->description(__('Outputs a SearchAction potentialAction on the WebSite node so Google may display a sitelinks search box in search results.', 'mihdan-index-now')),
 		]);
-	}
-
-	private function add_local_seo_fields(WPOSA $wposa): void
-	{
-		$this->add_heading(
-			$wposa,
-			self::SECTION,
-			'heading_local_seo',
-			__('Local SEO', 'mihdan-index-now'),
-			__('NAP details and opening hours for LocalBusiness structured data. Leave disabled for non-local sites.')
-		);
-
-		$wposa->add_field(self::SECTION, [
-			'id'      => 'local_enabled',
-			'type'    => 'switch',
-			'name'    => __('Enable LocalBusiness schema', 'mihdan-index-now'),
-			'default' => 'off',
-		]);
-
-		$wposa->add_field(self::SECTION, [
-			'id'      => 'local_type',
-			'type'    => 'select',
-			'name'    => __('Business type', 'mihdan-index-now'),
-			'default' => 'LocalBusiness',
-			'options' => [
-				'LocalBusiness' => 'LocalBusiness',
-				'Restaurant'    => 'Restaurant',
-				'Store'         => 'Store',
-				'ProfessionalService' => 'ProfessionalService',
-				'MedicalBusiness' => 'MedicalBusiness',
-				'LegalService'  => 'LegalService',
-			],
-		]);
-
-		$wposa->add_field(self::SECTION, [
-			'id'   => 'local_street',
-			'type' => 'text',
-			'name' => __('Street address', 'mihdan-index-now'),
-		]);
-
-		$wposa->add_field(self::SECTION, [
-			'id'   => 'local_city',
-			'type' => 'text',
-			'name' => __('City', 'mihdan-index-now'),
-		]);
-
-		$wposa->add_field(self::SECTION, [
-			'id'   => 'local_region',
-			'type' => 'text',
-			'name' => __('Region / State', 'mihdan-index-now'),
-		]);
-
-		$wposa->add_field(self::SECTION, [
-			'id'   => 'local_postal',
-			'type' => 'text',
-			'name' => __('Postal code', 'mihdan-index-now'),
-		]);
-
-		$wposa->add_field(self::SECTION, [
-			'id'   => 'local_country',
-			'type' => 'text',
-			'name' => __('Country code', 'mihdan-index-now'),
-			'desc' => esc_html__('Two-letter ISO code, e.g. US, NG, GB.', 'mihdan-index-now'),
-		]);
-
-		$wposa->add_field(self::SECTION, [
-			'id'   => 'local_phone',
-			'type' => 'text',
-			'name' => __('Phone', 'mihdan-index-now'),
-		]);
-
-		$wposa->add_field(self::SECTION, [
-			'id'   => 'local_hours',
-			'type' => 'textarea',
-			'name' => __('Opening hours', 'mihdan-index-now'),
-			'rows' => 5,
-			'desc' => esc_html__('One range per line, e.g. Mo-Fr 09:00-17:00', 'mihdan-index-now'),
-		]);
-	}
-
-	/**
-	 * @param array<string,mixed> $graph
-	 * @return array<string,mixed>
-	 */
-	public function add_local_business_node(array $graph): array
-	{
-		if (self::get('local_enabled', 'off') !== 'on') {
-			return $graph;
-		}
-
-		$node = [
-			'@type' => (string) self::get('local_type', 'LocalBusiness') ?: 'LocalBusiness',
-			'@id'   => home_url('/') . '#localbusiness',
-			'name'  => (string) self::get('site_name', '') ?: get_bloginfo('name'),
-			'url'   => home_url('/'),
-		];
-
-		$street  = trim((string) self::get('local_street', ''));
-		$city    = trim((string) self::get('local_city', ''));
-		$region  = trim((string) self::get('local_region', ''));
-		$postal  = trim((string) self::get('local_postal', ''));
-		$country = trim((string) self::get('local_country', ''));
-
-		if ($street !== '' || $city !== '') {
-			$node['address'] = array_filter([
-				'@type'           => 'PostalAddress',
-				'streetAddress'   => $street,
-				'addressLocality' => $city,
-				'addressRegion'   => $region,
-				'postalCode'      => $postal,
-				'addressCountry'  => $country,
-			]);
-		}
-
-		$phone = trim((string) self::get('local_phone', ''));
-		if ($phone !== '') {
-			$node['telephone'] = $phone;
-		}
-
-		$hours = [];
-		foreach (preg_split('/\r\n|\r|\n/', (string) self::get('local_hours', '')) ?: [] as $line) {
-			$line = trim($line);
-			if ($line !== '') {
-				$hours[] = $line;
-			}
-		}
-
-		if ($hours !== []) {
-			$node['openingHours'] = $hours;
-		}
-
-		if (! isset($graph['@graph']) || ! is_array($graph['@graph'])) {
-			return $graph;
-		}
-
-		$home_url = home_url('/');
-		$logo_id  = $home_url . '#/schema/logo/image/';
-
-		foreach ($graph['@graph'] as $graph_node) {
-			if (! is_array($graph_node)) {
-				continue;
-			}
-
-			/* The business belongs to the site's Organization. */
-			if (($graph_node['@id'] ?? '') === $home_url . '#organization') {
-				$node['parentOrganization'] = ['@id' => $home_url . '#organization'];
-			}
-
-			/* Reuse the site logo, emitted on the Organization or Person node. */
-			if (($graph_node['logo']['@id'] ?? '') === $logo_id || ($graph_node['image']['@id'] ?? '') === $logo_id) {
-				$node['image'] = ['@id' => $logo_id];
-			}
-		}
-
-		$graph['@graph'][] = $node;
-
-		return $graph;
 	}
 
 	// -------------------------------------------------------------------------

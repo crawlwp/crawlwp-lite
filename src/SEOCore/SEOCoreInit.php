@@ -61,6 +61,7 @@ class SEOCoreInit
 		SiteInfoSettings::class,
 		SocialSettings::class,
 		RssSettings::class,
+		\Mihdan\IndexNow\SEOCore\LocalSeo\LocalSeo::class,
 		BreadcrumbSettings::class,
 		RobotsSettings::class,
 		SitemapSettings::class,
