@@ -223,7 +223,7 @@ class ImageSitemap extends \WP_Sitemaps_Provider
 
 		return array_map(static function ($src) {
 			return html_entity_decode(trim($src), ENT_QUOTES);
-		}, $matches[2] ?? []);
+		}, $matches[2]);
 	}
 
 	/**
