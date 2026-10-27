@@ -47,8 +47,10 @@ class Author
 	/**
 	 * The author's details, with empty values for anything not filled in.
 	 *
+	 * url is the author archive, '' when the author has no published posts.
+	 *
 	 * @return array{
-	 *   id:int, name:string, url:string (author archive, '' when it has no posts), bio:string, job_title:string,
+	 *   id:int, name:string, url:string, bio:string, job_title:string,
 	 *   works_for:array{name:string, url:string, site:bool}|null,
 	 *   expertise:string[], credentials:string[], photo:string, photo_id:int,
 	 *   same_as:string[]
