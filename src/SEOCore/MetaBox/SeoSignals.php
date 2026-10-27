@@ -690,8 +690,8 @@ class SeoSignals
 	public static function keyword_in_slug(string $keyword, string $slug): bool
 	{
 		$keyword    = str_replace(["'", "\u{2018}", "\u{2019}"], '', $keyword);
-		$slug_words = array_values(array_filter(explode('-', mb_strtolower(urldecode($slug))), 'strlen'));
-		$kw_words   = array_values(array_filter(explode('-', mb_strtolower(urldecode(sanitize_title($keyword)))), 'strlen'));
+		$slug_words = array_values(array_filter(explode('-', mb_strtolower(urldecode($slug))), static fn(string $w): bool => $w !== ''));
+		$kw_words   = array_values(array_filter(explode('-', mb_strtolower(urldecode(sanitize_title($keyword)))), static fn(string $w): bool => $w !== ''));
 
 		if ( ! $slug_words || ! $kw_words) {
 			return false;
