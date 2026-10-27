@@ -140,7 +140,7 @@ class Runner
 	}
 
 	/**
-	 * @return array<int,array{id:string,label:string,available:bool,active:bool,posts:int,terms:int,users:int,redirects:int}>
+	 * @return array<int,array{id:string,label:string,available:bool,active:bool,posts:int,terms:int,users:int,redirects:int,redirects_only:bool}>
 	 */
 	public static function inventory(): array
 	{
