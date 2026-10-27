@@ -449,7 +449,7 @@ class LocalSeo
 		}
 
 		$s     = self::settings();
-		$field = static function (string $key) use ($s): string {
+		$field = static function (string $key): string {
 			return self::OPTION . '[' . $key . ']';
 		};
 		$value = static function (string $key) use ($s): string {
