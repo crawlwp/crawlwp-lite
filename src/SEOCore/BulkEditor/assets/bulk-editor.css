@@ -329,7 +329,7 @@
 
 /* ---- Notice ---- */
 .cwp-bulk-notice {
-	margin-top: 12px;
+	margin: 0 0 12px;
 	padding: 8px 12px;
 	border-radius: 3px;
 	font-size: 13px;
@@ -346,3 +346,157 @@
 	border: 1px solid #f3b8b8;
 	color: #c02b2b;
 }
+
+/* ---- Views: Posts and pages / Image alt text ---- */
+.cwp-bulk-views {
+	display: flex;
+	gap: 4px;
+	margin: 0 0 14px;
+	border-bottom: 1px solid #dcdcde;
+}
+
+.cwp-bulk-view {
+	margin-bottom: -1px;
+	padding: 8px 14px;
+	border: 0;
+	border-bottom: 2px solid transparent;
+	background: none;
+	color: #50575e;
+	font: inherit;
+	font-weight: 500;
+	cursor: pointer;
+}
+
+.cwp-bulk-view:hover { color: #1d2327; }
+.cwp-bulk-view.is-active { color: #1d2327; border-bottom-color: var(--wp-admin-theme-color, #2271b1); }
+
+.cwp-bulk-view__badge {
+	margin-left: 6px;
+	padding: 1px 7px;
+	border-radius: 999px;
+	background: #fcf0f1;
+	color: #b32d2e;
+	font-size: 11px;
+	font-weight: 600;
+}
+
+/* ---- Row selection (only used by "Write with AI", a Premium feature) ---- */
+.cwp-bulk-col-check { width: 24px; }
+.cwp-bulk-wrap:not(.cwp-bulk-wrap--batch) .cwp-bulk-table .cwp-bulk-col-check { display: none !important; }
+
+/* ---- Images ---- */
+.cwp-bulk-image { display: flex; align-items: flex-start; gap: 10px; }
+.cwp-bulk-image img,
+.cwp-bulk-image__none { flex: none; width: 56px; height: 56px; border-radius: 4px; object-fit: cover; background: #f0f0f1; }
+.cwp-bulk-image__used { display: block; margin-top: 2px; color: #646970; font-size: 12px; }
+.cwp-bulk-image .cwp-bulk-post-title { word-break: break-all; }
+
+/* ---- AI ---- */
+.cwp-bulk-btn--ai {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	border-color: #7c3aed;
+	background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
+	color: #fff;
+}
+
+.cwp-bulk-btn--ai:hover:not(:disabled),
+.cwp-bulk-btn--ai:focus:not(:disabled) { background: linear-gradient(135deg, #6d28d9 0%, #5b21b6 100%); border-color: #5b21b6; color: #fff; }
+.cwp-bulk-btn--ai.is-locked { opacity: .75; }
+
+.cwp-bulk-pro {
+	padding: 0 6px;
+	border-radius: 3px;
+	background: rgba(255, 255, 255, .22);
+	font-size: 10.5px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: .3px;
+}
+
+.cwp-bulk-field:has(.cwp-bulk-ai) .cwp-bulk-input { padding-right: 76px; }
+
+.cwp-bulk-ai {
+	position: absolute;
+	top: 5px;
+	right: 34px;
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	padding: 1px 6px;
+	border: 1px solid #c4b5fd;
+	border-radius: 4px;
+	background: #f5f3ff;
+	color: #6d28d9;
+	font: inherit;
+	font-size: 10.5px;
+	font-weight: 600;
+	line-height: 1.6;
+	cursor: pointer;
+}
+
+.cwp-bulk-ai:hover,
+.cwp-bulk-ai:focus { border-color: #7c3aed; background: #ede9fe; }
+.cwp-bulk-col-alt .cwp-bulk-ai { right: 6px; }
+.cwp-bulk-col-alt .cwp-bulk-field:has(.cwp-bulk-ai) .cwp-bulk-input { padding-right: 52px; }
+
+.is-ai .cwp-bulk-input { border-color: #c4b5fd; background: #faf7ff; }
+
+.is-ai-busy .cwp-bulk-input {
+	color: transparent;
+	background: linear-gradient(90deg, #f6f7f7 0%, #eceef0 50%, #f6f7f7 100%);
+	background-size: 200% 100%;
+	animation: cwp-bulk-shimmer 1.2s infinite linear;
+}
+
+.is-ai-busy .cwp-bulk-input::placeholder { color: transparent; }
+
+@keyframes cwp-bulk-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+
+.cwp-bulk-ai-wait { position: absolute; top: 8px; left: 11px; color: #6d28d9; font-size: 12px; pointer-events: none; }
+
+.cwp-bulk-ai-tag {
+	float: right;
+	margin: 4px 0 0 6px;
+	padding: 0 6px;
+	border-radius: 3px;
+	background: #ede9fe;
+	color: #5b21b6;
+	font-size: 10.5px;
+	font-weight: 600;
+}
+
+.cwp-bulk-ai-error { display: block; margin-top: 4px; color: #b32d2e; font-size: 12px; }
+
+/* ---- "Write with AI" progress ---- */
+.cwp-bulk-progress {
+	align-items: center;
+	gap: 12px;
+	margin: 0 0 12px;
+	padding: 10px 14px;
+	border: 1px solid #ddd6fe;
+	border-radius: 6px;
+	background: #f5f3ff;
+	color: #3b2a6b;
+	font-size: 13px;
+}
+
+.cwp-bulk-progress__bar { flex: 1; height: 6px; overflow: hidden; border-radius: 3px; background: #ede9fe; }
+.cwp-bulk-progress__bar i { display: block; width: 0; height: 100%; background: #7c3aed; transition: width .2s ease; }
+.cwp-bulk-progress__stop { border: 0; background: none; color: #6d28d9; font: inherit; text-decoration: underline; cursor: pointer; }
+.cwp-bulk-wrap.is-ai-running .cwp-bulk-ai,
+.cwp-bulk-wrap.is-ai-running #cwp-bulk-save-btn { pointer-events: none; opacity: .5; }
+
+/* ---- "Write with AI" dialog ---- */
+.cwp-bulk-dialog { position: fixed; inset: 0; z-index: 100000; display: flex; align-items: flex-start; justify-content: center; padding: 100px 16px 16px; background: rgba(0, 0, 0, .35); }
+.cwp-bulk-dialog__box { width: 100%; max-width: 520px; border-radius: 10px; background: #fff; box-shadow: 0 20px 60px rgba(0, 0, 0, .25); color: #1d2327; font-size: 13px; }
+.cwp-bulk-dialog__title { display: flex; align-items: center; gap: 8px; margin: 0; padding: 16px 20px; border-bottom: 1px solid #f0f0f1; font-size: 15px; }
+.cwp-bulk-dialog__title svg { color: #7c3aed; }
+.cwp-bulk-dialog__body { padding: 16px 20px; }
+.cwp-bulk-dialog__body fieldset { margin: 0 0 14px; }
+.cwp-bulk-dialog__body legend { margin-bottom: 6px; font-weight: 600; }
+.cwp-bulk-dialog__body label { display: block; margin: 4px 0; }
+.cwp-bulk-dialog__hint { margin: 4px 0 0 24px; color: #646970; font-size: 12px; }
+.cwp-bulk-dialog__note { margin: 0; padding: 10px 12px; border-radius: 6px; background: #f6f7f7; color: #50575e; }
+.cwp-bulk-dialog__foot { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 20px; border-top: 1px solid #f0f0f1; }
