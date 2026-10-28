@@ -124,18 +124,44 @@ class OAuthProxyTest extends TestCase
 		$this->assertTrue(\site_matches($domain, 'www.example.com'));
 		$this->assertTrue(\site_matches($domain, 'blog.example.com'));
 		$this->assertTrue(\site_matches($domain, 'EXAMPLE.com'));
-		$this->assertTrue(\site_matches(['sc-domain:www.example.com'], 'example.com'));
+		// A www domain property covers www and below, not the bare domain.
+		$this->assertTrue(\site_matches(['sc-domain:www.example.com'], 'www.example.com'));
+		$this->assertFalse(\site_matches(['sc-domain:www.example.com'], 'example.com'));
 
 		// URL property: the same host, with or without www; ports are not compared.
 		$this->assertTrue(\site_matches($prefix, 'example.com'));
 		$this->assertTrue(\site_matches($prefix, 'www.example.com'));
-		$this->assertTrue(\site_matches(['http://example.com:8080/blog/'], 'example.com'));
+		$this->assertTrue(\site_matches(['http://example.com:8080/blog/'], 'example.com', '/blog/'));
+		$this->assertFalse(\site_matches(['http://example.com:8080/blog/'], 'example.com', '/'), 'a folder property does not cover the whole host');
 		$this->assertFalse(\site_matches($prefix, 'blog.example.com'));
 
 		// Lookalikes and other sites.
 		foreach (['example.com.evil.io', 'evil-example.com', 'notexample.com', 'example.co', 'www.example.com.evil.io', ''] as $host) {
 			$this->assertFalse(\site_matches($domain, $host), $host);
 			$this->assertFalse(\site_matches($prefix, $host), $host);
+		}
+
+		// URL property with a path: only installs inside that path.
+		$alice = ['https://network.com/alice/'];
+		$this->assertTrue(\site_matches($alice, 'network.com', '/alice/'));
+		$this->assertTrue(\site_matches($alice, 'network.com', '/alice/shop/'));
+		$this->assertFalse(\site_matches($alice, 'network.com', '/mallory/'));
+		$this->assertFalse(\site_matches($alice, 'network.com', '/alicex/'));
+		$this->assertFalse(\site_matches($alice, 'network.com', '/'));
+		$this->assertTrue(\site_matches(['https://network.com/'], 'network.com', '/mallory/'), 'the root property covers every install on the host');
+		$this->assertFalse(\site_matches($alice, 'network.com', ''), 'an unsafe path matches no URL property');
+		$this->assertTrue(\site_matches(['sc-domain:network.com'], 'network.com', ''), 'domain properties cover the whole host');
+
+		// Install paths from return URLs; dot segments are refused.
+		$this->assertSame('/', \site_path('https://example.com/wp-admin/admin-post.php'));
+		$this->assertSame('/blog/', \site_path('https://example.com/blog/wp-admin/admin-post.php'));
+		$this->assertSame('', \site_path('https://network.com/alice/../mallory/wp-admin/admin-post.php'));
+		$this->assertSame('', \site_path('https://network.com/alice/%2e%2e/mallory/wp-admin/admin-post.php'));
+		$this->assertSame('', \site_path('https://network.com/alice/./wp-admin/admin-post.php'));
+
+		// Internationalised domain reported in Unicode matches the punycode host.
+		if (function_exists('idn_to_ascii')) {
+			$this->assertTrue(\site_matches(['sc-domain:bücher.example'], 'xn--bcher-kva.example'));
 		}
 
 		$this->assertFalse(\site_matches([], 'example.com'));
@@ -164,8 +190,8 @@ class OAuthProxyTest extends TestCase
 	{
 		$google = ['required' => 'https://www.googleapis.com/auth/webmasters.readonly', 'sites' => 'https://invalid.invalid/'];
 
-		$this->assertSame('missing_scope', \site_check($google, ['access_token' => 'x', 'scope' => 'openid email'], 'example.com', []));
-		$this->assertSame('ok', \site_check($google, ['access_token' => 'x', 'scope' => 'openid'], 'example.com', ['verify_site_ownership' => false]));
+		$this->assertSame('missing_scope', \site_check($google, ['access_token' => 'x', 'scope' => 'openid email'], 'https://example.com/wp-admin/admin-post.php', []));
+		$this->assertSame('ok', \site_check($google, ['access_token' => 'x', 'scope' => 'openid'], 'https://example.com/wp-admin/admin-post.php', ['verify_site_ownership' => false]));
 	}
 
 	public function test_flow_cookies_use_the_host_prefix(): void

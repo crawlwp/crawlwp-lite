@@ -283,7 +283,7 @@ function callback(array $providers, array $config): void
 	// Only hand tokens to a site this account manages in Search Console / Bing Webmaster Tools. Anyone can
 	// build an authorize link to their own domain, so without this a phishing link could collect a victim's
 	// tokens through CrawlWP's verified app. The tokens are dropped, never written, when the check fails.
-	$owned = site_check($providers[$provider], $tokens, (string)parse_url($flow['r'], PHP_URL_HOST), $config);
+	$owned = site_check($providers[$provider], $tokens, (string)$flow['r'], $config);
 
 	if ($owned !== 'ok') {
 		$back(['crawlwp_oauth_error' => $owned]);
@@ -468,7 +468,7 @@ function revoked_path(array $config, string $provider, string $token): string
  *
  * @return string 'ok', or an error code for the site: no_site_access, site_check_failed, missing_scope.
  */
-function site_check(array $provider, array $tokens, string $host, array $config): string
+function site_check(array $provider, array $tokens, string $return_url, array $config): string
 {
 	// Kill switch for emergencies only (e.g. the provider's site list API is down for everyone).
 	if (array_key_exists('verify_site_ownership', $config) && ! $config['verify_site_ownership']) {
@@ -487,7 +487,22 @@ function site_check(array $provider, array $tokens, string $host, array $config)
 		return 'site_check_failed';
 	}
 
-	return site_matches(site_urls($list), $host) ? 'ok' : 'no_site_access';
+	return site_matches(site_urls($list), (string)parse_url($return_url, PHP_URL_HOST), site_path($return_url)) ? 'ok' : 'no_site_access';
+}
+
+/**
+ * The WordPress install's path from its admin-post.php return URL ("/blog/wp-admin/admin-post.php" → "/blog/"),
+ * or '' when the path has "." or ".." segments (plain or percent-encoded), which could step outside a folder.
+ */
+function site_path(string $return_url): string
+{
+	$path = (string)parse_url($return_url, PHP_URL_PATH);
+
+	if (preg_match('#(^|/)\.{1,2}(/|$)#', rawurldecode($path)) || ! str_ends_with($path, '/wp-admin/admin-post.php')) {
+		return '';
+	}
+
+	return substr($path, 0, -strlen('wp-admin/admin-post.php'));
 }
 
 /**
@@ -517,14 +532,20 @@ function site_urls(array $list): array
 }
 
 /**
- * Whether one of the account's properties covers $host: a domain property (sc-domain:example.com) for the
- * host or a parent domain, or a URL property on the same host. "www." is ignored on both sides; ports aren't
- * compared (whoever owns the host owns every port on it).
+ * Whether one of the account's properties covers the site at $host and $path:
+ * - a domain property (sc-domain:example.com) for the host or a parent domain. A domain property covers every
+ *   subdomain: that is what Google means by it, so blog.example.com is accepted for sc-domain:example.com even
+ *   though someone else could run a site there (the domain's owner controls who can);
+ * - a URL property on the same host ("www." ignored, ports not compared) whose path contains the site's path,
+ *   so https://example.com/alice/ doesn't cover another install at https://example.com/mallory/.
+ *
+ * @param string $path The install's path from site_path(); '' (unsafe or unknown) only matches domain properties.
  */
-function site_matches(array $site_urls, string $host): bool
+function site_matches(array $site_urls, string $host, string $path = '/'): bool
 {
-	$bare = static fn(string $h): string => (string)preg_replace('/^www\./', '', rtrim(strtolower(trim($h)), '.'));
-	$host = $bare($host);
+	$clean = static fn(string $h): string => rtrim(strtolower(trim($h)), '.');
+	$bare  = static fn(string $h): string => (string)preg_replace('/^www\./', '', $clean($h));
+	$host  = $clean($host);
 
 	if ($host === '') {
 		return false;
@@ -534,7 +555,12 @@ function site_matches(array $site_urls, string $host): bool
 		$url = trim((string)$url);
 
 		if (stripos($url, 'sc-domain:') === 0) {
-			$domain = $bare(substr($url, 10));
+			$domain = $clean(substr($url, 10));
+
+			// Google may report an internationalised domain in Unicode; the host is always punycode.
+			if ($domain !== '' && preg_match('/[^\x20-\x7e]/', $domain) && function_exists('idn_to_ascii')) {
+				$domain = (string)idn_to_ascii($domain, IDNA_DEFAULT, INTL_IDNA_VARIANT_UTS46);
+			}
 
 			if ($domain !== '' && ($host === $domain || str_ends_with($host, '.' . $domain))) {
 				return true;
@@ -545,7 +571,13 @@ function site_matches(array $site_urls, string $host): bool
 
 		$property = parse_url($url, PHP_URL_HOST);
 
-		if (is_string($property) && $property !== '' && $bare($property) === $host) {
+		if ( ! is_string($property) || $property === '' || $bare($property) !== $bare($host) || $path === '') {
+			continue;
+		}
+
+		$property_path = rtrim((string)(parse_url($url, PHP_URL_PATH) ?: '/'), '/') . '/';
+
+		if (str_starts_with(rtrim($path, '/') . '/', $property_path)) {
 			return true;
 		}
 	}
