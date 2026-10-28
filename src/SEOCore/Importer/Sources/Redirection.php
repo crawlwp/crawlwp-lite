@@ -104,7 +104,7 @@ class Redirection extends Source
 			}
 
 			// The redirect was already live in Redirection, so a destination on another site keeps working.
-			$redirect['allow_external'] = $redirect['to_url'] !== '' && $manager->is_external_destination($redirect['to_url']) ? 1 : 0;
+			$redirect['allow_external'] = self::allow_external_for($manager, (string) $redirect['to_url']) ? 1 : 0;
 
 			$redirect['note'] = $redirect['note'] !== ''
 				/* translators: %s: the redirect's title in Redirection */

@@ -10,6 +10,26 @@ namespace Mihdan\IndexNow\SEOCore\Importer;
  */
 abstract class Source
 {
+	/**
+	 * Whether an imported redirect keeps an outside destination working (it was
+	 * already live in the old plugin). Only for a fixed outside host: a host built
+	 * from the request (https://$1/…, \1, ${1}) could send visitors anywhere, so it
+	 * stays limited to this site like any new rule.
+	 *
+	 * @param \Mihdan\IndexNow\SEOCore\Redirects\RedirectsManager $manager
+	 */
+	protected static function allow_external_for($manager, string $to): bool
+	{
+		$host = (string) wp_parse_url($to, PHP_URL_HOST);
+
+		// A plain host name only (letters, digits, dots, hyphens; IDNs as punycode).
+		if (! preg_match('/^[a-z0-9.-]+$/i', $host)) {
+			return false;
+		}
+
+		return $manager->is_external_destination($to);
+	}
+
 	abstract public function id(): string;
 
 	abstract public function label(): string;

@@ -167,7 +167,7 @@ class AIOSEO extends Source
 			$ok   = $manager->insert([
 				'from_url'            => $from,
 				'to_url'              => (string) ($row['target_url'] ?? ''),
-				'allow_external'      => $manager->is_external_destination((string) ($row['target_url'] ?? '')) ? 1 : 0, // already live in AIOSEO, so outside destinations keep working
+				'allow_external'      => self::allow_external_for($manager, (string) ($row['target_url'] ?? '')) ? 1 : 0, // already live in AIOSEO, so outside destinations keep working
 				'redirect_type'       => in_array($type, [301, 302, 307, 410, 451], true) ? $type : 301,
 				'match_type'          => $match,
 				'note'                => __('Imported from All in One SEO', 'mihdan-index-now'),

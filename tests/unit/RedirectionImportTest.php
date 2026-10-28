@@ -79,4 +79,24 @@ class RedirectionImportTest extends TestCase
 		$this->assertNull(Redirection::map_row($this->row(), ['module' => 2, 'enabled' => true]), 'Apache group');
 		$this->assertNull(Redirection::map_row($this->row(['action_data' => '']), null), 'no target');
 	}
+
+	public function test_outside_destinations_stay_allowed_only_for_a_fixed_host(): void
+	{
+		$manager = new class {
+			public function is_external_destination(string $url): bool
+			{
+				return (string) parse_url($url, PHP_URL_HOST) !== 'example.com';
+			}
+		};
+		$allow = new \ReflectionMethod(Redirection::class, 'allow_external_for');
+		$allow->setAccessible(true);
+
+		$this->assertTrue($allow->invoke(null, $manager, 'https://amazon.com/dp/123'), 'fixed outside host');
+		$this->assertFalse($allow->invoke(null, $manager, 'https://example.com/page/'), 'this site');
+		$this->assertFalse($allow->invoke(null, $manager, '/local/'), 'relative');
+		$this->assertFalse($allow->invoke(null, $manager, 'https://$1/path'), 'host from a capture');
+		$this->assertFalse($allow->invoke(null, $manager, 'https://\\1.com/'), 'host from a back-reference');
+		$this->assertFalse($allow->invoke(null, $manager, 'https://sub.$1.com/'), 'part of the host from a capture');
+		$this->assertTrue($allow->invoke(null, $manager, 'https://amazon.com/$1'), 'capture in the path only');
+	}
 }
