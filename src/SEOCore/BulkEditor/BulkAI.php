@@ -56,7 +56,7 @@ class BulkAI
 		}
 
 		if (Requests::rate_limited($batch)) {
-			wp_send_json_error(['message' => __('Too many AI requests. Please wait a few minutes and try again.', 'mihdan-index-now'), 'rateLimited' => true], 429);
+			wp_send_json_error(['message' => Requests::limit_message(), 'rateLimited' => true, 'dailyLimit' => Requests::limit_is_daily()], 429);
 		}
 
 		$text = $field === 'alt' ? $this->alt($id, $previous) : $this->post_field($id, $field, $previous);

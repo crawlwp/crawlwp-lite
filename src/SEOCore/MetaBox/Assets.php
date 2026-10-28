@@ -533,7 +533,7 @@ class Assets
 		}
 
 		if (Requests::rate_limited()) {
-			wp_send_json_error(['message' => __('Too many AI requests. Please wait a few minutes and try again.', 'mihdan-index-now')], 429);
+			wp_send_json_error(['message' => Requests::limit_message()], 429);
 		}
 
 		if (! in_array($field, Generator::fields(), true)) {
