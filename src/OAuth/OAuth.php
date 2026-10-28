@@ -68,6 +68,24 @@ final class OAuth
 		return self::get_connection($provider) !== [];
 	}
 
+	/**
+	 * Optional features a connection can be granted on top of its base access, and the scope each needs.
+	 */
+	public const FEATURES = [
+		'google' => ['analytics' => 'https://www.googleapis.com/auth/analytics.readonly'],
+	];
+
+	/**
+	 * Whether the connection was granted an optional feature, e.g. has_feature('google', 'analytics').
+	 */
+	public static function has_feature(string $provider, string $feature): bool
+	{
+		$scope = self::FEATURES[$provider][$feature] ?? '';
+		$conn  = self::get_connection($provider);
+
+		return $scope !== '' && $conn && in_array($scope, preg_split('/\s+/', (string)($conn['scope'] ?? '')) ?: [], true);
+	}
+
 	private static function save_connection(string $provider, ?array $data): void
 	{
 		$data === null ? delete_option(self::OPTION_PREFIX . $provider) : update_option(self::OPTION_PREFIX . $provider, $data, false);
@@ -302,14 +320,21 @@ final class OAuth
 	/* ---------- connect / return / disconnect ---------- */
 
 	/**
-	 * @param string $return Admin URL to come back to afterwards. Defaults to API Settings.
+	 * @param string   $return   Admin URL to come back to afterwards. Defaults to API Settings.
+	 * @param string[] $features Optional features to ask for as well, e.g. ['analytics'] (see FEATURES).
 	 */
-	public static function connect_url(string $provider, string $return = ''): string
+	public static function connect_url(string $provider, string $return = '', array $features = []): string
 	{
 		$url = admin_url('admin-post.php?action=crawlwp_oauth_connect&provider=' . $provider);
 
 		if ($return !== '') {
 			$url = add_query_arg('return', rawurlencode($return), $url);
+		}
+
+		$features = array_intersect(array_keys(self::FEATURES[$provider] ?? []), $features);
+
+		if ($features) {
+			$url = add_query_arg('features', implode(',', $features), $url);
 		}
 
 		return wp_nonce_url($url, 'crawlwp_oauth_connect_' . $provider);
@@ -341,10 +366,18 @@ final class OAuth
 		$provider = self::request_provider();
 		check_admin_referer('crawlwp_oauth_connect_' . $provider);
 
-		$state  = wp_generate_password(32, false);
-		$return = wp_validate_redirect(esc_url_raw(wp_unslash($_GET['return'] ?? '')), '');
+		$state    = wp_generate_password(32, false);
+		$return   = wp_validate_redirect(esc_url_raw(wp_unslash($_GET['return'] ?? '')), '');
+		$features = array_values(array_intersect(array_keys(self::FEATURES[$provider] ?? []), explode(',', sanitize_text_field(wp_unslash($_GET['features'] ?? '')))));
 
-		set_transient(self::state_key($provider), ['state' => $state, 'provider' => $provider, 'return' => $return], 15 * MINUTE_IN_SECONDS);
+		// Reconnecting replaces the stored tokens, so keep features that were already granted.
+		foreach (array_keys(self::FEATURES[$provider] ?? []) as $feature) {
+			if (self::has_feature($provider, $feature) && ! in_array($feature, $features, true)) {
+				$features[] = $feature;
+			}
+		}
+
+		set_transient(self::state_key($provider), ['state' => $state, 'provider' => $provider, 'return' => $return, 'features' => $features], 15 * MINUTE_IN_SECONDS);
 
 		// Not wp_safe_redirect(): the proxy is an external host by design.
 		wp_redirect(add_query_arg([
@@ -353,6 +386,7 @@ final class OAuth
 			// only a hash travels through the browser; the state itself is sent server to server at fetch.
 			'state'      => hash('sha256', $state),
 			'return_url' => rawurlencode(admin_url('admin-post.php?action=crawlwp_oauth_return')),
+			'features'   => implode(',', $features),
 		], self::proxy_url()));
 		exit;
 	}
@@ -423,6 +457,15 @@ final class OAuth
 		]);
 
 		do_action('crawlwp_oauth_connected', $provider);
+
+		// Optional permissions can be unticked on the consent screen: the base connection still works.
+		$missing = array_filter((array)($pending['features'] ?? []), function ($feature) use ($provider) {
+			return ! self::has_feature($provider, $feature);
+		});
+
+		if (in_array('analytics', $missing, true)) {
+			self::finish('error', __('Google was connected, but without access to Google Analytics. To see visitor stats, click Allow access again and tick the Google Analytics permission.', 'mihdan-index-now'), $back);
+		}
 
 		/* translators: %s: Google or Bing */
 		self::finish('success', sprintf(__('Connected to %s.', 'mihdan-index-now'), $label), $back);

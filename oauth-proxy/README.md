@@ -6,7 +6,7 @@ A single PHP file that lets CrawlWP sites "Connect with Google" and "Connect wit
 
 1. Host `index.php` on its own HTTPS domain (default the plugin uses: `https://auth.crawlwp.com/`; override with the `CRAWLWP_OAUTH_PROXY_URL` constant or the `crawlwp_oauth_proxy_url` filter). PHP 8.0+ with curl.
 2. Copy `config.sample.php` to `config.php` and fill it in. The proxy refuses to run (503) until `secret` is at least 32 characters. `storage_dir` must be writable and outside the web root.
-3. Google Cloud: create an OAuth client (Web application), enable the **Google Search Console API**, add the proxy URL as an authorised redirect URI. Scopes requested: `openid email https://www.googleapis.com/auth/webmasters.readonly`. The `webmasters.readonly` scope is sensitive, so the consent screen needs Google verification before public release.
+3. Google Cloud: create an OAuth client (Web application), enable the **Google Search Console API**, add the proxy URL as an authorised redirect URI. Scopes requested: `openid email https://www.googleapis.com/auth/webmasters.readonly`, plus `https://www.googleapis.com/auth/analytics.readonly` only when the site turns on Google Analytics (CrawlWP Premium). Add both to the consent screen and enable the Google Analytics Data API and Google Analytics Admin API in the same Cloud project. Both scopes are sensitive, so the consent screen needs Google verification before public release.
 4. Bing Webmaster Tools > Settings > API Access > OAuth client: register the same proxy URL as the redirect URI.
 
 5. Route every path to `index.php` (the included `.htaccess` does this on Apache; on Nginx use `try_files $uri /index.php?$query_string;`). Bing documents its error redirect with an extra path segment.
