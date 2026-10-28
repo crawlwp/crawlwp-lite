@@ -75,6 +75,7 @@ deleteDir('php-scoper');
 deleteDir('codekit');
 deleteDir('tests');
 deleteDir('doc');
+deleteDir('oauth-proxy');
 
 deleteDir('vendor');
 

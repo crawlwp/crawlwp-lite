@@ -3,12 +3,13 @@
 namespace Mihdan\IndexNow\Providers\Bing;
 
 use Mihdan\IndexNow\Indexing;
+use Mihdan\IndexNow\OAuth\OAuth;
 use Mihdan\IndexNow\WebmasterAbstract;
 use Mihdan\IndexNow\Utils;
 
 class BingWebmaster extends WebmasterAbstract
 {
-	private const RECRAWL_ENDPOINT = 'https://ssl.bing.com/webmaster/api.svc/json/SubmitUrlbatch?apikey=%s';
+	private const RECRAWL_ENDPOINT = 'https://ssl.bing.com/webmaster/api.svc/json/SubmitUrlbatch';
 	private const RATE_LIMIT_OPTION = 'crawlwp_bing_indexing_rate_limit_expiration';
 
 	public function get_ping_endpoint(): string
@@ -29,6 +30,14 @@ class BingWebmaster extends WebmasterAbstract
 	public function get_token(): string
 	{
 		return $this->wposa->get_option('api_key', 'bing_webmaster');
+	}
+
+	/**
+	 * Connected with an API key or with "Connect with Bing".
+	 */
+	public function is_connected()
+	{
+		return ! empty($this->get_token()) || OAuth::is_connected('bing');
 	}
 
 	public function is_enabled(): bool
@@ -53,9 +62,7 @@ class BingWebmaster extends WebmasterAbstract
 	 */
 	public function ping(int $post_id)
 	{
-		$token = $this->get_token();
-
-		if (empty($token)) return;
+		if ( ! $this->is_connected()) return;
 
 		if (Indexing::get_post_skip_reason($post_id) !== '') return;
 
@@ -63,13 +70,21 @@ class BingWebmaster extends WebmasterAbstract
 
 		if ($this->is_paused(self::RATE_LIMIT_OPTION, $post_url)) return;
 
-		$url = sprintf($this->get_ping_endpoint(), $token);
+		// API key when set, otherwise the OAuth token (refreshed through the CrawlWP proxy).
+		$request = OAuth::bing_request('SubmitUrlbatch');
 
+		if ($request === null) {
+			$this->log_submission($post_url, get_the_title($post_id), 0, OAuth::unavailable_reason('bing'));
+
+			return;
+		}
+
+		$url  = $request['url'];
 		$args = array(
 			'timeout' => 30,
 			'headers' => array(
 				'Content-Type' => 'application/json',
-			),
+			) + $request['headers'],
 			'body'    => wp_json_encode(
 				[
 					'siteUrl' => Utils::normalized_home_url(),
