@@ -83,6 +83,8 @@ class SitemapStatus
 
 		return $status + [
 			'permalink' => (string) get_permalink($post),
+			// FrontendHead resolves a relative redirect with home_url($path): the editor does the same.
+			'home'      => untrailingslashit(home_url()),
 			'text'      => [
 				'out'          => __('Not in your sitemap.', 'mihdan-index-now'),
 				'mixed'        => __('Mixed signals.', 'mihdan-index-now'),

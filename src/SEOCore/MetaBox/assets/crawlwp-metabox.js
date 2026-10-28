@@ -1135,6 +1135,15 @@
       return pub;
     },
 
+    /* Exactly FrontendHead::handle_redirect()'s loop guard: a relative path is resolved
+       with home_url($path), trailing slashes are ignored, and nothing else is normalised
+       (http:// or www. versions of the address still redirect on the site). */
+    redirectsToItself: function(redirect, st) {
+      var untrail = function(u) { return String(u).replace(/\/+$/, ''); };
+      var target = redirect.charAt(0) === '/' ? (st.home || '') + redirect : redirect;
+      return untrail(target) === untrail(st.permalink);
+    },
+
     updateSitemapNotice: function() {
       var st = $.extend({}, crawlwpSEO.sitemap, this.sitemapReason || {}), t = st.text, $box = $('#cwpSitemapNotice');
       var reason = st.reason, link = '', label = '', goTo = '', tone = 'warn', title = t.out, text = '';
@@ -1159,7 +1168,7 @@
         tone = 'info'; title = t.mixed;
         if (code === '410' || code === '451') {
           text = t.gone; goTo = 'cwpRedirectType'; label = t.toRedirect;
-        } else if (redirect && norm(absolute(redirect)) !== norm(st.permalink)) {
+        } else if (redirect && !this.redirectsToItself(redirect, st)) {
           /* A redirect to the post's own address is ignored when the page loads. */
           text = t.redirect; goTo = 'cwpRedirectUrl'; label = t.toRedirect;
         } else if (canonical && norm(absolute(canonical)) !== norm(st.permalink)) {
