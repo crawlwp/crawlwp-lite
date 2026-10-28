@@ -17,6 +17,10 @@ class GoogleWebmaster extends WebmasterAbstract
 	private const URL_DELETED = 'URL_DELETED';
 	private const RECRAWL_ENDPOINT = '';
 	private const RATE_LIMIT_OPTION = 'crawlwp_google_indexing_rate_limit_expiration';
+	private const SENT_OPTION = 'crawlwp_google_indexing_sent';
+
+	/** Google's default Indexing API quota: publish requests a day. */
+	public const DAILY_LIMIT = 200;
 
 	/**
 	 * Removals sent to Google per day. Google's default quota is 200 notifications a
@@ -171,6 +175,8 @@ class GoogleWebmaster extends WebmasterAbstract
 			$batch   = $service->createBatch();
 			$batch->add($service->urlNotifications->publish($body), 'url-0');
 
+			self::count_sent();
+
 			foreach ($batch->execute() as $result) {
 				if ($result instanceof Google_Service_Exception) {
 					$status_code   = (int)$result->getCode();
@@ -222,5 +228,37 @@ class GoogleWebmaster extends WebmasterAbstract
 	{
 		// TODO: Implement get_quota() method.
 		return [];
+	}
+
+	protected function rate_limit_option(): string
+	{
+		return self::RATE_LIMIT_OPTION;
+	}
+
+	protected function send_url(string $url, bool $removed): array
+	{
+		$status = $this->notify($url, $removed ? self::URL_DELETED : self::URL_UPDATED, $message);
+
+		return [$status, (string)$message];
+	}
+
+	/**
+	 * Requests sent to the Indexing API today. Google resets the quota at midnight Pacific Time.
+	 */
+	public static function sent_today(): int
+	{
+		$sent = get_option(self::SENT_OPTION, []);
+
+		return is_array($sent) && ($sent['day'] ?? '') === self::quota_day() ? (int)($sent['count'] ?? 0) : 0;
+	}
+
+	private static function count_sent(): void
+	{
+		update_option(self::SENT_OPTION, ['day' => self::quota_day(), 'count' => self::sent_today() + 1], false);
+	}
+
+	private static function quota_day(): string
+	{
+		return (new \DateTimeImmutable('now', new \DateTimeZone('America/Los_Angeles')))->format('Y-m-d');
 	}
 }
