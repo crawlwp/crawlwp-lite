@@ -2048,8 +2048,9 @@
         }
       }
 
-      /* Sentences starting with the same word */
-      if (d.sentences.length >= 3) {
+      /* Sentences starting with the same word. Skipped for Chinese, Japanese, Thai and similar
+         scripts: without spaces between words there is no "first word" to compare. */
+      if (d.sentences.length >= 3 && this.unspacedShare(d.plainText) <= 0.5) {
         if (d.structure.repeats.length) {
           var rp = d.structure.repeats[0];
           addCheck('warn', this.plural(L.repeatsBad, d.structure.repeats.length),
