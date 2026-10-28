@@ -57,6 +57,7 @@ class SEOCoreInit
 		InternalLinksUpsell::class,
 		CodeSettings::class,
 		Elementor::class,
+		\Mihdan\IndexNow\SEOCore\Integrations\PageBuilders::class,
 		CoreSettings\CoreSettings::class,
 		SiteInfoSettings::class,
 		SocialSettings::class,
