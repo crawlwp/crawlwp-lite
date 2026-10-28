@@ -435,7 +435,9 @@ final class OAuth
 	{
 		$label   = self::label($provider);
 		$service = $provider === 'google' ? 'Google Search Console' : 'Bing Webmaster Tools';
-		$host    = (string)wp_parse_url(home_url('/'), PHP_URL_HOST);
+		// The address the sign-in server checked: the WordPress install's (admin) address, which can differ from the home URL.
+		$admin   = wp_parse_url(admin_url('/'));
+		$host    = (string)($admin['host'] ?? '') . rtrim((string)preg_replace('#/wp-admin/?$#', '', (string)($admin['path'] ?? '')), '/');
 
 		switch ($error) {
 			case 'access_denied':
