@@ -62,6 +62,15 @@ class MetaFields
 	public const CHECKBOX_TRACKER = '_crawlwp_seo_fields_present';
 
 	/**
+	 * Fields of the Schema and Advanced tabs (plus every `_crawlwp_schema_*`
+	 * key), saved only for users with the "Advanced SEO fields" permission.
+	 */
+	public const ADVANCED_FIELDS = [
+		self::ROBOTS_INDEX, self::ROBOTS_FOLLOW, self::ROBOTS_ADVANCED, self::CANONICAL_URL,
+		self::MAX_SNIPPET, self::MAX_IMAGE, self::REDIRECT_URL, self::REDIRECT_TYPE, self::PRIMARY_CATEGORY,
+	];
+
+	/**
 	 * Meta keys that are always stored, even when empty.
 	 *
 	 * Keeping a row with an empty string lets the Bulk Editor find posts with no
@@ -279,7 +288,7 @@ class MetaFields
 		}
 
 		$form_rendered = isset($_POST[self::CHECKBOX_TRACKER]);
-		$values        = FieldProcessor::process(self::field_definitions($form_rendered), $_POST);
+		$values        = self::allowed_values(FieldProcessor::process(self::field_definitions($form_rendered), $_POST));
 
 		if (
 			isset($values[self::REDIRECT_URL]) &&
@@ -295,6 +304,34 @@ class MetaFields
 		}
 
 		self::store_defaults($post_id);
+	}
+
+	/**
+	 * Drop the values the current user may not change: everything without the
+	 * SEO box permission, the Schema and Advanced fields without the advanced one.
+	 *
+	 * @param array<string, mixed> $values
+	 *
+	 * @return array<string, mixed>
+	 */
+	public static function allowed_values(array $values): array
+	{
+		if (! \Mihdan\IndexNow\SEOCore\Permissions::can(\Mihdan\IndexNow\SEOCore\Permissions::SEO_BOX)) {
+			return [];
+		}
+
+		if (\Mihdan\IndexNow\SEOCore\Permissions::can(\Mihdan\IndexNow\SEOCore\Permissions::SEO_ADVANCED)) {
+			return $values;
+		}
+
+		return array_filter($values, static function ($key) {
+			return ! self::is_advanced_field((string) $key);
+		}, ARRAY_FILTER_USE_KEY);
+	}
+
+	public static function is_advanced_field(string $key): bool
+	{
+		return in_array($key, self::ADVANCED_FIELDS, true) || strpos($key, '_crawlwp_schema_') === 0;
 	}
 
 	/**

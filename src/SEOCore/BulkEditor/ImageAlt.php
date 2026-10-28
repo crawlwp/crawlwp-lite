@@ -71,7 +71,7 @@ class ImageAlt
 	{
 		check_ajax_referer('crawlwp_bulk_editor_nonce', 'nonce');
 
-		if (! current_user_can('upload_files')) {
+		if (! current_user_can('upload_files') || ! \Mihdan\IndexNow\SEOCore\Permissions::can(\Mihdan\IndexNow\SEOCore\Permissions::BULK_EDITOR)) {
 			wp_send_json_error(['message' => __('Permission denied.', 'mihdan-index-now')]);
 		}
 

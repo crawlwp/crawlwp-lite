@@ -50,6 +50,7 @@ class SEOCoreInit
 	 * @var string[]
 	 */
 	private const MODULES_ALWAYS = [
+		Permissions::class,
 		Graph::class,
 		SitemapStylesheet::class,
 		ImageSEO::class,
