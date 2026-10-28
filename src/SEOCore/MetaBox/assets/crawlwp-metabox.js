@@ -64,6 +64,7 @@
       this.updateBreadcrumbPreview();
       this.initSocialImagePlaceholders();
       this.validateExistingImages();
+      this.bindSitemapNotice();
       this.emit('renderLinks');
       this.emit('analyze');
     },
@@ -1093,6 +1094,95 @@
           self.initSocialImagePlaceholders();
         });
       }
+    },
+
+    /* ---------- "Not in sitemap" notice (General tab) ---------- */
+    bindSitemapNotice: function() {
+      var self = this;
+      if (!crawlwpSEO.sitemap || !$('#cwpSitemapNotice').length) return;
+      $('#cwpIndex, #cwpCanonical, #cwpRedirectUrl, #cwpRedirectType').on('change input', function() {
+        self.updateSitemapNotice();
+      });
+      /* Block editor: publishing, making private or adding a password changes whether the post can be listed. */
+      if (typeof wp !== 'undefined' && wp.data && wp.data.subscribe && wp.data.select('core/editor') && crawlwpSEO.sitemap.published) {
+        var last = '';
+        wp.data.subscribe(function() {
+          var ed = wp.data.select('core/editor');
+          if (!ed || typeof ed.getEditedPostAttribute !== 'function') return;
+          var status = ed.getEditedPostAttribute('status') || '', pass = ed.getEditedPostAttribute('password') || '';
+          var key = status + '|' + (pass ? 1 : 0);
+          if (key === last) return;
+          last = key;
+          self.sitemapReason = self.liveSitemapReason(status, pass);
+          self.updateSitemapNotice();
+        });
+      }
+      $('#cwpSitemapNotice').on('click', '[data-cwp-goto]', function(e) {
+        e.preventDefault();
+        var $target = $('#' + $(this).attr('data-cwp-goto'));
+        self.$mb.find('.cwp-tab[data-panel="advanced"]').trigger('click');
+        if ($target.length) $target.trigger('focus');
+      });
+      this.updateSitemapNotice();
+    },
+
+    /* The same order as SitemapStatus::for_post(). */
+    liveSitemapReason: function(status, password) {
+      var pub = crawlwpSEO.sitemap.published;
+      if (status !== 'publish' && status !== 'private') return { reason: 'draft', link: '' };
+      if (pub.reason === 'off' || pub.reason === 'elsewhere' || pub.reason === 'type_noindex' || pub.reason === 'type' || pub.reason === 'type_filtered') return pub;
+      if (status === 'private' || password) return { reason: 'protected', link: '' };
+      return pub;
+    },
+
+    /* Exactly FrontendHead::handle_redirect()'s loop guard: a relative path is resolved
+       with home_url($path), trailing slashes are ignored, and nothing else is normalised
+       (http:// or www. versions of the address still redirect on the site). */
+    redirectsToItself: function(redirect, st) {
+      var untrail = function(u) { return String(u).replace(/\/+$/, ''); };
+      var target = redirect.charAt(0) === '/' ? (st.home || '') + redirect : redirect;
+      return untrail(target) === untrail(st.permalink);
+    },
+
+    updateSitemapNotice: function() {
+      var st = $.extend({}, crawlwpSEO.sitemap, this.sitemapReason || {}), t = st.text, $box = $('#cwpSitemapNotice');
+      var reason = st.reason, link = '', label = '', goTo = '', tone = 'warn', title = t.out, text = '';
+      var canonical = $.trim($('#cwpCanonical').val() || '');
+      var redirect = $.trim($('#cwpRedirectUrl').val() || '');
+      var code = $('#cwpRedirectType').val() || '';
+      /* Keep the query string: with plain permalinks (?p=12) it is what tells pages apart. */
+      var norm = function(u) { return u.replace(/^https?:\/\/(www\.)?/i, '').replace(/#.*$/, '').replace(/\/+(\?|$)/, '$1').toLowerCase(); };
+      var absolute = function(u) { return u.charAt(0) === '/' ? st.permalink.replace(/^(https?:\/\/[^\/]+).*$/, '$1') + u : u; };
+
+      /* Another SEO plugin makes the sitemap: nothing reliable to say. */
+      if (reason === 'elsewhere') { $box.empty().hide(); return; }
+      if (reason === 'draft') reason = '';
+
+      if (reason) {
+        text = t[reason] || '';
+        if (reason === 'type_noindex') { link = st.link; label = t.toTitleMeta; }
+        if (reason === 'off' && st.link) { link = st.link; label = t.toReading; }
+      } else if ($('#cwpIndex').val() === 'noindex') {
+        text = t.noindex; goTo = 'cwpIndex'; label = t.toAdvanced;
+      } else if (st.reason !== 'draft') {
+        tone = 'info'; title = t.mixed;
+        if (code === '410' || code === '451') {
+          text = t.gone; goTo = 'cwpRedirectType'; label = t.toRedirect;
+        } else if (redirect && !this.redirectsToItself(redirect, st)) {
+          /* A redirect to the post's own address is ignored when the page loads. */
+          text = t.redirect; goTo = 'cwpRedirectUrl'; label = t.toRedirect;
+        } else if (canonical && norm(absolute(canonical)) !== norm(st.permalink)) {
+          text = t.canonical; goTo = 'cwpCanonical'; label = t.toCanonical;
+        }
+      }
+
+      if (!text) { $box.empty().hide(); return; }
+
+      var html = '<div class="cwp-sitemap-notice is-' + tone + '"><span class="cwp-sitemap-icon" aria-hidden="true">' + (tone === 'warn' ? '!' : 'i') + '</span><div>'
+        + '<b>' + this.escHtml(title) + '</b> ' + this.escHtml(text);
+      if (label && link) html += ' <a href="' + this.escAttr(link) + '">' + this.escHtml(label) + '</a>';
+      else if (label && goTo) html += ' <a href="#" data-cwp-goto="' + goTo + '">' + this.escHtml(label) + '</a>';
+      $box.html(html + '</div></div>').show();
     },
 
     /* ---------- helpers ---------- */
