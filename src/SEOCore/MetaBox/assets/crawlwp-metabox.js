@@ -1148,7 +1148,40 @@
     },
 
     getWordCount: function(text) {
-      return text.split(/\s+/).filter(function(w) { return w.length > 0; }).length;
+      /* Length in words. Chinese and Japanese have no spaces between words, so two
+         characters count as one word: the ratio Yoast uses for its Japanese limits
+         (200 characters for 100 words, 40 for a 20-word sentence, 600 for 300 words).
+         Thai, Lao, Myanmar and Khmer words are found with the browser's word segmenter. */
+      text = String(text || '');
+      var cjk = text.match(this.CJK_CHARS);
+      var rest = cjk ? text.replace(this.CJK_CHARS, ' ') : text;
+      var words = 0;
+      if (/[\u0e00-\u0eff\u1000-\u109f\u1780-\u17ff]/.test(rest) && window.Intl && typeof Intl.Segmenter === 'function') {
+        Array.prototype.forEach.call(Array.from(new Intl.Segmenter(undefined, { granularity: 'word' }).segment(rest)), function(s) {
+          if (s.isWordLike) words++;
+        });
+      } else {
+        words = rest.split(/\s+/).filter(function(w) { return w.length > 0; }).length;
+      }
+      return words + (cjk ? Math.round(cjk.length / 2) : 0);
+    },
+
+    /* Chinese and Japanese characters (written without spaces between words). */
+    CJK_CHARS: /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff66-\uff9f]/g,
+
+    /* Share (0-1) of the text's letters in scripts written without spaces between words:
+       Chinese, Japanese, Thai, Lao, Myanmar, Khmer. */
+    unspacedShare: function(text) {
+      text = String(text || '');
+      var letters = text.replace(/[\s\d.,;:!?'"()\[\]{}\-\u2013\u2014\u2026\u3001\u3002\uff01\uff1f\u300c-\u300f\uff08\uff09]/g, '').length;
+      var unspaced = (text.match(/[\u0e00-\u0eff\u1000-\u109f\u1780-\u17ff\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff66-\uff9f]/g) || []).length;
+      return letters ? unspaced / letters : 0;
+    },
+
+    /* Number of Chinese and Japanese characters, for messages in those languages. */
+    cjkCount: function(text) {
+      var cjk = String(text || '').match(this.CJK_CHARS);
+      return cjk ? cjk.length : 0;
     },
 
     getEditorContent: function() {
@@ -1218,19 +1251,20 @@
         var $a = $(this);
         var href = $.trim($a.attr('href') || '');
         if (!href || href.charAt(0) === '#') return;
-        var text = $.trim($a.text()) || href;
+        var label = $.trim($a.text());
+        var text = label || href;
         try {
           var url = new URL(href, crawlwpSEO.siteUrl);
           /* mailto:, tel:, javascript: … are not links to a page. */
           if (url.protocol !== 'http:' && url.protocol !== 'https:') return;
-          var item = { href: url.href, text: text };
+          var item = { href: url.href, text: text, hasText: !!label };
           if (bareHost(url.hostname) === siteHost) {
             internal.push(item);
           } else {
             external.push(item);
           }
         } catch(e) {
-          external.push({ href: href, text: text });
+          external.push({ href: href, text: text, hasText: !!label });
         }
       });
       return { internal: internal, external: external };
@@ -1422,6 +1456,15 @@
         return;
       }
 
+      /* Flesch Reading Ease is an English formula (syllables per word): meaningless for
+         Chinese, Japanese, Thai and other scripts without spaces between words. */
+      if (this.unspacedShare(plainText) > 0.5) {
+        $badge.attr('class', 'cwp-readability-badge');
+        $icon.text('\u2014');
+        $text.text(L.readabilityNoScore);
+        return;
+      }
+
       /* Flesch Reading Ease (approximation) */
       var syllableCount = 0;
       var words = plainText.split(/\s+/).filter(function(w) { return w.length > 0; });
@@ -1453,6 +1496,108 @@
       $badge.attr('class', 'cwp-readability-badge ' + cls);
       $icon.text(flesch);
       $text.html('<b>' + label + '</b> \u2014 ' + this.fmt(L.readabilityDetail, flesch, avgLen, longPct));
+    },
+
+    /* ---------- structure checks: paragraphs, sections, sentence openings ---------- */
+
+    /* First few words of a text, for pointing at a paragraph in a message. */
+    textStart: function(text, words) {
+      text = $.trim(text);
+      /* Chinese and Japanese have no spaces: quote the first dozen characters instead. */
+      if (this.cjkCount(text.slice(0, 20)) > 5) return text.length > 12 ? text.slice(0, 12) + '\u2026' : text;
+      var parts = text.split(/\s+/);
+      var start = parts.slice(0, words || 4).join(' ');
+      /* Thai and similar scripts put spaces only between phrases: keep the quote short. */
+      if (start.length > 40) return start.slice(0, 40) + '\u2026';
+      return start + (parts.length > (words || 4) ? '\u2026' : '');
+    },
+
+    /* Paragraph lengths, words between subheadings and repeated sentence openings. */
+    structureData: function(html) {
+      var self = this;
+      /* The classic editor's text tab has no <p> tags: add them the way WordPress does. */
+      if (!/<p[\s>]/i.test(html) && window.wp && wp.editor && typeof wp.editor.autop === 'function') {
+        html = wp.editor.autop(html);
+      }
+      var $root = $('<div>').html(html);
+      $root.find('script,style,pre,code,table').remove();
+
+      var data = { paras: 0, longParas: [], sections: [], repeats: [] };
+      var section = { words: 0, chars: 0, heading: null };
+
+      $root.find('h1,h2,h3,h4,h5,h6,p,li').each(function() {
+        var $el = $(this);
+        var tag = this.tagName.toLowerCase();
+        /* A list item's own paragraphs are counted as paragraphs. */
+        if (tag === 'li' && $el.find('p').length) return;
+        /* A nested list's items are counted on their own. */
+        var text = $.trim((tag === 'li' ? $el.clone().find('ul,ol').remove().end() : $el).text().replace(/\u00a0/g, ' '));
+        if (!text) return;
+
+        if (tag.charAt(0) === 'h') {
+          data.sections.push(section);
+          section = { words: 0, chars: 0, heading: text };
+          return;
+        }
+
+        var words = self.getWordCount(text);
+        var chars = self.cjkCount(text);
+        section.words += words;
+        section.chars += chars;
+        if (tag !== 'p') return;
+
+        data.paras++;
+        if (words > 150) data.longParas.push({ words: words, chars: chars, start: self.textStart(text) });
+
+        /* Three or more sentences in a row that start with the same word. */
+        var sentences = text.match(/[^.!?\u3002\uff01\uff1f]+[.!?\u3002\uff01\uff1f]*/g) || [];
+        var prev = '', run = 0;
+        var flush = function() {
+          if (run >= 3) data.repeats.push({ count: run, word: prev, start: self.textStart(text) });
+        };
+        $.each(sentences, function(i, s) {
+          var first = ($.trim(s).split(/\s+/)[0] || '')
+            .replace(/^[\s"'\u201c\u2018(\[]+|[\s"'\u201d\u2019),:;.!?\]]+$/g, '').toLowerCase();
+          if (first && first === prev) {
+            run++;
+          } else {
+            flush();
+            prev = first;
+            run = first ? 1 : 0;
+          }
+        });
+        flush();
+      });
+      data.sections.push(section);
+
+      data.longSections = $.grep(data.sections, function(s) { return s.words > 300; });
+      data.longSections.sort(function(a, b) { return b.words - a.words; });
+      data.longParas.sort(function(a, b) { return b.words - a.words; });
+      return data;
+    },
+
+    /* Links whose text contains the keyword and that point to another page. */
+    competingLinks: function(kw, parsed) {
+      var norm = function(s) {
+        return ' ' + String(s || '').toLowerCase().replace(/[\s\u00a0.,;:!?"'\u201c\u201d\u2018\u2019()\[\]{}<>\/\\|_\u2013\u2014-]+/g, ' ') + ' ';
+      };
+      var bare = function(u) { return String(u || '').split('#')[0].replace(/\/+$/, '').toLowerCase(); };
+      var key = $.trim(norm(kw));
+      if (!key) return [];
+      /* Match whole words, except in scripts written without spaces between words
+         (Chinese, Japanese, Thai, Lao, Myanmar, Khmer). Korean, Greek, Arabic, Hebrew,
+         Hindi and others use spaces, so "서울" doesn't match inside "서울대학교". */
+      var whole = !/[\u0e00-\u0eff\u1000-\u109f\u1780-\u17ff\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/.test(key);
+      var selfUrl = bare(crawlwpSEO.permalink);
+      var found = [];
+      /* Internal links first: those compete with this page on the same site. */
+      $.each(parsed.internal.concat(parsed.external), function(i, link) {
+        /* Image-only links have no text to compete with. */
+        if (bare(link.href) === selfUrl || !link.hasText) return;
+        var text = norm(link.text);
+        if (whole ? text.indexOf(' ' + key + ' ') !== -1 : text.indexOf(key) !== -1) found.push($.extend({ internal: i < parsed.internal.length }, link));
+      });
+      return found;
     },
 
     /* ---------- breadcrumb preview ---------- */
@@ -1571,7 +1716,12 @@
       this.refreshLiveTokens();
       var plainText = this.stripTags(html).toLowerCase();
       var wordCount = this.getWordCount(plainText);
-      var sentences = plainText.split(/[.!?]+/).filter(function(s) { return $.trim(s).length > 5; });
+      /* Also split on Chinese/Japanese full stops; a short CJK sentence has few characters. */
+      var self0 = this;
+      var sentences = plainText.split(/[.!?\u3002\uff01\uff1f]+/).filter(function(s) {
+        s = $.trim(s);
+        return s.length > 5 || self0.cjkCount(s) >= 3;
+      });
       this.updateReadability(plainText, wordCount, sentences);
 
       if (keywords.length === 0) {
@@ -1610,8 +1760,11 @@
       var $paragraphs = $tmp.find('p');
       var firstParaText = $paragraphs.length > 0 ? ($paragraphs.first().text() || '').toLowerCase() : '';
       var avgSentenceLen = sentences.length > 0 ? Math.round(wordCount / sentences.length) : 0;
+      /* Mostly Chinese/Japanese: sentence length is reported in characters (2 per word, as Yoast). */
+      var cjkText = this.cjkCount(plainText) > wordCount;
 
       var sharedData = {
+        cjkText: cjkText,
         plainText: plainText,
         wordCount: wordCount,
         sentences: sentences,
@@ -1630,6 +1783,7 @@
         imagesNoAlt: imagesNoAlt,
         firstParaText: firstParaText
       };
+      sharedData.structure = this.structureData(html);
 
       var results = [];
       for (var i = 0; i < keywords.length; i++) {
@@ -1785,6 +1939,20 @@
         addCheck('warn', this.fmt(L.h1Multiple, d.h1Count), L.h1MultipleFix);
       }
 
+      /* Words between subheadings */
+      var st = d.structure;
+      if (d.wordCount > 300) {
+        if (st.longSections.length) {
+          var longest = st.longSections[0];
+          var inChars = longest.chars > longest.words;
+          addCheck('warn', this.plural(inChars ? L.sectionsLongChars : L.sectionsLong, st.longSections.length), longest.heading === null
+            ? this.fmt(inChars ? L.sectionsIntroCharsD : L.sectionsIntroD, inChars ? longest.chars : longest.words)
+            : this.fmt(inChars ? L.sectionsLongCharsD : L.sectionsLongD, inChars ? longest.chars : longest.words, '\u201c' + longest.heading + '\u201d'));
+        } else {
+          addCheck('good', L.sectionsGood, '');
+        }
+      }
+
       /* 8. Images alt text */
       if (d.$images.length === 0) {
         addCheck('warn', L.noImages, L.noImagesFix);
@@ -1810,6 +1978,20 @@
         addCheck('warn', L.intLinksOne, L.intLinksOneFix);
       } else {
         addCheck('bad', L.intLinksNone, L.intLinksNoneFix);
+      }
+
+      /* Link text that competes for the keyword */
+      if (d.parsed.internal.length + d.parsed.external.length > 0) {
+        var competing = this.competingLinks(kw, d.parsed);
+        if (competing.length) {
+          var path = competing[0].href;
+          try { var u = new URL(path); if (u.origin === new URL(crawlwpSEO.siteUrl).origin) path = u.pathname + u.search; } catch (e) {}
+          /* Linking out to a source with the keyword is common and less harmful than linking to your own competing page. */
+          addCheck(competing[0].internal ? 'bad' : 'warn', this.fmt(L.competingBad, '\u201c' + competing[0].text + '\u201d'),
+            this.fmt(L.competingBadD, path) + (competing.length > 1 ? ' ' + this.plural(L.competingMore, competing.length - 1) : ''));
+        } else {
+          addCheck('good', L.competingGood, '');
+        }
       }
 
       /* 11. External links */
@@ -1841,12 +2023,40 @@
 
       /* 14. Readability: avg sentence length */
       if (d.sentences.length >= 3) {
+        var lenLabel = d.cjkText ? this.fmt(L.readabilityChars, d.avgSentenceLen * 2) : this.fmt(L.readability, d.avgSentenceLen);
         if (d.avgSentenceLen <= 20) {
-          addCheck('good', this.fmt(L.readability, d.avgSentenceLen), L.readabilityGoodD);
+          addCheck('good', lenLabel, L.readabilityGoodD);
         } else if (d.avgSentenceLen <= 25) {
-          addCheck('warn', this.fmt(L.readability, d.avgSentenceLen), L.readabilityWarnD);
+          addCheck('warn', lenLabel, L.readabilityWarnD);
         } else {
-          addCheck('bad', this.fmt(L.readability, d.avgSentenceLen), L.readabilityBadD);
+          addCheck('bad', lenLabel, d.cjkText ? L.readabilityBadCharsD : L.readabilityBadD);
+        }
+      }
+
+      /* Paragraph length */
+      if (d.structure.paras > 0 && d.wordCount >= 50) {
+        if (d.structure.longParas.length) {
+          var lp = d.structure.longParas[0];
+          /* Mostly Chinese or Japanese: say it in characters, as writers in those languages count. */
+          if (lp.chars > lp.words) {
+            addCheck('warn', this.plural(L.parasLongChars, d.structure.longParas.length), this.fmt(L.parasLongCharsD, lp.chars, '\u201c' + lp.start + '\u201d'));
+          } else {
+            addCheck('warn', this.plural(L.parasLong, d.structure.longParas.length), this.fmt(L.parasLongD, lp.words, '\u201c' + lp.start + '\u201d'));
+          }
+        } else {
+          addCheck('good', L.parasGood, '');
+        }
+      }
+
+      /* Sentences starting with the same word. Skipped for Chinese, Japanese, Thai and similar
+         scripts: without spaces between words there is no "first word" to compare. */
+      if (d.sentences.length >= 3 && this.unspacedShare(d.plainText) <= 0.5) {
+        if (d.structure.repeats.length) {
+          var rp = d.structure.repeats[0];
+          addCheck('warn', this.plural(L.repeatsBad, d.structure.repeats.length),
+            this.fmt(L.repeatsBadD, rp.count, '\u201c' + rp.word.charAt(0).toUpperCase() + rp.word.slice(1) + '\u201d', '\u201c' + rp.start + '\u201d'));
+        } else {
+          addCheck('good', L.repeatsGood, '');
         }
       }
 

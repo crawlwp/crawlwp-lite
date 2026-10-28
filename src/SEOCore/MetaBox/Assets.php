@@ -791,6 +791,47 @@ class Assets
 			'h1Multiple'       => __('Multiple H1 tags found (%s).', 'mihdan-index-now'),
 			'h1MultipleFix'    => __('Use only one H1 per page; the theme usually prints the title as the H1, so use H2 and below in the content.', 'mihdan-index-now'),
 
+			/* Analysis: link text that competes for the keyword */
+			/* translators: %s: link text in quotes */
+			'competingBad'     => __('Competing link: %s links to another page.', 'mihdan-index-now'),
+			/* translators: %s: address the link points to */
+			'competingBadD'    => __('This page wants to rank for that keyword, but the link tells Google that %s is the better match. Use different link text.', 'mihdan-index-now'),
+			/* translators: %s: number of other links */
+			'competingMore'    => self::plural(_n_noop('%s more link does the same.', '%s more links do the same.', 'mihdan-index-now')),
+			'competingGood'    => __('No links compete for the keyword.', 'mihdan-index-now'),
+
+			/* Analysis: text between subheadings */
+			/* translators: %s: number of sections */
+			'sectionsLong'     => self::plural(_n_noop('%s section has over 300 words without a subheading.', '%s sections have over 300 words without a subheading.', 'mihdan-index-now')),
+			/* translators: 1: number of words, 2: subheading in quotes */
+			'sectionsLongD'    => __('The longest is %1$s words, under %2$s. Add an H2 or H3 about every 300 words so readers can scan the page.', 'mihdan-index-now'),
+			/* translators: %s: number of words */
+			'sectionsIntroD'   => __('The longest is %s words, before the first subheading. Add an H2 or H3 about every 300 words so readers can scan the page.', 'mihdan-index-now'),
+			/* Chinese and Japanese text is measured in characters (2 characters = 1 word). */
+			'sectionsLongChars' => self::plural(_n_noop('%s section has over 600 characters without a subheading.', '%s sections have over 600 characters without a subheading.', 'mihdan-index-now')),
+			/* translators: 1: number of characters, 2: subheading in quotes */
+			'sectionsLongCharsD' => __('The longest is %1$s characters, under %2$s. Add an H2 or H3 about every 600 characters so readers can scan the page.', 'mihdan-index-now'),
+			/* translators: %s: number of characters */
+			'sectionsIntroCharsD' => __('The longest is %s characters, before the first subheading. Add an H2 or H3 about every 600 characters so readers can scan the page.', 'mihdan-index-now'),
+			'sectionsGood'     => __('Subheadings are well spread out.', 'mihdan-index-now'),
+
+			/* Analysis: paragraph length */
+			/* translators: %s: number of paragraphs */
+			'parasLong'        => self::plural(_n_noop('%s paragraph is over 150 words.', '%s paragraphs are over 150 words.', 'mihdan-index-now')),
+			/* translators: 1: number of words, 2: first words of the paragraph in quotes */
+			'parasLongD'       => __('The longest has %1$s words and starts %2$s. Split it into shorter paragraphs; long blocks are hard to read on a phone.', 'mihdan-index-now'),
+			'parasLongChars'   => self::plural(_n_noop('%s paragraph is over 300 characters.', '%s paragraphs are over 300 characters.', 'mihdan-index-now')),
+			/* translators: 1: number of characters, 2: first words of the paragraph in quotes */
+			'parasLongCharsD'  => __('The longest has %1$s characters and starts %2$s. Split it into shorter paragraphs; long blocks are hard to read on a phone.', 'mihdan-index-now'),
+			'parasGood'        => __('Paragraphs are a good length.', 'mihdan-index-now'),
+
+			/* Analysis: sentences starting with the same word */
+			/* translators: %s: number of places */
+			'repeatsBad'       => self::plural(_n_noop('Sentences repeat their first word in %s place.', 'Sentences repeat their first word in %s places.', 'mihdan-index-now')),
+			/* translators: 1: number of sentences, 2: the word in quotes, 3: first words of the paragraph in quotes */
+			'repeatsBadD'      => __('For example, %1$s sentences in a row start with %2$s (paragraph starting %3$s). Vary how sentences begin.', 'mihdan-index-now'),
+			'repeatsGood'      => __('Sentences start in varied ways.', 'mihdan-index-now'),
+
 			/* Analysis: 9 – Images alt text */
 			'noImages'         => __('No images found.', 'mihdan-index-now'),
 			'noImagesFix'      => __('Adding relevant images can improve engagement and image search traffic.', 'mihdan-index-now'),
@@ -839,9 +880,12 @@ class Assets
 			/* Analysis: 15 – Readability */
 			/* translators: %s: average sentence length */
 			'readability'      => __('Average sentence length is %s words.', 'mihdan-index-now'),
+			/* translators: %s: number of characters (Chinese and Japanese text) */
+			'readabilityChars' => __('Average sentence length is %s characters.', 'mihdan-index-now'),
 			'readabilityGoodD' => __('Easy to read.', 'mihdan-index-now'),
 			'readabilityWarnD' => __('Some sentences may be hard to follow. Try breaking them up.', 'mihdan-index-now'),
 			'readabilityBadD'  => __('Sentences are too long. Aim for under 20 words on average.', 'mihdan-index-now'),
+			'readabilityBadCharsD' => __('Sentences are too long. Aim for under 40 characters on average.', 'mihdan-index-now'),
 
 			/* Analysis: 16 – Heading hierarchy */
 			/* translators: %s: number of H2 tags */
@@ -878,6 +922,7 @@ class Assets
 			'readabilityOk'         => __('Fairly readable', 'mihdan-index-now'),
 			'readabilityPoor'       => __('Needs improvement', 'mihdan-index-now'),
 			'readabilityNA'         => __('Readability analysis will run when content is available.', 'mihdan-index-now'),
+			'readabilityNoScore'    => __('No reading-ease score: the formula only works for languages written with spaces between words.', 'mihdan-index-now'),
 			/* translators: %1$s: Flesch score, %2$s: avg sentence length, %3$s: percentage of long sentences */
 			'readabilityDetail'     => __('Flesch score %1$s · avg. sentence %2$s words · %3$s% long sentences', 'mihdan-index-now'),
 
