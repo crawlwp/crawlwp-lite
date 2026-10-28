@@ -619,7 +619,7 @@
 		}).fail(function (xhr) {
 			var data = xhr && xhr.responseJSON && xhr.responseJSON.data ? xhr.responseJSON.data : {};
 			fieldError($td, data.message || i18n.aiError);
-			done({ error: data.message || i18n.aiError, connectUrl: data.connectUrl, rateLimited: xhr && xhr.status === 429 });
+			done({ error: data.message || i18n.aiError, connectUrl: data.connectUrl, rateLimited: xhr && xhr.status === 429, dailyLimit: !!data.dailyLimit });
 		}).always(function () {
 			$td.removeClass('is-ai-busy').find('.cwp-bulk-ai-wait').remove();
 		});
@@ -805,7 +805,8 @@
 				render();
 
 				if (result.rateLimited) {
-					finish(i18n.aiRateLimited, true);
+					/* The daily cap lasts until midnight: the server's message says so, "wait a few minutes" would not. */
+					finish(result.dailyLimit ? result.error : i18n.aiRateLimited, true);
 					return;
 				}
 
