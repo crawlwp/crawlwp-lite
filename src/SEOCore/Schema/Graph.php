@@ -157,7 +157,7 @@ class Graph
 	}
 
 	/**
-	 * The custom JSON-LD nodes saved on a post.
+	 * The rich result and custom JSON-LD nodes saved on a post.
 	 *
 	 * Added by {@see \Mihdan\IndexNow\SEOCore\TitleMeta\FrontendOutput}, which
 	 * skips them on noindexed pages and when the page type is "None". Text that
@@ -165,9 +165,9 @@ class Graph
 	 *
 	 * @return array<int,array<string,mixed>>
 	 */
-	public static function nodes_for_post(\WP_Post $post): array
+	public static function nodes_for_post(\WP_Post $post, string $webpage_id = ''): array
 	{
-		$nodes = [];
+		$nodes = RichResults::nodes_for_post($post, $webpage_id);
 
 		$custom = (string) MetaFields::get($post->ID, MetaFields::SCHEMA_CUSTOM, '');
 

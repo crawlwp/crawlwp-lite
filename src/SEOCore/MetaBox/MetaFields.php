@@ -2,6 +2,8 @@
 
 namespace Mihdan\IndexNow\SEOCore\MetaBox;
 
+use Mihdan\IndexNow\SEOCore\Schema\RichResults;
+
 class MetaFields
 {
 	public const SEO_TITLE       = '_crawlwp_seo_title';
@@ -38,6 +40,7 @@ class MetaFields
 	public const SCHEMA_BREADCRUMB   = '_crawlwp_schema_breadcrumb';
 	public const SCHEMA_SECTION      = '_crawlwp_schema_section';
 	public const SCHEMA_CUSTOM       = '_crawlwp_schema_custom';
+	public const SCHEMA_RICH         = '_crawlwp_schema_rich';
 
 	public const PRIMARY_CATEGORY = '_crawlwp_primary_category';
 	public const CORNERSTONE      = '_crawlwp_cornerstone';
@@ -217,6 +220,7 @@ class MetaFields
 
 		$fields[self::PRIMARY_CATEGORY] = ['type' => FieldProcessor::TYPE_INT];
 		$fields[self::SCHEMA_CUSTOM]    = ['type' => FieldProcessor::TYPE_JSON];
+		$fields[self::SCHEMA_RICH]      = ['type' => FieldProcessor::TYPE_JSON];
 
 		/*
 		 * Checkbox and robots-advanced fields are only touched when the SEO form
@@ -290,8 +294,16 @@ class MetaFields
 			$values[self::REDIRECT_URL] = '';
 		}
 
+		if (isset($values[self::SCHEMA_RICH])) {
+			$values[self::SCHEMA_RICH] = RichResults::sanitize((string) $values[self::SCHEMA_RICH], (string) get_post_meta($post_id, self::SCHEMA_RICH, true));
+		}
+
+		/*
+		 * The values are already unslashed; update_post_meta() unslashes again, which
+		 * would strip the backslashes JSON needs (\" and \n) and break the schema fields.
+		 */
 		foreach ($values as $key => $value) {
-			update_post_meta($post_id, $key, $value);
+			update_post_meta($post_id, $key, wp_slash($value));
 		}
 
 		self::store_defaults($post_id);

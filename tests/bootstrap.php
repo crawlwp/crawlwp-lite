@@ -504,6 +504,13 @@ if (!function_exists('sanitize_text_field')) {
 	}
 }
 
+if (!function_exists('wp_timezone')) {
+	function wp_timezone()
+	{
+		return new DateTimeZone('Africa/Lagos');
+	}
+}
+
 if (!function_exists('sanitize_textarea_field')) {
 	function sanitize_textarea_field($str)
 	{
@@ -1414,6 +1421,8 @@ if (!function_exists('get_post_thumbnail_id')) {
 require_once CRAWLWP_TESTS_PLUGIN_DIR . '/src/SEOCore/TitleMeta/Variables.php';
 require_once CRAWLWP_TESTS_PLUGIN_DIR . '/src/SEOCore/Importer/TokenMapper.php';
 require_once CRAWLWP_TESTS_PLUGIN_DIR . '/src/SEOCore/Schema/Graph.php';
+require_once CRAWLWP_TESTS_PLUGIN_DIR . '/src/SEOCore/Schema/RichResults.php';
+require_once CRAWLWP_TESTS_PLUGIN_DIR . '/src/SEOCore/Schema/RichResultTypes.php';
 require_once CRAWLWP_TESTS_PLUGIN_DIR . '/src/SEOCore/InternalLinks/InternalLinksUpsell.php';
 require_once CRAWLWP_TESTS_PLUGIN_DIR . '/src/SEOCore/EmailReports/EmailReportsUpsell.php';
 require_once CRAWLWP_TESTS_PLUGIN_DIR . '/src/SEOCore/MetaBox/MetaFields.php';

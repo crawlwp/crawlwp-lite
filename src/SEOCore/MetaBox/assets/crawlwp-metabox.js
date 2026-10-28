@@ -318,8 +318,8 @@
         var $pre = this.$jsonPre;
         $jsonBtn.on('click', function() {
           var open = $pre.prop('hidden');
-          if (open) self.updateSchemaPreview();
           $pre.prop('hidden', !open);
+          if (open) self.updateSchemaPreview();
           $jsonBtn.text(open ? crawlwpSEO.i18n.hideJsonLd : crawlwpSEO.i18n.showJsonLd);
         });
       }
@@ -329,6 +329,7 @@
       if (this.$schemaHeadline.length) this.$schemaHeadline.on('input', function() { self.updateSchemaPreview(); });
       if (this.$schemaSection.length) this.$schemaSection.on('input', function() { self.updateSchemaPreview(); });
       $('#cwpSchemaCustom').on('input', function() { self.updateSchemaPreview(); });
+      $('#cwpRichValue').on('change', function() { self.updateSchemaPreview(); });
 
       /* image pickers (with dimension validation) */
       this.bindImagePickers();
@@ -524,6 +525,10 @@
       }
       graph.push(main);
 
+      /* The rich result node comes from the server, built like the page output. */
+      var rich = this.richPreview(webpageId);
+      if (rich) graph = graph.concat(rich.nodes || []);
+
       var custom = $.trim($('#cwpSchemaCustom').val() || '');
       if (custom) {
         try {
@@ -533,6 +538,49 @@
       }
 
       this.$jsonPre.text(JSON.stringify({ '@context': 'https://schema.org', '@graph': graph }, null, 2));
+    },
+
+    /* Last server answer for the rich result fields, or null while one is on its way. */
+    richPreview: function(webpageId) {
+      var self  = this;
+      var value = $.trim($('#cwpRichValue').val() || '');
+      var key   = value + '|' + webpageId;
+      var $note = this.$jsonPre.next('.cwp-json-note');
+
+      if (!$note.length) $note = $('<p class="cwp-json-note" style="display:none"></p>').insertAfter(this.$jsonPre);
+
+      if (!value) { $note.hide(); return null; }
+
+      if (this._richKey === key) {
+        var r = this._rich || {};
+        if (r.missing && r.missing.length) {
+          $note.text(this.fmt(crawlwpSEO.i18n.richMissing, r.label, r.missing.join(', '))).show();
+        } else {
+          $note.hide();
+        }
+        return r;
+      }
+
+      /* Only ask the server while the preview is open. */
+      if (this.$jsonPre.prop('hidden')) return null;
+
+      clearTimeout(this._richTimer);
+      this._richTimer = setTimeout(function() {
+        $.post(crawlwpSEO.ajaxUrl, {
+          action: 'crawlwp_rich_result_preview',
+          nonce: crawlwpSEO.richPreviewNonce,
+          post_id: crawlwpSEO.postId,
+          value: value,
+          webpage_id: webpageId
+        }).done(function(res) {
+          if (!res || !res.success) return;
+          self._richKey = key;
+          self._rich = res.data;
+          self.updateSchemaPreview();
+        });
+      }, 400);
+
+      return null;
     },
 
     /* The social image the front end uses: the Facebook image, else the featured image. */

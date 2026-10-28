@@ -737,8 +737,9 @@ class Elementor
 		}
 
 		// Persist verified post meta
+		// update_post_meta() unslashes: slash the clean values so JSON keeps its backslashes.
 		foreach ($values as $meta_key => $meta_val) {
-			update_post_meta($post_id, $meta_key, $meta_val);
+			update_post_meta($post_id, $meta_key, wp_slash($meta_val));
 		}
 
 		// Ensure default values are written for empty keys
