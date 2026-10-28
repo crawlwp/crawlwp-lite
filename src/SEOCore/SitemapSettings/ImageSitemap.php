@@ -33,6 +33,11 @@ class ImageSitemap extends \WP_Sitemaps_Provider
 		/* Only changes to published, public content can change the sitemap. */
 		add_action('transition_post_status', [$this, 'flush_on_status'], 10, 3);
 		add_action('deleted_post', [$this, 'flush_on_delete'], 10, 2);
+
+		/* Images themselves: deleted, edited (title, caption, alt) or replaced by the image editor. */
+		add_action('delete_attachment', [$this, 'flush_on_attachment']);
+		add_action('attachment_updated', [$this, 'flush_on_attachment']);
+		add_filter('update_attached_file', [$this, 'flush_on_file_change'], 10, 2);
 		add_action('crawlwp_sitemap_settings_saved', [$this, 'flush_cache']);
 	}
 
@@ -360,6 +365,39 @@ class ImageSitemap extends \WP_Sitemaps_Provider
 	 *
 	 * @param mixed $post
 	 */
+	/**
+	 * An image was deleted or edited. Only images can be in the sitemap.
+	 *
+	 * @param mixed $attachment_id
+	 */
+	public function flush_on_attachment($attachment_id): void
+	{
+		if (wp_attachment_is_image((int) $attachment_id)) {
+			$this->flush_cache();
+		}
+	}
+
+	/**
+	 * The image editor saved a new file for an existing image (crop, rotate): its
+	 * address changed. A brand-new upload sets its file too, but can't be in the
+	 * sitemap yet, so uploads don't empty the cache.
+	 *
+	 * @param mixed $file
+	 * @param mixed $attachment_id
+	 *
+	 * @return mixed
+	 */
+	public function flush_on_file_change($file, $attachment_id = 0)
+	{
+		$attachment = get_post((int) $attachment_id);
+
+		if ($attachment instanceof \WP_Post && strtotime($attachment->post_date_gmt . ' UTC') < time() - MINUTE_IN_SECONDS && wp_attachment_is_image($attachment)) {
+			$this->flush_cache();
+		}
+
+		return $file;
+	}
+
 	private static function listed_type($post): bool
 	{
 		return $post instanceof \WP_Post
