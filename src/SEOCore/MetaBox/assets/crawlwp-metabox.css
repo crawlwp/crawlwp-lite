@@ -630,6 +630,7 @@
 .cwp-rich-group{margin:6px 0 10px;padding-top:12px;border-top:1px solid var(--cwp-line-soft);font-size:12px;font-weight:600;color:var(--cwp-ink);}
 .cwp-rich-req{margin-left:3px;color:var(--cwp-bad);}
 .cwp-rich-req[hidden]{display:none;}
+.cwp-rich-invalid{font-size:12px;color:var(--cwp-bad);margin:5px 0 0;}
 .cwp-rich-status{display:flex;flex-wrap:wrap;gap:4px 8px;margin:0 0 16px;padding:10px 14px;border-radius:var(--cwp-radius);font-size:13px;}
 .cwp-rich-status.is-ok{background:var(--cwp-good-bg);color:var(--cwp-good);}
 .cwp-rich-status.is-warn{background:var(--cwp-warn-bg);color:var(--cwp-warn);}

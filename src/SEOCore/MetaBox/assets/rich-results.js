@@ -31,8 +31,35 @@
 
     function value(key, field) {
         var v = current()[key] || '';
+        // A number the server won't keep counts as empty, so "Google needs" stays accurate.
+        if (v !== '' && invalid(v, field)) v = '';
         if (v === '' && field.default) v = cfg.defaults[field.default] || '';
         return v;
+    }
+
+    function fill(text, a, b) {
+        return String(text).replace('%1$s', a).replace('%2$s', b).replace('%s', a);
+    }
+
+    /*
+     * Why a number won't be saved, or ''. The server applies the same rules
+     * (RichResults::clean_value()); the inputs are plain text fields because the
+     * browser's own number checks would silently block the editor's Update button
+     * when the Schema tab is hidden.
+     */
+    function invalid(v, field) {
+        v = String(v).trim();
+        if (v === '') return '';
+        if (field.type === 'minutes') return /^\d+$/.test(v) ? '' : i18n.wholeNumber;
+        if (field.type !== 'number') return '';
+        var n = Number(v);
+        if (!/^[+-]?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$/i.test(v) || !isFinite(n)) return i18n.notNumber;
+        var hasMin = field.min !== undefined && field.min !== null, hasMax = field.max !== undefined && field.max !== null;
+        if ((hasMin && n < field.min) || (hasMax && n > field.max)) {
+            if (hasMin && hasMax) return fill(i18n.between, field.min, field.max);
+            return hasMin ? fill(i18n.atLeast, field.min) : fill(i18n.atMost, field.max);
+        }
+        return '';
     }
 
     function isRequired(field, values) {
@@ -85,14 +112,11 @@
             c = el('textarea', { className: 'cwp-textarea', id: id, rows: field.type === 'list' ? '5' : '3' });
             c.value = stored;
         } else {
-            var types = { url: 'url', number: 'number', minutes: 'number', datetime: 'datetime-local', date: 'date' };
+            // Numbers are text inputs: see invalid() for why the browser mustn't check them.
+            var types = { url: 'url', datetime: 'datetime-local', date: 'date' };
             c = el('input', { className: 'cwp-input', id: id, type: types[field.type] || 'text' });
-            if (field.type === 'number') {
-                c.setAttribute('step', 'any');
-                if (field.min !== undefined) c.setAttribute('min', String(field.min));
-                if (field.max !== undefined) c.setAttribute('max', String(field.max));
-            }
-            if (field.type === 'minutes') { c.setAttribute('min', '0'); c.setAttribute('step', '1'); }
+            if (field.type === 'number') c.setAttribute('inputmode', 'decimal');
+            if (field.type === 'minutes') c.setAttribute('inputmode', 'numeric');
             if (field.type === 'currency') { c.setAttribute('maxlength', '3'); c.style.textTransform = 'uppercase'; }
             c.value = stored;
         }
@@ -117,9 +141,13 @@
         star.hidden = !isRequired(field, values);
         label.appendChild(star);
         var wide = field.type === 'textarea' || field.type === 'list';
+        var bad = invalid(current()[key] || '', field);
+        var note = el('p', { className: 'cwp-rich-invalid', 'data-invalid': key, role: 'status', text: bad });
+        note.hidden = !bad;
         return el('div', { className: 'cwp-field' + (wide ? ' cwp-rich-wide' : '') }, [
             el('div', { className: 'cwp-label-row' }, [label]),
             control(key, field),
+            note,
             field.hint ? el('p', { className: 'cwp-hint', text: field.hint }) : null
         ]);
     }
@@ -134,6 +162,11 @@
         Object.keys(type.fields).forEach(function (k) { values[k] = value(k, type.fields[k]); });
         Array.prototype.forEach.call(app.querySelectorAll('[data-req]'), function (star) {
             star.hidden = !isRequired(type.fields[star.getAttribute('data-req')], values);
+        });
+        Array.prototype.forEach.call(app.querySelectorAll('[data-invalid]'), function (note) {
+            var k = note.getAttribute('data-invalid');
+            note.textContent = invalid(current()[k] || '', type.fields[k]);
+            note.hidden = note.textContent === '';
         });
         statusBox.className = 'cwp-rich-status ' + (miss.length ? 'is-warn' : 'is-ok');
         statusBox.innerHTML = '';

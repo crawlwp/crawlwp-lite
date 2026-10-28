@@ -563,6 +563,14 @@ class RichResults
 				'lockedTitle' => __('%s is a Premium type', 'mihdan-index-now'),
 				'upgrade'     => __('Upgrade to Premium', 'mihdan-index-now'),
 				'update'      => __('Update CrawlWP Premium to use it', 'mihdan-index-now'),
+				'notNumber'   => __('Not a number, so it won\'t be saved.', 'mihdan-index-now'),
+				'wholeNumber' => __('Use a whole number of minutes. This won\'t be saved.', 'mihdan-index-now'),
+				/* translators: 1: lowest allowed number, 2: highest allowed number */
+				'between'     => __('Use a number from %1$s to %2$s. This won\'t be saved.', 'mihdan-index-now'),
+				/* translators: %s: lowest allowed number */
+				'atLeast'     => __('Use %s or more. This won\'t be saved.', 'mihdan-index-now'),
+				/* translators: %s: highest allowed number */
+				'atMost'      => __('Use %s or less. This won\'t be saved.', 'mihdan-index-now'),
 			],
 		];
 	}
