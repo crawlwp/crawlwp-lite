@@ -501,6 +501,19 @@ class WPOSA
 		// Combine the defaults with user's arguments.
 		$arg = wp_parse_args($field_array, $defaults);
 
+		/*
+		 * The same section id can appear under more than one header tab (the Google, Bing and
+		 * Yandex sections are on both Index Settings and API Settings), so remember which tab
+		 * this field was added under: the tab of the latest section added with this id.
+		 */
+		$arg['_header_menu'] = '';
+		for ($i = count($this->sections_array) - 1; $i >= 0; $i--) {
+			if (($this->sections_array[$i]['id'] ?? '') === $this->plugin_prefix . '_' . $section) {
+				$arg['_header_menu'] = (string) ($this->sections_array[$i]['header_menu_id'] ?? '');
+				break;
+			}
+		}
+
 		// Each field is an array named against its section.
 		$this->fields_array[$this->plugin_prefix . '_' . $section][] = $arg;
 		// Invalidate the sanitize index so a newly added field is included.
@@ -595,7 +608,8 @@ class WPOSA
 			check_admin_referer($option_page . '-options');
 
 			// Only registered section ids the user may open can be saved through this handler.
-			$section_ids = array_flip(array_column((array) apply_filters('crawlwp_wposa_sections', $this->sections_array, $this->plugin_prefix, ! empty($this->sub_menu_slug) ? $this->sub_menu_slug : $this->plugin_slug), 'id'));
+			$visible_sections = (array) apply_filters('crawlwp_wposa_sections', $this->sections_array, $this->plugin_prefix, ! empty($this->sub_menu_slug) ? $this->sub_menu_slug : $this->plugin_slug);
+			$section_ids      = array_flip(array_column($visible_sections, 'id'));
 
 			foreach ($_POST as $k => $v) {
 
@@ -626,6 +640,7 @@ class WPOSA
 					$posted_data = isset($_POST[$name]) && is_array($_POST[$name]) ? $_POST[$name] : [];
 
 					$submitted_data = apply_filters('wposa_submitted_data', $posted_data, $name, $_POST);
+					$submitted_data = $this->visible_fields_only($name, is_array($submitted_data) ? $submitted_data : [], $visible_sections);
 
 					$value = array_replace($db_options, $this->sanitize_section_data($name, wp_unslash($submitted_data)));
 
@@ -877,6 +892,57 @@ class WPOSA
 	 *
 	 * @return array
 	 */
+	/**
+	 * Drop posted fields that belong to a tab the user can't open.
+	 *
+	 * A section id can be shared by a visible tab and a hidden one (e.g. Index Settings and the
+	 * admin-only API Settings both have "google_webmaster"), so allowing the section id is not
+	 * enough: a user could otherwise post the hidden tab's fields (API keys) with the visible
+	 * tab's nonce. Fields added under a hidden tab are dropped, and so are unregistered keys in
+	 * a section that has any hidden fields.
+	 *
+	 * @param array<string, mixed>              $data
+	 * @param array<int, array<string, mixed>>  $visible_sections Sections after the crawlwp_wposa_sections filter.
+	 *
+	 * @return array<string, mixed>
+	 */
+	public function visible_fields_only(string $section_id, array $data, array $visible_sections): array
+	{
+		$visible_menus = [];
+		foreach ($visible_sections as $section) {
+			if (($section['id'] ?? '') === $section_id) {
+				$visible_menus[(string) ($section['header_menu_id'] ?? '')] = true;
+			}
+		}
+
+		$fields     = [];
+		$has_hidden = false;
+		foreach ($this->fields_array[$section_id] ?? [] as $field) {
+			if (empty($field['id'])) {
+				continue;
+			}
+
+			// Unknown tab (field added before its section): treat as visible, as before.
+			$menu    = (string) ($field['_header_menu'] ?? '');
+			$visible = $menu === '' || isset($visible_menus[$menu]);
+			// A field id registered under several tabs stays allowed if any of them is visible.
+			$fields[$field['id']] = ($fields[$field['id']] ?? false) || $visible;
+			$has_hidden           = $has_hidden || ! $visible;
+		}
+
+		if ( ! $has_hidden) {
+			return $data;
+		}
+
+		foreach (array_keys($data) as $key) {
+			if (empty($fields[$key])) {
+				unset($data[$key]);
+			}
+		}
+
+		return $data;
+	}
+
 	public function sanitize_section_data(string $section_id, $data): array
 	{
 		if ( ! is_array($data)) {

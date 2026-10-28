@@ -181,12 +181,18 @@ class RedirectsSettings
 		/*
 		 * Sending visitors to another site is for administrators, as in the SEO box
 		 * (crawlwp_allow_external_redirects). Other roles given the Redirects
-		 * permission can still save an existing external rule without changing where it goes.
+		 * permission can still re-save an existing external rule, but only unchanged in what it
+		 * matches and where it goes: otherwise a catch-all "from" could send every page off-site.
 		 */
 		if ($data['allow_external'] && ! (bool) apply_filters('crawlwp_allow_external_redirects', current_user_can('manage_options'), 0)) {
-			$existing = $id > 0 ? $this->manager->get($id) : null;
+			$existing  = $id > 0 ? $this->manager->get($id) : null;
+			$unchanged = $existing
+				&& (int) ($existing->allow_external ?? 0) === 1
+				&& (string) $existing->to_url === (string) wp_unslash($data['to_url'])
+				&& (string) $existing->from_url === (string) wp_unslash($data['from_url'])
+				&& (string) $existing->match_type === (string) wp_unslash($data['match_type']);
 
-			if (! $existing || (int) ($existing->allow_external ?? 0) !== 1 || (string) $existing->to_url !== (string) $data['to_url']) {
+			if (! $unchanged) {
 				$data['allow_external'] = 0;
 			}
 		}
