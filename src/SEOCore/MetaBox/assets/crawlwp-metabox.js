@@ -1169,6 +1169,15 @@
     /* Chinese and Japanese characters (written without spaces between words). */
     CJK_CHARS: /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff66-\uff9f]/g,
 
+    /* Share (0-1) of the text's letters in scripts written without spaces between words:
+       Chinese, Japanese, Thai, Lao, Myanmar, Khmer. */
+    unspacedShare: function(text) {
+      text = String(text || '');
+      var letters = text.replace(/[\s\d.,;:!?'"()\[\]{}\-\u2013\u2014\u2026\u3001\u3002\uff01\uff1f\u300c-\u300f\uff08\uff09]/g, '').length;
+      var unspaced = (text.match(/[\u0e00-\u0eff\u1000-\u109f\u1780-\u17ff\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff66-\uff9f]/g) || []).length;
+      return letters ? unspaced / letters : 0;
+    },
+
     /* Number of Chinese and Japanese characters, for messages in those languages. */
     cjkCount: function(text) {
       var cjk = String(text || '').match(this.CJK_CHARS);
@@ -1447,6 +1456,15 @@
         return;
       }
 
+      /* Flesch Reading Ease is an English formula (syllables per word): meaningless for
+         Chinese, Japanese, Thai and other scripts without spaces between words. */
+      if (this.unspacedShare(plainText) > 0.5) {
+        $badge.attr('class', 'cwp-readability-badge');
+        $icon.text('\u2014');
+        $text.text(L.readabilityNoScore);
+        return;
+      }
+
       /* Flesch Reading Ease (approximation) */
       var syllableCount = 0;
       var words = plainText.split(/\s+/).filter(function(w) { return w.length > 0; });
@@ -1698,7 +1716,12 @@
       this.refreshLiveTokens();
       var plainText = this.stripTags(html).toLowerCase();
       var wordCount = this.getWordCount(plainText);
-      var sentences = plainText.split(/[.!?]+/).filter(function(s) { return $.trim(s).length > 5; });
+      /* Also split on Chinese/Japanese full stops; a short CJK sentence has few characters. */
+      var self0 = this;
+      var sentences = plainText.split(/[.!?\u3002\uff01\uff1f]+/).filter(function(s) {
+        s = $.trim(s);
+        return s.length > 5 || self0.cjkCount(s) >= 3;
+      });
       this.updateReadability(plainText, wordCount, sentences);
 
       if (keywords.length === 0) {
@@ -1737,8 +1760,11 @@
       var $paragraphs = $tmp.find('p');
       var firstParaText = $paragraphs.length > 0 ? ($paragraphs.first().text() || '').toLowerCase() : '';
       var avgSentenceLen = sentences.length > 0 ? Math.round(wordCount / sentences.length) : 0;
+      /* Mostly Chinese/Japanese: sentence length is reported in characters (2 per word, as Yoast). */
+      var cjkText = this.cjkCount(plainText) > wordCount;
 
       var sharedData = {
+        cjkText: cjkText,
         plainText: plainText,
         wordCount: wordCount,
         sentences: sentences,
@@ -1997,12 +2023,13 @@
 
       /* 14. Readability: avg sentence length */
       if (d.sentences.length >= 3) {
+        var lenLabel = d.cjkText ? this.fmt(L.readabilityChars, d.avgSentenceLen * 2) : this.fmt(L.readability, d.avgSentenceLen);
         if (d.avgSentenceLen <= 20) {
-          addCheck('good', this.fmt(L.readability, d.avgSentenceLen), L.readabilityGoodD);
+          addCheck('good', lenLabel, L.readabilityGoodD);
         } else if (d.avgSentenceLen <= 25) {
-          addCheck('warn', this.fmt(L.readability, d.avgSentenceLen), L.readabilityWarnD);
+          addCheck('warn', lenLabel, L.readabilityWarnD);
         } else {
-          addCheck('bad', this.fmt(L.readability, d.avgSentenceLen), L.readabilityBadD);
+          addCheck('bad', lenLabel, d.cjkText ? L.readabilityBadCharsD : L.readabilityBadD);
         }
       }
 

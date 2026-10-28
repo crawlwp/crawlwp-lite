@@ -880,9 +880,12 @@ class Assets
 			/* Analysis: 15 – Readability */
 			/* translators: %s: average sentence length */
 			'readability'      => __('Average sentence length is %s words.', 'mihdan-index-now'),
+			/* translators: %s: number of characters (Chinese and Japanese text) */
+			'readabilityChars' => __('Average sentence length is %s characters.', 'mihdan-index-now'),
 			'readabilityGoodD' => __('Easy to read.', 'mihdan-index-now'),
 			'readabilityWarnD' => __('Some sentences may be hard to follow. Try breaking them up.', 'mihdan-index-now'),
 			'readabilityBadD'  => __('Sentences are too long. Aim for under 20 words on average.', 'mihdan-index-now'),
+			'readabilityBadCharsD' => __('Sentences are too long. Aim for under 40 characters on average.', 'mihdan-index-now'),
 
 			/* Analysis: 16 – Heading hierarchy */
 			/* translators: %s: number of H2 tags */
@@ -919,6 +922,7 @@ class Assets
 			'readabilityOk'         => __('Fairly readable', 'mihdan-index-now'),
 			'readabilityPoor'       => __('Needs improvement', 'mihdan-index-now'),
 			'readabilityNA'         => __('Readability analysis will run when content is available.', 'mihdan-index-now'),
+			'readabilityNoScore'    => __('No reading-ease score: the formula only works for languages written with spaces between words.', 'mihdan-index-now'),
 			/* translators: %1$s: Flesch score, %2$s: avg sentence length, %3$s: percentage of long sentences */
 			'readabilityDetail'     => __('Flesch score %1$s · avg. sentence %2$s words · %3$s% long sentences', 'mihdan-index-now'),
 
