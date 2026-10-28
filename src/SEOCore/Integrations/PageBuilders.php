@@ -15,7 +15,7 @@ namespace Mihdan\IndexNow\SEOCore\Integrations;
  */
 class PageBuilders
 {
-	/** The page's plain text, remembered until the post changes: ['modified' => post_modified_gmt, 'text' => …]. */
+	/** The page's plain text, remembered until the post changes: ['key' => see text_key(), 'text' => …]. Never written in previews. */
 	public const TEXT_META = '_crawlwp_builder_text';
 
 	/** Shortcode content beyond this is not scanned (and very long builder HTML is not sent to the editor script). */
@@ -69,10 +69,16 @@ class PageBuilders
 		 * The description runs on page views, but only needs the first words:
 		 * build the text once per change of the post and keep it (a page's
 		 * builder HTML can take tens of milliseconds and a query per image).
+		 *
+		 * Not in previews, autosaves or revisions: a preview swaps in the
+		 * unsaved autosave content while keeping the live post's date, and its
+		 * text must never be stored for the public page.
 		 */
-		$saved = get_post_meta($post->ID, self::TEXT_META, true);
+		$cacheable = ! self::is_preview_like($post);
+		$key       = $cacheable ? self::text_key($post) : '';
+		$saved     = $cacheable ? get_post_meta($post->ID, self::TEXT_META, true) : null;
 
-		if (is_array($saved) && ($saved['modified'] ?? '') === $post->post_modified_gmt && isset($saved['text']) && is_string($saved['text'])) {
+		if (is_array($saved) && ($saved['key'] ?? '') === $key && isset($saved['text']) && is_string($saved['text'])) {
 			return $saved['text'];
 		}
 
@@ -89,11 +95,40 @@ class PageBuilders
 
 		$text = wp_trim_words(wp_strip_all_tags(strip_shortcodes($text)), 100, '');
 
-		if (! wp_is_post_revision($post) && $post->post_status !== 'auto-draft') {
-			update_post_meta($post->ID, self::TEXT_META, ['modified' => $post->post_modified_gmt, 'text' => $text]);
+		if ($cacheable) {
+			update_post_meta($post->ID, self::TEXT_META, ['key' => $key, 'text' => $text]);
 		}
 
 		return $text;
+	}
+
+	/**
+	 * Whether this is a preview, autosave or revision, whose content isn't the published page's.
+	 */
+	private static function is_preview_like(\WP_Post $post): bool
+	{
+		return is_preview()
+			|| (defined('DOING_AUTOSAVE') && DOING_AUTOSAVE)
+			|| wp_is_post_revision($post)
+			|| wp_is_post_autosave($post)
+			|| $post->post_status === 'auto-draft';
+	}
+
+	/**
+	 * What the remembered text depends on: the post's date and its content
+	 * (post_content for Divi and Avada, the Bricks elements for Bricks), so an
+	 * edit that keeps the date (a filter, an import, a direct meta write) still
+	 * rebuilds it.
+	 */
+	private static function text_key(\WP_Post $post): string
+	{
+		$parts = [$post->post_modified_gmt, md5($post->post_content)];
+
+		if (get_post_meta($post->ID, '_bricks_editor_mode', true) === 'bricks') {
+			$parts[] = md5(maybe_serialize(get_post_meta($post->ID, self::BRICKS_CONTENT, true)));
+		}
+
+		return md5(implode('|', $parts));
 	}
 
 	/**
