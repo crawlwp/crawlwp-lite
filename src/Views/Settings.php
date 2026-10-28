@@ -414,7 +414,8 @@ class Settings
 				)
 			);
 
-			if ( ! $GLOBALS['CRAWLWP_BING_WEBMASTER']->is_connected()) {
+			// Only warn while this engine is switched on: sites that index through other engines don't need it.
+			if ($GLOBALS['CRAWLWP_BING_WEBMASTER']->is_enabled() && ! $GLOBALS['CRAWLWP_BING_WEBMASTER']->is_connected()) {
 				$this->wposa->add_field(
 					'bing_webmaster',
 					array(
@@ -445,7 +446,8 @@ class Settings
 				)
 			);
 
-			if ( ! $GLOBALS['CRAWLWP_GOOGLE_WEBMASTER']->is_connected()) {
+			// Only warn while this engine is switched on: sites that index through other engines don't need it.
+			if ($GLOBALS['CRAWLWP_GOOGLE_WEBMASTER']->is_enabled() && ! $GLOBALS['CRAWLWP_GOOGLE_WEBMASTER']->is_connected()) {
 				$this->wposa->add_field(
 					'google_webmaster',
 					array(
@@ -476,7 +478,8 @@ class Settings
 				)
 			);
 
-			if ( ! $GLOBALS['CRAWLWP_YANDEX_WEBMASTER']->is_connected()) {
+			// Only warn while this engine is switched on: sites that index through other engines don't need it.
+			if ($GLOBALS['CRAWLWP_YANDEX_WEBMASTER']->is_enabled() && ! $GLOBALS['CRAWLWP_YANDEX_WEBMASTER']->is_connected()) {
 				$this->wposa->add_field(
 					'yandex_webmaster',
 					array(

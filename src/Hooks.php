@@ -25,6 +25,45 @@ class Hooks {
 	public const DELAYED_TERM_EVENT = 'crawlwp_delayed_term_ping';
 
 	/**
+	 * Single event sending queued submissions in the background, so saving a post,
+	 * a term or a comment never waits for search engines to answer.
+	 */
+	public const BACKGROUND_EVENT = 'crawlwp_background_submission';
+
+	/**
+	 * Submissions waiting for the background event (not autoloaded). One queue and
+	 * one event, however many posts change: a bulk trash or an import of thousands
+	 * of posts doesn't fill the cron option with an event per post.
+	 */
+	public const QUEUE_OPTION = 'crawlwp_submission_queue';
+
+	/** Held (a few milliseconds) while the queue is read and written, so writers can't overwrite each other. */
+	public const QUEUE_LOCK = 'crawlwp_submission_queue_lock';
+
+	/**
+	 * Submissions sent per background run; the rest wait for the next run.
+	 */
+	private const BATCH_SIZE = 200;
+
+	/**
+	 * Submission actions that may be sent in the background.
+	 */
+	private const BACKGROUND_ACTIONS = [
+		'crawlwp/post_added',
+		'crawlwp/post_updated',
+		'crawlwp/post_deleted',
+		'crawlwp/comment_updated',
+		'crawlwp/term_updated',
+	];
+
+	/**
+	 * Whether a background submission was queued in this request.
+	 *
+	 * @var bool
+	 */
+	private $spawn_cron = false;
+
+	/**
 	 * Hooks init.
 	 *
 	 * @return void
@@ -39,6 +78,8 @@ class Hooks {
 		add_action( 'crawlwp/index_pinged', [ $this, 'record_submission' ], 10, 2 );
 		add_action( self::DELAYED_POST_EVENT, [ $this, 'delayed_post_ping' ] );
 		add_action( self::DELAYED_TERM_EVENT, [ $this, 'delayed_term_ping' ], 10, 2 );
+		add_action( self::BACKGROUND_EVENT, [ $this, 'run_queue' ], 10, 2 );
+		add_action( 'shutdown', [ $this, 'maybe_spawn_cron' ] );
 		add_action( 'admin_notices', [ Indexing::class, 'pause_admin_notice' ] );
 	}
 
@@ -102,7 +143,8 @@ class Hooks {
 			return;
 		}
 
-		do_action( 'crawlwp/comment_updated', $post->ID, $comment );
+		// queued per post, not per comment: many comments before the queue runs still mean one ping.
+		$this->submit( 'crawlwp/comment_updated', [ $post->ID ] );
 	}
 
 	/**
@@ -147,7 +189,7 @@ class Hooks {
 			return;
 		}
 
-		do_action( $is_update ? 'crawlwp/post_updated' : 'crawlwp/post_added', $post->ID, $post );
+		$this->submit( $is_update ? 'crawlwp/post_updated' : 'crawlwp/post_added', [ $post->ID ] );
 	}
 
 	/**
@@ -315,7 +357,7 @@ class Hooks {
 			return;
 		}
 
-		do_action( 'crawlwp/post_deleted', $post->ID, $permalink );
+		$this->submit( 'crawlwp/post_deleted', [ $post->ID, $permalink ] );
 	}
 
 	/**
@@ -373,6 +415,313 @@ class Hooks {
 			return;
 		}
 
-		do_action( 'crawlwp/term_updated', $term_id, $taxonomy );
+		$this->submit( 'crawlwp/term_updated', [ $term_id, $taxonomy ] );
+	}
+
+	/**
+	 * Whether submissions are sent in the background. Requests that nobody waits
+	 * on (WP-Cron, WP-CLI) send them straight away. So do sites with WP-Cron
+	 * disabled, since nothing may ever run the queue there; a site with a server
+	 * cron can opt in with the filter.
+	 */
+	private function in_background(): bool {
+
+		if ( wp_doing_cron() || ( defined( 'WP_CLI' ) && WP_CLI ) ) {
+			return false;
+		}
+
+		/**
+		 * Filter whether pings are sent in the background or while the post,
+		 * term or comment is being saved.
+		 *
+		 * @param bool $in_background Default true, false when DISABLE_WP_CRON is set.
+		 */
+		return (bool) apply_filters( 'crawlwp/submit_in_background', ! ( defined( 'DISABLE_WP_CRON' ) && DISABLE_WP_CRON ) );
+	}
+
+	/**
+	 * Fire a submission action now, or add it to the background queue.
+	 *
+	 * Only IDs and strings are queued; objects are loaded again when the queue
+	 * runs, so the submission uses the post as it is then.
+	 *
+	 * @param string $action Submission action.
+	 * @param array  $args   Action arguments (IDs and strings).
+	 *
+	 * @return void
+	 */
+	private function submit( string $action, array $args ): void {
+
+		if ( ! $this->in_background() ) {
+			$this->background_submission( $action, $args );
+
+			return;
+		}
+
+		if ( ! self::lock_queue() ) {
+			// The queue stayed locked (a stuck request): send this one now rather than lose it.
+			$this->background_submission( $action, $args );
+
+			return;
+		}
+
+		try {
+			$queue = self::read_queue();
+			$key   = self::queue_key( $action, $args );
+
+			/*
+			 * One entry per post: saved twice, or saved and then commented on, before the
+			 * queue runs still means one ping. "Added" wins over "updated", which wins over
+			 * a comment, so the post is announced the way it first changed.
+			 */
+			if ( ! isset( $queue[ $key ] ) || self::action_rank( $action ) > self::action_rank( (string) $queue[ $key ][0] ) ) {
+				$queue[ $key ] = [ $action, $args ];
+			}
+
+			update_option( self::QUEUE_OPTION, $queue, false );
+		} finally {
+			self::unlock_queue();
+		}
+
+		if ( wp_next_scheduled( self::BACKGROUND_EVENT ) ) {
+			return;
+		}
+
+		if ( wp_schedule_single_event( time(), self::BACKGROUND_EVENT ) ) {
+			$this->spawn_cron = true;
+		} else {
+			// Could not schedule the queue: send it now rather than lose it.
+			$this->run_queue();
+		}
+	}
+
+	/**
+	 * The queue as stored now, not this request's cached copy of it.
+	 *
+	 * @return array<string, array>
+	 */
+	public static function read_queue(): array {
+
+		wp_cache_delete( self::QUEUE_OPTION, 'options' );
+
+		$missing = wp_cache_get( 'notoptions', 'options' );
+
+		if ( is_array( $missing ) && isset( $missing[ self::QUEUE_OPTION ] ) ) {
+			unset( $missing[ self::QUEUE_OPTION ] );
+			wp_cache_set( 'notoptions', $missing, 'options' );
+		}
+
+		$queue = get_option( self::QUEUE_OPTION, [] );
+
+		return is_array( $queue ) ? $queue : [];
+	}
+
+	/**
+	 * Take the queue lock. add_option() is atomic: only one request can create it. Waits up
+	 * to about two seconds; a lock older than 30 seconds belongs to a request that died.
+	 */
+	public static function lock_queue(): bool {
+
+		for ( $i = 0; $i < 40; $i++ ) {
+			if ( add_option( self::QUEUE_LOCK, time(), '', false ) ) {
+				return true;
+			}
+
+			wp_cache_delete( self::QUEUE_LOCK, 'options' );
+
+			if ( (int) get_option( self::QUEUE_LOCK, 0 ) < time() - 30 ) {
+				delete_option( self::QUEUE_LOCK );
+				continue;
+			}
+
+			usleep( 50000 );
+		}
+
+		return false;
+	}
+
+	public static function unlock_queue(): void {
+
+		delete_option( self::QUEUE_LOCK );
+	}
+
+	/**
+	 * Queue key: one per post, term or removed URL.
+	 */
+	private static function queue_key( string $action, array $args ): string {
+
+		switch ( $action ) {
+			case 'crawlwp/post_added':
+			case 'crawlwp/post_updated':
+			case 'crawlwp/comment_updated':
+				return 'post:' . (int) ( $args[0] ?? 0 );
+
+			case 'crawlwp/post_deleted':
+				return 'deleted:' . (int) ( $args[0] ?? 0 );
+
+			default:
+				return 'term:' . (int) ( $args[0] ?? 0 ) . ':' . (string) ( $args[1] ?? '' );
+		}
+	}
+
+	private static function action_rank( string $action ): int {
+
+		$ranks = [
+			'crawlwp/comment_updated' => 1,
+			'crawlwp/post_updated'    => 2,
+			'crawlwp/post_added'      => 3,
+		];
+
+		return $ranks[ $action ] ?? 0;
+	}
+
+	/**
+	 * Send queued submissions: new and updated content first, removals last, so a
+	 * mass trash can't use up a search engine's quota before new posts are sent.
+	 *
+	 * IndexNow engines collect the URLs between crawlwp/submission_batch_start and
+	 * crawlwp/submission_batch_end and send them in one request (see IndexNowAbstract).
+	 *
+	 * Also accepts the action and arguments of events queued one by one by earlier
+	 * versions, so those still go out after an update.
+	 *
+	 * @param string|null $action Legacy single event: submission action.
+	 * @param array|null  $args   Legacy single event: its arguments.
+	 *
+	 * @return void
+	 */
+	public function run_queue( $action = null, $args = null ): void {
+
+		if ( is_string( $action ) && $action !== '' ) {
+			$this->background_submission( $action, (array) $args );
+
+			return;
+		}
+
+		if ( ! self::lock_queue() ) {
+			// Another request holds the queue: try again shortly.
+			if ( ! wp_next_scheduled( self::BACKGROUND_EVENT ) ) {
+				wp_schedule_single_event( time() + MINUTE_IN_SECONDS, self::BACKGROUND_EVENT );
+			}
+
+			return;
+		}
+
+		try {
+			// Claimed under the lock from what is stored now, so an overlapping run (or a request
+			// holding an old copy) can't send the same items again or drop new ones.
+			$queue = self::read_queue();
+
+			if ( $queue === [] ) {
+				delete_option( self::QUEUE_OPTION );
+
+				return;
+			}
+
+			uasort(
+				$queue,
+				static function ( $a, $b ) {
+					return ( (string) $a[0] === 'crawlwp/post_deleted' ) <=> ( (string) $b[0] === 'crawlwp/post_deleted' );
+				}
+			);
+
+			$batch = array_slice( $queue, 0, self::BATCH_SIZE, true );
+			$rest  = array_diff_key( $queue, $batch );
+
+			if ( $rest ) {
+				update_option( self::QUEUE_OPTION, $rest, false );
+
+				if ( ! wp_next_scheduled( self::BACKGROUND_EVENT ) ) {
+					wp_schedule_single_event( time() + MINUTE_IN_SECONDS, self::BACKGROUND_EVENT );
+				}
+			} else {
+				delete_option( self::QUEUE_OPTION );
+			}
+		} finally {
+			self::unlock_queue();
+		}
+
+		do_action( 'crawlwp/submission_batch_start' );
+
+		try {
+			foreach ( $batch as $item ) {
+				if ( is_array( $item ) && isset( $item[0] ) ) {
+					$this->background_submission( (string) $item[0], (array) ( $item[1] ?? [] ) );
+				}
+			}
+		} finally {
+			do_action( 'crawlwp/submission_batch_end' );
+		}
+	}
+
+	/**
+	 * Start WP-Cron at the end of the request so queued submissions go out within
+	 * seconds. spawn_cron() does not wait for it. When the loopback request is
+	 * blocked, the next WP-Cron run (any page view, or the server cron) sends them.
+	 *
+	 * Skipped with ALTERNATE_WP_CRON: there spawn_cron() redirects and runs cron in
+	 * the current request, which can't be done once the response has been sent.
+	 *
+	 * @return void
+	 */
+	public function maybe_spawn_cron(): void {
+
+		if (
+			$this->spawn_cron
+			&& ! ( defined( 'DISABLE_WP_CRON' ) && DISABLE_WP_CRON )
+			&& ! ( defined( 'ALTERNATE_WP_CRON' ) && ALTERNATE_WP_CRON )
+		) {
+			$this->spawn_cron = false;
+			spawn_cron();
+		}
+	}
+
+	/**
+	 * Send a submission: fire its action with the current post, term or comment.
+	 *
+	 * @param string $action Submission action.
+	 * @param array  $args   Queued arguments.
+	 *
+	 * @return void
+	 */
+	public function background_submission( $action, $args ): void {
+
+		$action = (string) $action;
+		$args   = array_values( (array) $args );
+
+		if ( ! in_array( $action, self::BACKGROUND_ACTIONS, true ) ) {
+			return;
+		}
+
+		switch ( $action ) {
+			case 'crawlwp/post_added':
+			case 'crawlwp/post_updated':
+				$post = get_post( (int) ( $args[0] ?? 0 ) );
+
+				// Re-checked: the post may have been unpublished or set to noindex since.
+				if ( $post instanceof WP_Post && Indexing::get_post_skip_reason( $post ) === '' ) {
+					do_action( $action, $post->ID, $post );
+				}
+				break;
+
+			case 'crawlwp/post_deleted':
+				do_action( $action, (int) ( $args[0] ?? 0 ), (string) ( $args[1] ?? '' ) );
+				break;
+
+			case 'crawlwp/comment_updated':
+				$post = get_post( (int) ( $args[0] ?? 0 ) );
+
+				// the comment was approved when queued; the post is re-checked as it may have changed since.
+				if ( $post instanceof WP_Post && Indexing::get_post_skip_reason( $post ) === '' ) {
+					do_action( $action, $post->ID, null );
+				}
+				break;
+
+			case 'crawlwp/term_updated':
+				if ( Indexing::get_term_skip_reason( (int) ( $args[0] ?? 0 ), (string) ( $args[1] ?? '' ) ) === '' ) {
+					do_action( $action, (int) $args[0], (string) $args[1] );
+				}
+				break;
+		}
 	}
 }
