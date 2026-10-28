@@ -127,6 +127,7 @@ class SlimSEO extends Source
 			$ok = $manager->insert([
 				'from_url'            => $from,
 				'to_url'              => (string) ($row['to'] ?? $row['to_url'] ?? ''),
+				'allow_external'      => self::allow_external_for($manager, (string) ($row['to'] ?? $row['to_url'] ?? '')) ? 1 : 0, // already live in SlimSEO, so outside destinations keep working
 				'redirect_type'       => in_array($type, [301, 302, 307, 410, 451], true) ? $type : 301,
 				'match_type'          => $match,
 				'note'                => __('Imported from Slim SEO', 'mihdan-index-now'),

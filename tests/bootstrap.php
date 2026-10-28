@@ -1428,6 +1428,8 @@ require_once CRAWLWP_TESTS_PLUGIN_DIR . '/src/SEOCore/MetaBox/FieldProcessor.php
 require_once CRAWLWP_TESTS_PLUGIN_DIR . '/src/SEOCore/MetaBox/SeoSignals.php';
 require_once CRAWLWP_TESTS_PLUGIN_DIR . '/src/SEOCore/MetaBox/Assets.php';
 require_once CRAWLWP_TESTS_PLUGIN_DIR . '/src/SEOCore/Integrations/Elementor.php';
+require_once CRAWLWP_TESTS_PLUGIN_DIR . '/src/SEOCore/Importer/Source.php';
+require_once CRAWLWP_TESTS_PLUGIN_DIR . '/src/SEOCore/Importer/Sources/Redirection.php';
 
 if (! class_exists('WC_Product')) {
 	class WC_Product {
