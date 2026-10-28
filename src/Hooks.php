@@ -37,6 +37,9 @@ class Hooks {
 	 */
 	public const QUEUE_OPTION = 'crawlwp_submission_queue';
 
+	/** Held (a few milliseconds) while the queue is read and written, so writers can't overwrite each other. */
+	public const QUEUE_LOCK = 'crawlwp_submission_queue_lock';
+
 	/**
 	 * Submissions sent per background run; the rest wait for the next run.
 	 */
@@ -455,20 +458,30 @@ class Hooks {
 			return;
 		}
 
-		$queue = get_option( self::QUEUE_OPTION, [] );
-		$queue = is_array( $queue ) ? $queue : [];
-		$key   = self::queue_key( $action, $args );
+		if ( ! self::lock_queue() ) {
+			// The queue stayed locked (a stuck request): send this one now rather than lose it.
+			$this->background_submission( $action, $args );
 
-		/*
-		 * One entry per post: saved twice, or saved and then commented on, before the
-		 * queue runs still means one ping. "Added" wins over "updated", which wins over
-		 * a comment, so the post is announced the way it first changed.
-		 */
-		if ( ! isset( $queue[ $key ] ) || self::action_rank( $action ) > self::action_rank( (string) $queue[ $key ][0] ) ) {
-			$queue[ $key ] = [ $action, $args ];
+			return;
 		}
 
-		update_option( self::QUEUE_OPTION, $queue, false );
+		try {
+			$queue = self::read_queue();
+			$key   = self::queue_key( $action, $args );
+
+			/*
+			 * One entry per post: saved twice, or saved and then commented on, before the
+			 * queue runs still means one ping. "Added" wins over "updated", which wins over
+			 * a comment, so the post is announced the way it first changed.
+			 */
+			if ( ! isset( $queue[ $key ] ) || self::action_rank( $action ) > self::action_rank( (string) $queue[ $key ][0] ) ) {
+				$queue[ $key ] = [ $action, $args ];
+			}
+
+			update_option( self::QUEUE_OPTION, $queue, false );
+		} finally {
+			self::unlock_queue();
+		}
 
 		if ( wp_next_scheduled( self::BACKGROUND_EVENT ) ) {
 			return;
@@ -480,6 +493,56 @@ class Hooks {
 			// Could not schedule the queue: send it now rather than lose it.
 			$this->run_queue();
 		}
+	}
+
+	/**
+	 * The queue as stored now, not this request's cached copy of it.
+	 *
+	 * @return array<string, array>
+	 */
+	public static function read_queue(): array {
+
+		wp_cache_delete( self::QUEUE_OPTION, 'options' );
+
+		$missing = wp_cache_get( 'notoptions', 'options' );
+
+		if ( is_array( $missing ) && isset( $missing[ self::QUEUE_OPTION ] ) ) {
+			unset( $missing[ self::QUEUE_OPTION ] );
+			wp_cache_set( 'notoptions', $missing, 'options' );
+		}
+
+		$queue = get_option( self::QUEUE_OPTION, [] );
+
+		return is_array( $queue ) ? $queue : [];
+	}
+
+	/**
+	 * Take the queue lock. add_option() is atomic: only one request can create it. Waits up
+	 * to about two seconds; a lock older than 30 seconds belongs to a request that died.
+	 */
+	public static function lock_queue(): bool {
+
+		for ( $i = 0; $i < 40; $i++ ) {
+			if ( add_option( self::QUEUE_LOCK, time(), '', false ) ) {
+				return true;
+			}
+
+			wp_cache_delete( self::QUEUE_LOCK, 'options' );
+
+			if ( (int) get_option( self::QUEUE_LOCK, 0 ) < time() - 30 ) {
+				delete_option( self::QUEUE_LOCK );
+				continue;
+			}
+
+			usleep( 50000 );
+		}
+
+		return false;
+	}
+
+	public static function unlock_queue(): void {
+
+		delete_option( self::QUEUE_LOCK );
 	}
 
 	/**
@@ -535,33 +598,47 @@ class Hooks {
 			return;
 		}
 
-		$queue = get_option( self::QUEUE_OPTION, [] );
-		$queue = is_array( $queue ) ? $queue : [];
-
-		if ( $queue === [] ) {
-			delete_option( self::QUEUE_OPTION );
+		if ( ! self::lock_queue() ) {
+			// Another request holds the queue: try again shortly.
+			if ( ! wp_next_scheduled( self::BACKGROUND_EVENT ) ) {
+				wp_schedule_single_event( time() + MINUTE_IN_SECONDS, self::BACKGROUND_EVENT );
+			}
 
 			return;
 		}
 
-		uasort(
-			$queue,
-			static function ( $a, $b ) {
-				return ( (string) $a[0] === 'crawlwp/post_deleted' ) <=> ( (string) $b[0] === 'crawlwp/post_deleted' );
+		try {
+			// Claimed under the lock from what is stored now, so an overlapping run (or a request
+			// holding an old copy) can't send the same items again or drop new ones.
+			$queue = self::read_queue();
+
+			if ( $queue === [] ) {
+				delete_option( self::QUEUE_OPTION );
+
+				return;
 			}
-		);
 
-		$batch = array_slice( $queue, 0, self::BATCH_SIZE, true );
+			uasort(
+				$queue,
+				static function ( $a, $b ) {
+					return ( (string) $a[0] === 'crawlwp/post_deleted' ) <=> ( (string) $b[0] === 'crawlwp/post_deleted' );
+				}
+			);
 
-		// Claimed before sending, so an overlapping run can't send the same items again.
-		$current = get_option( self::QUEUE_OPTION, [] );
-		$rest    = array_diff_key( is_array( $current ) ? $current : [], $batch );
+			$batch = array_slice( $queue, 0, self::BATCH_SIZE, true );
+			$rest  = array_diff_key( $queue, $batch );
 
-		if ( $rest ) {
-			update_option( self::QUEUE_OPTION, $rest, false );
-			wp_schedule_single_event( time() + MINUTE_IN_SECONDS, self::BACKGROUND_EVENT );
-		} else {
-			delete_option( self::QUEUE_OPTION );
+			if ( $rest ) {
+				update_option( self::QUEUE_OPTION, $rest, false );
+
+				if ( ! wp_next_scheduled( self::BACKGROUND_EVENT ) ) {
+					wp_schedule_single_event( time() + MINUTE_IN_SECONDS, self::BACKGROUND_EVENT );
+				}
+			} else {
+				delete_option( self::QUEUE_OPTION );
+			}
+		} finally {
+			self::unlock_queue();
 		}
 
 		do_action( 'crawlwp/submission_batch_start' );

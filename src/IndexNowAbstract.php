@@ -98,6 +98,37 @@ abstract class IndexNowAbstract implements SearchEngineInterface
 		$batch       = (array) $this->batch;
 		$this->batch = null;
 
+		/*
+		 * IndexNow rejects a whole request when one URL isn't on the key's host (sites with a
+		 * domain per language, for example), so those are left out of the batch and logged.
+		 */
+		$host    = strtolower((string) $this->get_host());
+		$skipped = [];
+
+		$batch = array_values(array_filter($batch, static function ($item) use ($host, &$skipped) {
+			$url_host = strtolower((string) wp_parse_url((string) $item[0], PHP_URL_HOST));
+
+			if ($url_host === '' || $url_host === $host) {
+				return true;
+			}
+
+			$skipped[] = (string) $item[0];
+
+			return false;
+		}));
+
+		if ($skipped) {
+			$this->logger->error(
+				sprintf(
+					/* translators: 1: host, 2: list of URLs */
+					__('Not sent to IndexNow: these URLs are not on %1$s, the site the IndexNow key belongs to: %2$s', 'mihdan-index-now'),
+					$host,
+					implode(', ', array_map([Indexing::class, 'url_link'], $skipped))
+				),
+				['status_code' => 0, 'search_engine' => $this->get_current_search_engine()]
+			);
+		}
+
 		foreach (array_chunk($batch, self::BATCH_URLS) as $chunk) {
 			if ( ! $this->push(array_values(array_unique(array_column($chunk, 0))))) {
 				continue;
