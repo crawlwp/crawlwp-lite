@@ -27,6 +27,7 @@ use Mihdan\IndexNow\SEOCore\Redirects\Monitor404;
 use Mihdan\IndexNow\SEOCore\BulkEditor\BulkEditorSettings;
 use Mihdan\IndexNow\SEOCore\Integrations\WooCommerce;
 use Mihdan\IndexNow\SEOCore\Integrations\Elementor;
+use Mihdan\IndexNow\SEOCore\Integrations\Jetpack;
 use Mihdan\IndexNow\SEOCore\FeatureGate\FeatureGate;
 use Mihdan\IndexNow\SEOCore\Wizard\Wizard;
 use Mihdan\IndexNow\SEOCore\Importer\ImporterSettings;
@@ -71,6 +72,7 @@ class SEOCoreInit
 		FrontendOutput::class,
 		Sitemap::class,
 		WooCommerce::class,
+		Jetpack::class,
 	];
 
 	/**
