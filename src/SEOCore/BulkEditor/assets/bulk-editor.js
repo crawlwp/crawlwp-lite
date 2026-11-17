@@ -67,8 +67,9 @@
 		bindAI();
 		loadTable();
 
+		// Every Advanced section is on one page: count the images only once this one is opened.
 		if ($('#cwp-bulk-missing-alt').length) {
-			refreshMissingCount();
+			whenShown(refreshMissingCount);
 		}
 	});
 
@@ -513,6 +514,20 @@
 	function updateMissingBadge(count) {
 		var $badge = $('#cwp-bulk-missing-alt');
 		$badge.text(fmt(i18n.missingAlt || '%s missing', [Number(count).toLocaleString()])).toggle(count > 0);
+	}
+
+	function whenShown(callback) {
+		if ($wrap.is(':visible')) {
+			callback();
+			return;
+		}
+
+		var timer = window.setInterval(function () {
+			if ($wrap.is(':visible')) {
+				window.clearInterval(timer);
+				callback();
+			}
+		}, 500);
 	}
 
 	function refreshMissingCount() {

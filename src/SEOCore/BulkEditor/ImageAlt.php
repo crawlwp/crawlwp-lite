@@ -16,6 +16,33 @@ class ImageAlt
 	public function __construct()
 	{
 		add_action('wp_ajax_crawlwp_bulk_editor_images', [$this, 'ajax_list']);
+
+		/* The missing-alt count is cached: forget it when alt text or the set of images changes. */
+		foreach (['added_post_meta', 'updated_post_meta', 'deleted_post_meta'] as $hook) {
+			add_action($hook, [__CLASS__, 'forget_count_on_meta'], 10, 3);
+		}
+		add_action('add_attachment', [__CLASS__, 'forget_count']);
+		add_action('delete_attachment', [__CLASS__, 'forget_count']);
+	}
+
+	/** Cached missing-alt counts: one entry per scope (everyone's images, or one user's uploads). */
+	const COUNT_TRANSIENT = 'crawlwp_missing_alt_counts';
+
+	/**
+	 * @param int|int[] $meta_id
+	 * @param int       $object_id
+	 * @param string    $meta_key
+	 */
+	public static function forget_count_on_meta($meta_id, $object_id, $meta_key): void
+	{
+		if ($meta_key === self::META_KEY) {
+			self::forget_count();
+		}
+	}
+
+	public static function forget_count(): void
+	{
+		delete_transient(self::COUNT_TRANSIENT);
 	}
 
 	/**
@@ -62,9 +89,26 @@ class ImageAlt
 	 */
 	public static function count_missing(): int
 	{
+		/* The same scope query_args() applies: all images, or only the user's own uploads. */
+		$scope  = current_user_can('edit_others_posts') ? 'all' : 'u' . get_current_user_id();
+		$counts = get_transient(self::COUNT_TRANSIENT);
+		$counts = is_array($counts) ? $counts : [];
+
+		if (isset($counts[$scope])) {
+			return (int) $counts[$scope];
+		}
+
 		$query = new \WP_Query(self::query_args(true, '', 1, 1) + ['fields' => 'ids', 'no_found_rows' => false]);
 
-		return (int) $query->found_posts;
+		/* Keep the entry small on sites with many uploaders. */
+		if (count($counts) >= 50) {
+			$counts = [];
+		}
+
+		$counts[$scope] = (int) $query->found_posts;
+		set_transient(self::COUNT_TRANSIENT, $counts, 12 * HOUR_IN_SECONDS);
+
+		return $counts[$scope];
 	}
 
 	public function ajax_list(): void
