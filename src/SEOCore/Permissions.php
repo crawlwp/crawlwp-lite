@@ -53,7 +53,13 @@ class Permissions
 	 * the licence) or the submission log: administrators only, even for roles
 	 * given the settings permission.
 	 */
-	private const ADMIN_ONLY_MENUS = ['api_settings', 'log', 'license'];
+	private const ADMIN_ONLY_MENUS = ['api_settings', 'log', 'license', 'submit_urls'];
+
+	/** Sections whose every action is for administrators only (the importer). */
+	private const ADMIN_ONLY_SECTIONS = ['importer'];
+
+	/** Scripts and styles of the SEO box, kept off the page for users without it. */
+	private const SEO_BOX_ASSETS = ['crawlwp-seo-metabox', 'crawlwp-rich-results'];
 
 	/** AJAX actions only the SEO box uses: closed to users without the SEO box permission. */
 	private const SEO_BOX_AJAX = [
@@ -68,6 +74,7 @@ class Permissions
 	{
 		add_filter('crawlwp_admin_page_capability', [__CLASS__, 'page_capability'], 10, 2);
 		add_filter('crawlwp_wposa_sections', [__CLASS__, 'visible_sections'], 10, 3);
+		add_filter('crawlwp_wposa_hidden_menus', [__CLASS__, 'hidden_menus'], 10, 3);
 		/* admin-ajax.php runs admin_init before the wp_ajax_ action. */
 		add_action('admin_init', [__CLASS__, 'guard_seo_box_ajax'], 0);
 		add_action('admin_enqueue_scripts', [__CLASS__, 'dequeue_seo_box'], 100);
@@ -96,9 +103,38 @@ class Permissions
 	public static function dequeue_seo_box(string $hook): void
 	{
 		if (in_array($hook, ['post.php', 'post-new.php'], true) && ! self::can(self::SEO_BOX)) {
-			wp_dequeue_script('crawlwp-seo-metabox');
-			wp_dequeue_style('crawlwp-seo-metabox');
+			/*
+			 * Deregister, not just dequeue: WordPress still prints a dequeued script when
+			 * another queued script (Premium's Insights) lists it as a dependency, and the
+			 * script carries the SEO box's nonces.
+			 */
+			foreach (self::SEO_BOX_ASSETS as $handle) {
+				wp_dequeue_script($handle);
+				wp_deregister_script($handle);
+				wp_dequeue_style($handle);
+				wp_deregister_style($handle);
+			}
 		}
+	}
+
+	/**
+	 * Header tabs to leave out of the main settings screen: the administrators-only ones.
+	 *
+	 * @param string[] $menus
+	 *
+	 * @return string[]
+	 */
+	public static function hidden_menus(array $menus, string $prefix, string $slug): array
+	{
+		if ($slug !== CRAWLWP_SLUG || current_user_can('manage_options')) {
+			return $menus;
+		}
+
+		foreach (self::ADMIN_ONLY_MENUS as $menu) {
+			$menus[] = $prefix . '_' . $menu;
+		}
+
+		return $menus;
 	}
 
 	/**
@@ -196,8 +232,13 @@ class Permissions
 			return $prefix . '_' . $menu;
 		}, self::ADMIN_ONLY_MENUS);
 
-		$sections = array_values(array_filter($sections, static function ($section) use ($admin_only) {
-			return ! in_array((string) ($section['header_menu_id'] ?? ''), $admin_only, true);
+		$admin_sections = array_map(static function ($section) use ($prefix) {
+			return $prefix . '_' . $section;
+		}, self::ADMIN_ONLY_SECTIONS);
+
+		$sections = array_values(array_filter($sections, static function ($section) use ($admin_only, $admin_sections) {
+			return ! in_array((string) ($section['header_menu_id'] ?? ''), $admin_only, true)
+				&& ! in_array((string) ($section['id'] ?? ''), $admin_sections, true);
 		}));
 
 		if (self::can(self::SETTINGS)) {

@@ -588,9 +588,23 @@ class WPOSA
 	 */
 	public function get_active_header_menu()
 	{
-		return ! empty($_GET['wposa-menu']) ?
-			sanitize_text_field($_GET['wposa-menu']) :
-			($this->header_menu_array[0]['id'] ?? '');
+		if ( ! empty($_GET['wposa-menu'])) {
+			return sanitize_text_field($_GET['wposa-menu']);
+		}
+
+		/*
+		 * A role allowed only Redirects or the Bulk Editor can't open the first tab: its
+		 * sections live on the Advanced tab, so that is where the menu item takes it.
+		 */
+		if (
+			empty($this->sub_menu_slug) && $this->plugin_slug === CRAWLWP_SLUG &&
+			function_exists('wp_get_current_user') && did_action('init') &&
+			! Permissions::can(Permissions::SETTINGS) && Permissions::can_open_settings()
+		) {
+			return $this->plugin_prefix . '_advanced_settings';
+		}
+
+		return $this->header_menu_array[0]['id'] ?? '';
 	}
 
 	/**
@@ -601,7 +615,7 @@ class WPOSA
 	 */
 	function admin_init()
 	{
-		if (isset($_REQUEST['action'], $_REQUEST['crawlwp_options_save']) && $_REQUEST['action'] == 'update' && Permissions::can(Permissions::SETTINGS)) {
+		if (isset($_REQUEST['action'], $_REQUEST['crawlwp_options_save']) && $_REQUEST['action'] == 'update' && (Permissions::can(Permissions::SETTINGS) || $this->can_save_own_sections())) {
 
 			$option_page = ! empty($_REQUEST['option_page']) ? sanitize_text_field($_REQUEST['option_page']) : '';
 
@@ -641,6 +655,7 @@ class WPOSA
 
 					$submitted_data = apply_filters('wposa_submitted_data', $posted_data, $name, $_POST);
 					$submitted_data = $this->visible_fields_only($name, is_array($submitted_data) ? $submitted_data : [], $visible_sections);
+					$submitted_data = $this->non_admin_keys_only($name, $submitted_data);
 
 					$value = array_replace($db_options, $this->sanitize_section_data($name, wp_unslash($submitted_data)));
 
@@ -936,6 +951,74 @@ class WPOSA
 
 		foreach (array_keys($data) as $key) {
 			if (empty($fields[$key])) {
+				unset($data[$key]);
+			}
+		}
+
+		return $data;
+	}
+
+	/**
+	 * Whether a user without the settings permission may still save the sections they are
+	 * shown (Redirects, 404 monitor, Bulk Editor). Which sections those are is decided by the
+	 * crawlwp_wposa_sections filter, exactly as for display.
+	 */
+	private function can_save_own_sections(): bool
+	{
+		return empty($this->sub_menu_slug) && $this->plugin_slug === CRAWLWP_SLUG && Permissions::can_open_settings();
+	}
+
+	/**
+	 * Options that hold credentials next to ordinary settings, and the keys in them only
+	 * administrators may write. The API Settings tab (administrators only) and the Index
+	 * Settings tab save into the same options, and each tab registers its fields only when it
+	 * is the one open, so "is this field on a hidden tab?" can't be answered from the request.
+	 */
+	private const ADMIN_ONLY_KEYS = [
+		'google_webmaster' => ['json_key'],
+		'bing_webmaster'   => ['api_key'],
+		'yandex_webmaster' => ['client_id', 'client_secret', 'access_token', 'refresh_token', 'expires_in', 'host_id', 'host_ids', 'user_id'],
+	];
+
+	/**
+	 * For users who aren't administrators: in an option that holds credentials, keep only the
+	 * fields registered for the open tab, and never a credential key. Dropped keys keep their
+	 * stored value, because the caller merges the result over what is saved.
+	 *
+	 * @param array<string, mixed> $data
+	 *
+	 * @return array<string, mixed>
+	 */
+	public function non_admin_keys_only(string $section_id, array $data): array
+	{
+		if (current_user_can('manage_options')) {
+			return $data;
+		}
+
+		$short = strpos($section_id, $this->plugin_prefix . '_') === 0 ? substr($section_id, strlen($this->plugin_prefix) + 1) : $section_id;
+
+		/**
+		 * Filter the keys only administrators may save, per settings option (without the prefix).
+		 *
+		 * @param array<string, string[]> $keys
+		 */
+		$admin_only = (array) apply_filters('crawlwp_admin_only_setting_keys', self::ADMIN_ONLY_KEYS);
+
+		if ( ! isset($admin_only[$short])) {
+			return $data;
+		}
+
+		$registered = [];
+		foreach ($this->fields_array[$section_id] ?? [] as $field) {
+			if ( ! empty($field['id'])) {
+				$registered[(string) $field['id']] = true;
+			}
+		}
+
+		$blocked = array_flip(array_map('strval', (array) $admin_only[$short]));
+
+		foreach (array_keys($data) as $key) {
+			if ( ! isset($registered[$key]) || isset($blocked[$key])) {
 				unset($data[$key]);
 			}
 		}
@@ -1606,8 +1689,23 @@ class WPOSA
 	private function apply_section_visibility(): void
 	{
 		$before = count($this->sections_array);
+		$slug   = ! empty($this->sub_menu_slug) ? $this->sub_menu_slug : $this->plugin_slug;
 
-		$this->sections_array = (array) apply_filters('crawlwp_wposa_sections', $this->sections_array, $this->plugin_prefix, ! empty($this->sub_menu_slug) ? $this->sub_menu_slug : $this->plugin_slug);
+		$this->sections_array = (array) apply_filters('crawlwp_wposa_sections', $this->sections_array, $this->plugin_prefix, $slug);
+
+		/**
+		 * Header tabs (prefixed ids) the current user shouldn't be offered. A tab's sections are
+		 * only registered while it is open, so tabs can't be worked out from the sections.
+		 *
+		 * @param string[] $menus
+		 */
+		$hidden = (array) apply_filters('crawlwp_wposa_hidden_menus', [], $this->plugin_prefix, $slug);
+
+		if ($hidden) {
+			$this->header_menu_array = array_values(array_filter($this->header_menu_array, static function ($menu) use ($hidden) {
+				return ! in_array((string) ($menu['id'] ?? ''), $hidden, true);
+			}));
+		}
 
 		if (count($this->sections_array) === $before) return;
 
