@@ -122,6 +122,7 @@ class SEOPress extends Source
 			$ok = $manager->insert([
 				'from_url'            => $from,
 				'to_url'              => $to,
+				'allow_external'      => self::allow_external_for($manager, $to) ? 1 : 0, // already live in SEOPress, so outside destinations keep working
 				'redirect_type'       => in_array($type, [301, 302, 307, 410, 451], true) ? $type : 301,
 				'match_type'          => $match,
 				'note'                => __('Imported from SEOPress', 'mihdan-index-now'),

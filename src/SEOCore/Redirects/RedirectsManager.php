@@ -941,7 +941,12 @@ class RedirectsManager
 			// the characters a regex pattern relies on. Doing so previously
 			// corrupted every saved regex rule into a broken pattern.
 			if ($match_type_hint === 'regex') {
-				$clean['from_url'] = sanitize_text_field(trim($data['from_url']));
+				// sanitize_text_field() also deletes percent-encoded bytes ("%C3%A9"), which a
+				// pattern for a non-English or space-containing address needs: keep them.
+				$pattern = preg_replace('/%([0-9a-fA-F]{2})/', "\x1A$1\x1A", trim($data['from_url']));
+				$pattern = sanitize_text_field((string) $pattern);
+
+				$clean['from_url'] = (string) preg_replace('/\x1A([0-9a-fA-F]{2})\x1A/', '%$1', $pattern);
 			} else {
 				$clean['from_url'] = $this->normalize_home_relative(trim($data['from_url']));
 			}

@@ -408,7 +408,8 @@ class Wizard
 		}
 
 		$inventory      = Runner::inventory();
-		$active_sources = array_filter($inventory, static fn(array $src): bool => ! empty($src['active']));
+		// A redirects-only plugin (Redirection) isn't "the SEO plugin": it stays importable from the full list.
+		$active_sources = array_filter($inventory, static fn(array $src): bool => ! empty($src['active']) && empty($src['redirects_only']));
 		$avail_sources  = array_filter($inventory, static fn(array $src): bool => ! empty($src['available']));
 
 		$site_info = get_option('crawlwp_site_info', []);

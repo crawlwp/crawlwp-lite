@@ -146,6 +146,7 @@ class RankMath extends Source
 				$ok = $manager->insert([
 					'from_url'            => $from,
 					'to_url'              => (string) ($row['url_to'] ?? ''),
+					'allow_external'      => self::allow_external_for($manager, (string) ($row['url_to'] ?? '')) ? 1 : 0, // already live in RankMath, so outside destinations keep working
 					'redirect_type'       => in_array($type, [301, 302, 307, 410, 451], true) ? $type : 301,
 					'match_type'          => $match,
 					'note'                => __('Imported from Rank Math', 'mihdan-index-now'),

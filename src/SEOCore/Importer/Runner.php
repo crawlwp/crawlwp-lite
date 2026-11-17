@@ -3,6 +3,7 @@
 namespace Mihdan\IndexNow\SEOCore\Importer;
 
 use Mihdan\IndexNow\SEOCore\Importer\Sources\AIOSEO;
+use Mihdan\IndexNow\SEOCore\Importer\Sources\Redirection;
 use Mihdan\IndexNow\SEOCore\Importer\Sources\RankMath;
 use Mihdan\IndexNow\SEOCore\Importer\Sources\SEOPress;
 use Mihdan\IndexNow\SEOCore\Importer\Sources\SlimSEO;
@@ -26,6 +27,7 @@ class Runner
 	public static function sources(): array
 	{
 		return [
+			new Redirection(),
 			new Yoast(),
 			new RankMath(),
 			new AIOSEO(),
@@ -71,6 +73,7 @@ class Runner
 	public static function is_plugin_active(string $id): bool
 	{
 		$constants = [
+			'redirection' => defined('REDIRECTION_VERSION'),
 			'yoast'    => defined('WPSEO_VERSION'),
 			'rankmath' => defined('RANK_MATH_VERSION'),
 			'aioseo'   => defined('AIOSEO_VERSION'),
@@ -89,6 +92,7 @@ class Runner
 
 		if (function_exists('is_plugin_active')) {
 			$files = [
+				'redirection' => ['redirection/redirection.php'],
 				'yoast'    => ['wordpress-seo/wp-seo.php', 'wordpress-seo-premium/wp-seo-premium.php'],
 				'rankmath' => ['seo-by-rank-math/rank-math.php', 'seo-by-rank-math-pro/rank-math-pro.php'],
 				'aioseo'   => ['all-in-one-seo-pack/all_in_one_seo_pack.php', 'all-in-one-seo-pack-pro/all_in_one_seo_pack.php'],
@@ -117,6 +121,7 @@ class Runner
 		}
 
 		$files = [
+			'redirection' => ['redirection/redirection.php'],
 			'yoast'    => ['wordpress-seo/wp-seo.php', 'wordpress-seo-premium/wp-seo-premium.php'],
 			'rankmath' => ['seo-by-rank-math/rank-math.php', 'seo-by-rank-math-pro/rank-math-pro.php'],
 			'aioseo'   => ['all-in-one-seo-pack/all_in_one_seo_pack.php', 'all-in-one-seo-pack-pro/all_in_one_seo_pack.php'],
@@ -135,7 +140,7 @@ class Runner
 	}
 
 	/**
-	 * @return array<int,array{id:string,label:string,available:bool,active:bool,posts:int,terms:int,users:int,redirects:int}>
+	 * @return array<int,array{id:string,label:string,available:bool,active:bool,posts:int,terms:int,users:int,redirects:int,redirects_only:bool}>
 	 */
 	public static function inventory(): array
 	{
@@ -155,10 +160,14 @@ class Runner
 				'terms'     => (int) $counts['terms'],
 				'users'     => (int) $counts['users'],
 				'redirects' => (int) $counts['redirects'],
+				'redirects_only' => $source->redirects_only(),
 			];
 		}
 
-		return $out;
+		// Plugins that only hold redirects come last, after the SEO plugins.
+		$seo = array_filter($out, static fn(array $src): bool => ! $src['redirects_only']);
+
+		return array_merge(array_values($seo), array_values(array_diff_key($out, $seo)));
 	}
 
 	/**
