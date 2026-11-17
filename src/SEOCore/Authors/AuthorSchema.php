@@ -276,7 +276,7 @@ class AuthorSchema
 		/* With the Permissions feature, the Schema tab needs the "Advanced SEO fields" permission. */
 		$permissions = '\Mihdan\IndexNow\SEOCore\Permissions';
 
-		if (class_exists($permissions) && ! $permissions::can($permissions::SEO_ADVANCED)) {
+		if (class_exists($permissions) && (! $permissions::can($permissions::SEO_BOX) || ! $permissions::can($permissions::SEO_ADVANCED))) {
 			return;
 		}
 
