@@ -190,6 +190,17 @@ class AuthorBox
 			return $content;
 		}
 
+		/*
+		 * Not in an automatic excerpt (WordPress builds it from the filtered content), and not
+		 * when the content filters run inside themselves (a builder template or a block that
+		 * renders the post's content again): the box belongs after the outer content only.
+		 */
+		global $wp_current_filter;
+
+		if (doing_filter('get_the_excerpt') || count(array_keys((array) $wp_current_filter, 'the_content', true)) > 1) {
+			return $content;
+		}
+
 		$post = get_post();
 
 		if (! $post instanceof \WP_Post || $post->ID !== get_queried_object_id() || post_password_required($post) || ! self::shows_after($post)) {
