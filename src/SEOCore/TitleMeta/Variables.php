@@ -367,13 +367,13 @@ class Variables
 				return get_the_title($post);
 
 			case 'excerpt':
-				return $post->post_excerpt;
+				return (string) $post->post_password !== '' ? '' : $post->post_excerpt;
 
 			case 'auto_description':
 				return self::post_auto_description($post);
 
 			case 'content':
-				return wp_strip_all_tags($post->post_content);
+				return (string) $post->post_password !== '' ? '' : wp_strip_all_tags($post->post_content);
 
 			case 'id':
 				return (string) $post->ID;
@@ -766,6 +766,16 @@ class Variables
 	{
 		if (isset(self::$auto_descriptions[$post->ID])) {
 			return self::$auto_descriptions[$post->ID];
+		}
+
+		/*
+		 * A password-protected post shows visitors a password form (WordPress hides its
+		 * excerpt too), so the start of its content must not be printed in the page head.
+		 */
+		if ((string) $post->post_password !== '') {
+			self::$auto_descriptions[$post->ID] = '';
+
+			return '';
 		}
 
 		$description = $post->post_excerpt;

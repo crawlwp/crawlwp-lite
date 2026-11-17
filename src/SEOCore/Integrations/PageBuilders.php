@@ -88,6 +88,10 @@ class PageBuilders
 		if ($builder !== null) {
 			/* A space between elements, so a heading's last word doesn't run into the next paragraph. */
 			$text = str_replace('><', '> <', $builder['html']);
+
+			if ($builder['name'] === 'Bricks') {
+				$text = self::bricks_dynamic_text($text, $post);
+			}
 		} elseif (strpos($content, '[et_pb_') !== false || strpos($content, '[fusion_') !== false) {
 			$text = self::shortcodes_to_text($content);
 		} else {
@@ -101,6 +105,29 @@ class PageBuilders
 		}
 
 		return $text;
+	}
+
+	/**
+	 * Bricks dynamic data tags ({post_title}, {acf_subtitle}, {echo:…}) are stored as written
+	 * and filled in when Bricks renders the page. Have Bricks fill them in for the description,
+	 * and drop any that are left, so a tag is never printed in the meta description.
+	 */
+	private static function bricks_dynamic_text(string $text, \WP_Post $post): string
+	{
+		if (strpos($text, '{') === false) {
+			return $text;
+		}
+
+		if (function_exists('bricks_render_dynamic_data')) {
+			try {
+				$rendered = bricks_render_dynamic_data($text, $post->ID);
+				$text     = is_string($rendered) ? $rendered : $text;
+			} catch (\Throwable $e) {
+				// Keep the unrendered text; its tags are removed below.
+			}
+		}
+
+		return (string) preg_replace('/\{[a-z][a-z0-9_]*(?::[^{}]*)?\}/i', '', $text);
 	}
 
 	/**
