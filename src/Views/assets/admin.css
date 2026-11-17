@@ -949,6 +949,40 @@ body:not(.cwpWP7higher) .cwp-premium-sidebar-upsell-cta .button-primary {
 	position: relative;
 }
 
+/* "New in CrawlWP Premium" cards on the upsell pages */
+.crawlwp-new-badge { display: inline-block; margin-right: 6px; padding: 1px 7px; border-radius: 999px; background: #e7f5ec; color: #00703c; font-size: 11px; font-weight: 600; line-height: 1.6; vertical-align: 1px; }
+.crawlwp-upsell-new { max-width: 900px; margin: 0 auto; padding: 34px 30px 10px; text-align: center; }
+.crawlwp-full-feature-upsell-page-wrap .crawlwp-upsell-new h3 { margin: 0 0 6px; }
+.crawlwp-full-feature-upsell-page-wrap .crawlwp-upsell-new > p { margin: 0 0 20px; }
+.crawlwp-upsell-new__cards { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; text-align: left; }
+.crawlwp-upsell-new__card { display: flex; flex-direction: column; overflow: hidden; background: #fff; border: 1px solid #dcdcde; border-radius: 10px; }
+.crawlwp-upsell-new__media { display: flex; align-items: flex-start; justify-content: center; height: 190px; overflow: hidden; background: #f6f7f7; border-bottom: 1px solid #f0f0f1; }
+.crawlwp-upsell-new__media img { display: block; width: 100%; height: auto; }
+.crawlwp-upsell-new__icon { align-self: center; color: #2271b1; }
+.crawlwp-upsell-new__text { padding: 14px 16px 16px; }
+.crawlwp-full-feature-upsell-page-wrap .crawlwp-upsell-new__text h4 { margin: 0 0 6px; font-size: 14px; text-align: left; }
+.crawlwp-full-feature-upsell-page-wrap .crawlwp-upsell-new__text p { margin: 0; font-size: 13px; line-height: 1.5; text-align: left; }
+@media (max-width: 782px) { .crawlwp-upsell-new__cards { grid-template-columns: 1fr; } }
+
+/* Analytics upsell page: blurred preview of the Premium page behind an upgrade box */
+.crawlwp-analytics-upsell { position: relative; max-width: 1100px; max-height: 900px; overflow: hidden; border-radius: 6px; }
+.crawlwp-analytics-upsell__preview { display: block; width: 100%; height: auto; filter: blur(3px); opacity: .85; user-select: none; pointer-events: none; }
+.crawlwp-analytics-upsell__box { position: absolute; top: 120px; left: 50%; width: min(520px, calc(100% - 32px)); box-sizing: border-box; padding: 28px 32px; transform: translateX(-50%); background: #fff; border: 1px solid #dcdcde; border-radius: 8px; box-shadow: 0 10px 40px rgba(0, 0, 0, .15); text-align: center; }
+.crawlwp-analytics-upsell__box h2 { margin: 0 0 8px; font-size: 20px; }
+.crawlwp-analytics-upsell__box p { margin: 0 0 14px; color: #50575e; font-size: 14px; }
+.crawlwp-analytics-upsell__box ul { display: inline-block; margin: 0 0 18px; text-align: left; }
+.crawlwp-analytics-upsell__box li { position: relative; padding-left: 22px; }
+.crawlwp-analytics-upsell__box li::before { content: "\2713"; position: absolute; left: 0; color: #008a20; font-weight: 700; }
+@media (max-width: 782px) {
+	.crawlwp-analytics-upsell { max-height: none; }
+	.crawlwp-analytics-upsell__preview { max-height: 160px; object-fit: cover; object-position: top; }
+	.crawlwp-analytics-upsell__box { position: relative; top: auto; left: auto; width: auto; margin-top: -40px; padding: 20px; transform: none; }
+}
+
+/* "New" marker in the Premium sidebar card */
+.cwp-premium-sidebar-upsell-li .crawlwp-new-badge { margin: 0 0 0 6px; font-size: 10px; }
+
+
 .crawlwp-upsell-featured-image img {
 	width: 100%;
 	height: auto;
