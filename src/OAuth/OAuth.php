@@ -600,7 +600,7 @@ final class OAuth
 				return $button . $key_note;
 			}
 
-			return $button . '<p class="description">' . ($provider === 'google'
+			return $button . self::premium_update_note() . '<p class="description">' . ($provider === 'google'
 					? esc_html__('Sign in with the Google account that has access to this site in Google Search Console. No Google Cloud project is needed.', 'mihdan-index-now')
 					: esc_html__('Sign in with the Microsoft account that has this site in Bing Webmaster Tools. No API key is needed.', 'mihdan-index-now')
 				) . '</p>' . self::agency_note($provider);
@@ -617,7 +617,28 @@ final class OAuth
 			$who,
 			esc_url(self::disconnect_url($provider)),
 			esc_html__('Disconnect', 'mihdan-index-now')
-		) . $key_note . ($has_key ? '' : self::agency_note($provider));
+		) . ($has_key ? '' : self::premium_update_note()) . $key_note . ($has_key ? '' : self::agency_note($provider));
+	}
+
+	/**
+	 * CrawlWP Premium is active but from before account connections existed: it only knows
+	 * API keys, so its screens (SEO Stats, SEO Indexing, Insights, email reports) would keep
+	 * saying "not connected" with nothing telling the owner why.
+	 */
+	public static function premium_needs_update(): bool
+	{
+		$api = '\\CrawlWP\\Libsodium\\AbstractGoogleApi';
+
+		return class_exists($api) && ! method_exists($api, 'is_google_oauth_connected');
+	}
+
+	private static function premium_update_note(): string
+	{
+		if ( ! self::premium_needs_update()) {
+			return '';
+		}
+
+		return '<div class="notice notice-warning inline"><p>' . esc_html__('Update CrawlWP Premium to its latest version to use this connection in SEO Stats, SEO Indexing, the Insights tab and email reports. The Premium version on this site only works with an API key.', 'mihdan-index-now') . '</p></div>';
 	}
 
 	/**

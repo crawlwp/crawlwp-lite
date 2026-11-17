@@ -453,7 +453,9 @@ class Settings
 						'type' => 'html',
 						'desc' => sprintf(
 							'<div class="notice notice-warning inline"><p>' . (OAuth::is_connected('google')
-								? __('Google only accepts indexing requests from a service account, so connecting with Google is not enough for this setting. Paste a service account JSON key under %sAPI Settings%s to submit pages to Google.', 'mihdan-index-now')
+								/* translators: 1: opening link tag, 2: closing link tag */
+								? __('Google only accepts indexing requests from a service account, so connecting with Google is not enough for this setting. Paste a service account JSON key under %1$sAPI Settings%2$s to submit pages to Google.', 'mihdan-index-now')
+								/* translators: %s: opening and closing link tags (an existing string, kept as it is so its translations still apply) */
 								: __('This setting will not work because Google API is not configured. Go to %sAPI Settings%s to set it up.', 'mihdan-index-now')
 							) . '</p></div>',
 							'<a target="_blank" href="' . CRAWLWP_API_SETTINGS_URL . '">', '</a>'
