@@ -345,7 +345,17 @@ function rate_limit_key(string $ip): string
 {
 	$packed = strpos($ip, ':') !== false ? @inet_pton($ip) : false;
 
-	return is_string($packed) && strlen($packed) === 16 ? 'v6:' . bin2hex(substr($packed, 0, 8)) : $ip;
+	if ( ! is_string($packed) || strlen($packed) !== 16) {
+		return $ip;
+	}
+
+	// An IPv4 client reported as ::ffff:a.b.c.d (dual-stack servers, some load balancers) is counted as that IPv4 address,
+	// not with every other IPv4 client under one /64.
+	if (substr($packed, 0, 12) === "\0\0\0\0\0\0\0\0\0\0\xff\xff") {
+		return (string)inet_ntop(substr($packed, 12));
+	}
+
+	return 'v6:' . bin2hex(substr($packed, 0, 8));
 }
 
 function fetch_handoff(array $config): void

@@ -142,6 +142,10 @@ class OAuthProxyTest extends TestCase
 		$this->assertSame(\rate_limit_key('2001:db8:1:2::1'), \rate_limit_key('2001:db8:1:2:ffff:ffff:ffff:ffff'));
 		$this->assertNotSame(\rate_limit_key('2001:db8:1:2::1'), \rate_limit_key('2001:db8:1:3::1'));
 		$this->assertSame('not-an-ip:x', \rate_limit_key('not-an-ip:x'));
+		// IPv4 clients reported in IPv6 form are counted per IPv4 address.
+		$this->assertSame('1.2.3.4', \rate_limit_key('::ffff:1.2.3.4'));
+		$this->assertSame('9.9.9.9', \rate_limit_key('::ffff:909:909'));
+		$this->assertNotSame(\rate_limit_key('::ffff:1.2.3.4'), \rate_limit_key('::ffff:9.9.9.9'));
 	}
 
 	public function test_site_ownership_matches_domain_and_url_properties(): void
