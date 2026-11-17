@@ -1600,6 +1600,13 @@ if (!isset($GLOBALS['wpdb'])) {
 	$GLOBALS['wpdb'] = new CrawlWP_Mock_WPDB();
 }
 
+if (!function_exists('wp_unschedule_hook')) {
+	function wp_unschedule_hook($hook, $wp_error = false) {
+		$GLOBALS['crawlwp_test_state']['cleared_crons'][] = $hook;
+		return 0;
+	}
+}
+
 if (!function_exists('wp_clear_scheduled_hook')) {
 	function wp_clear_scheduled_hook($hook, $args = []) {
 		$GLOBALS['crawlwp_test_state']['cleared_crons'][] = $hook;
