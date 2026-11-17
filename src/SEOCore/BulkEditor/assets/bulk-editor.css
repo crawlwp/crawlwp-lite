@@ -485,8 +485,7 @@
 .cwp-bulk-progress__bar { flex: 1; height: 6px; overflow: hidden; border-radius: 3px; background: #ede9fe; }
 .cwp-bulk-progress__bar i { display: block; width: 0; height: 100%; background: #7c3aed; transition: width .2s ease; }
 .cwp-bulk-progress__stop { border: 0; background: none; color: #6d28d9; font: inherit; text-decoration: underline; cursor: pointer; }
-.cwp-bulk-wrap.is-ai-running .cwp-bulk-ai,
-.cwp-bulk-wrap.is-ai-running #cwp-bulk-save-btn { pointer-events: none; opacity: .5; }
+.cwp-bulk-wrap.is-ai-running .cwp-bulk-ai { pointer-events: none; opacity: .5; }
 
 /* ---- "Write with AI" dialog ---- */
 .cwp-bulk-dialog { position: fixed; inset: 0; z-index: 100000; display: flex; align-items: flex-start; justify-content: center; padding: 100px 16px 16px; background: rgba(0, 0, 0, .35); }

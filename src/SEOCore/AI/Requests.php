@@ -229,7 +229,21 @@ class Requests
 			return false;
 		}
 
-		$locked = (string) $wpdb->get_var($wpdb->prepare('SELECT GET_LOCK(%s, %d)', self::lock_name(), 3)) === '1'; // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		/* Databases without GET_LOCK (SQLite drop-ins) fail this query: keep that out of the error log. */
+		$quiet  = method_exists($wpdb, 'suppress_errors') ? $wpdb->suppress_errors(true) : null;
+		$result = $wpdb->get_var($wpdb->prepare('SELECT GET_LOCK(%s, %d)', self::lock_name(), 3)); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		if ($quiet !== null) {
+			$wpdb->suppress_errors($quiet);
+		}
+
+		if ($result === null) {
+			/* No named locks here: fall back to a row in the options table. */
+			$locked          = self::row_lock();
+			self::$lock_mode = $locked ? 'row' : '';
+		} else {
+			$locked          = (string) $result === '1';
+			self::$lock_mode = $locked ? 'named' : '';
+		}
 
 		if ($locked) {
 			/* This request may hold counts it read before another request changed them. */
@@ -241,11 +255,75 @@ class Requests
 		return $locked;
 	}
 
+	/** @var string 'named' (GET_LOCK), 'row' (options row) or '' when this request holds no lock. */
+	private static $lock_mode = '';
+
+	/** @var string This request's value in the options-row lock, so only its own lock is released. */
+	private static $lock_token = '';
+
+	const LOCK_OPTION = 'crawlwp_ai_counter_lock';
+
+	/**
+	 * Options-row lock for databases without GET_LOCK: one request inserts the row, the others
+	 * wait up to 3 seconds. A row older than 15 seconds was left by a request that died and is
+	 * taken over with a compare-and-swap, so only one waiter wins it.
+	 */
+	private static function row_lock(): bool
+	{
+		global $wpdb;
+
+		if (! isset($wpdb->options) || ! method_exists($wpdb, 'query')) {
+			return false;
+		}
+
+		$quiet = method_exists($wpdb, 'suppress_errors') ? $wpdb->suppress_errors(true) : null;
+		$token = time() . '|' . (function_exists('wp_generate_password') ? wp_generate_password(12, false) : uniqid('', true));
+		$until = microtime(true) + 3;
+		$got   = false;
+
+		do {
+			$got = (int) $wpdb->query($wpdb->prepare("INSERT IGNORE INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no')", self::LOCK_OPTION, $token)) === 1; // phpcs:ignore WordPress.DB
+
+			if (! $got) {
+				$held = (string) $wpdb->get_var($wpdb->prepare("SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", self::LOCK_OPTION)); // phpcs:ignore WordPress.DB
+
+				if ($held !== '' && time() - (int) $held > 15) {
+					$got = (int) $wpdb->query($wpdb->prepare("UPDATE {$wpdb->options} SET option_value = %s WHERE option_name = %s AND option_value = %s", $token, self::LOCK_OPTION, $held)) === 1; // phpcs:ignore WordPress.DB
+				}
+			}
+
+			if (! $got) {
+				usleep(100000);
+			}
+		} while (! $got && microtime(true) < $until);
+
+		if ($quiet !== null) {
+			$wpdb->suppress_errors($quiet);
+		}
+
+		self::$lock_token = $got ? $token : '';
+
+		return $got;
+	}
+
 	private static function unlock(): void
 	{
 		global $wpdb;
 
-		$wpdb->query($wpdb->prepare('SELECT RELEASE_LOCK(%s)', self::lock_name())); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$quiet = method_exists($wpdb, 'suppress_errors') ? $wpdb->suppress_errors(true) : null;
+
+		if (self::$lock_mode === 'row') {
+			$wpdb->query($wpdb->prepare("DELETE FROM {$wpdb->options} WHERE option_name = %s AND option_value = %s", self::LOCK_OPTION, self::$lock_token)); // phpcs:ignore WordPress.DB
+		} else {
+			$wpdb->query($wpdb->prepare('SELECT RELEASE_LOCK(%s)', self::lock_name())); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		}
+
+		if ($quiet !== null) {
+			$wpdb->suppress_errors($quiet);
+		}
+
+		self::$lock_mode  = '';
+		self::$lock_token = '';
 	}
 
 	/** One lock per site (MySQL lock names are server-wide and at most 64 characters). */
