@@ -385,7 +385,8 @@ final class OAuth
 			'provider'   => $provider,
 			// only a hash travels through the browser; the state itself is sent server to server at fetch.
 			'state'      => hash('sha256', $state),
-			'return_url' => rawurlencode(admin_url('admin-post.php?action=crawlwp_oauth_return')),
+			// the proxy only accepts this exact address, so drop anything a filter on admin_url() appended.
+			'return_url' => rawurlencode(strtok(admin_url('admin-post.php'), '?#') . '?action=crawlwp_oauth_return'),
 			'features'   => implode(',', $features),
 		], self::proxy_url()));
 		exit;

@@ -22,20 +22,32 @@ class OAuthProxyTest extends TestCase
 	public function test_return_url_must_be_a_site_admin_post_url(): void
 	{
 		$this->assertTrue(\is_valid_return_url('https://site.test/wp-admin/admin-post.php?action=crawlwp_oauth_return'));
-		$this->assertTrue(\is_valid_return_url('http://site.test/blog/wp-admin/admin-post.php'));
+		$this->assertTrue(\is_valid_return_url('http://site.test/blog/wp-admin/admin-post.php?action=crawlwp_oauth_return'));
 
 		$this->assertFalse(\is_valid_return_url('https://evil.test/steal'));
-		$this->assertFalse(\is_valid_return_url('javascript:alert(1)//wp-admin/admin-post.php'));
-		$this->assertFalse(\is_valid_return_url('https://user:pass@site.test/wp-admin/admin-post.php'));
-		$this->assertFalse(\is_valid_return_url('//site.test/wp-admin/admin-post.php'));
+		$this->assertFalse(\is_valid_return_url('javascript:alert(1)//wp-admin/admin-post.php?action=crawlwp_oauth_return'));
+		$this->assertFalse(\is_valid_return_url('https://user:pass@site.test/wp-admin/admin-post.php?action=crawlwp_oauth_return'));
+		$this->assertFalse(\is_valid_return_url('//site.test/wp-admin/admin-post.php?action=crawlwp_oauth_return'));
 		// hosts and paths that would make the confirmation page show a different site than the browser visits
-		$this->assertFalse(\is_valid_return_url('https://evil.test\\victim.test/wp-admin/admin-post.php'));
-		$this->assertFalse(\is_valid_return_url('https://evil.test/https://victim.test/wp-admin/admin-post.php'));
-		$this->assertFalse(\is_valid_return_url('https://evil.test//victim.test/wp-admin/admin-post.php'));
-		$this->assertFalse(\is_valid_return_url('https://evil.test/a\\b/wp-admin/admin-post.php'));
-		$this->assertFalse(\is_valid_return_url('https://-bad.test/wp-admin/admin-post.php'));
-		$this->assertTrue(\is_valid_return_url('https://xn--bcher-kva.test/wp-admin/admin-post.php'));
-		$this->assertTrue(\is_valid_return_url('https://site.test:8443/wp-admin/admin-post.php'));
+		$this->assertFalse(\is_valid_return_url('https://evil.test\\victim.test/wp-admin/admin-post.php?action=crawlwp_oauth_return'));
+		$this->assertFalse(\is_valid_return_url('https://evil.test/https://victim.test/wp-admin/admin-post.php?action=crawlwp_oauth_return'));
+		$this->assertFalse(\is_valid_return_url('https://evil.test//victim.test/wp-admin/admin-post.php?action=crawlwp_oauth_return'));
+		$this->assertFalse(\is_valid_return_url('https://evil.test/a\\b/wp-admin/admin-post.php?action=crawlwp_oauth_return'));
+		$this->assertFalse(\is_valid_return_url('https://-bad.test/wp-admin/admin-post.php?action=crawlwp_oauth_return'));
+		$this->assertTrue(\is_valid_return_url('https://xn--bcher-kva.test/wp-admin/admin-post.php?action=crawlwp_oauth_return'));
+		$this->assertTrue(\is_valid_return_url('https://site.test:8443/wp-admin/admin-post.php?action=crawlwp_oauth_return'));
+
+		// only the exact address the plugin sends: no other action, extra arguments, fragment or control characters
+		$base = 'https://site.test/wp-admin/admin-post.php';
+		$this->assertFalse(\is_valid_return_url($base));
+		$this->assertFalse(\is_valid_return_url($base . '?action=other_plugin_action'));
+		$this->assertFalse(\is_valid_return_url($base . '?action=crawlwp_oauth_return&action=other'));
+		$this->assertFalse(\is_valid_return_url($base . '?action=crawlwp_oauth_return&x=1'));
+		$this->assertFalse(\is_valid_return_url($base . '?action=crawlwp_oauth_return#x'));
+		$this->assertFalse(\is_valid_return_url($base . '#?action=crawlwp_oauth_return'));
+		$this->assertFalse(\is_valid_return_url($base . "?action=crawlwp_oauth_return\r\nX-Injected: 1"));
+		$this->assertFalse(\is_valid_return_url($base . '?action=crawlwp_oauth_return '));
+		$this->assertFalse(\is_valid_return_url(''));
 	}
 
 	public function test_signed_flow_cookie_round_trips(): void
@@ -103,15 +115,33 @@ class OAuthProxyTest extends TestCase
 
 		$this->assertFalse(\is_revoked($config, 'google', 'token-a'));
 
+		// the deny list has its own folder, so housekeeping scans of the storage folder never read it
+		$this->assertSame($dir . '/revoked', dirname(\revoked_path($config, 'google', 'token-a')));
+		mkdir($dir . '/revoked');
 		file_put_contents(\revoked_path($config, 'google', 'token-a'), '1');
 
 		$this->assertTrue(\is_revoked($config, 'google', 'token-a'));
+
+		// entries written straight into the storage folder by the earlier version still count
+		file_put_contents(\revoked_path($config, 'google', 'token-old', true), '1');
+		$this->assertSame($dir, dirname(\revoked_path($config, 'google', 'token-old', true)));
+		$this->assertTrue(\is_revoked($config, 'google', 'token-old'));
 		$this->assertFalse(\is_revoked($config, 'google', 'token-b'));
 		$this->assertFalse(\is_revoked($config, 'bing', 'token-a'));
 		$this->assertStringNotContainsString('token-a', \revoked_path($config, 'google', 'token-a'));
 
+		array_map('unlink', glob($dir . '/revoked/*'));
+		rmdir($dir . '/revoked');
 		array_map('unlink', glob($dir . '/*'));
 		rmdir($dir);
+	}
+
+	public function test_rate_limit_counts_ipv6_by_64_network(): void
+	{
+		$this->assertSame('203.0.113.9', \rate_limit_key('203.0.113.9'));
+		$this->assertSame(\rate_limit_key('2001:db8:1:2::1'), \rate_limit_key('2001:db8:1:2:ffff:ffff:ffff:ffff'));
+		$this->assertNotSame(\rate_limit_key('2001:db8:1:2::1'), \rate_limit_key('2001:db8:1:3::1'));
+		$this->assertSame('not-an-ip:x', \rate_limit_key('not-an-ip:x'));
 	}
 
 	public function test_site_ownership_matches_domain_and_url_properties(): void

@@ -31,8 +31,10 @@ return [
 	'client_ip_header' => '',
 
 	// Leave true. Before handing tokens to a site, the proxy checks that the signed-in account has that site in
-	// Google Search Console / Bing Webmaster Tools, so a phishing link can't collect someone's tokens for another
-	// domain. Set false only in an emergency (e.g. the providers' site list API is down for everyone).
+	// Google Search Console / Bing Webmaster Tools. That stops wrong-account connections and links to a site the
+	// account has nothing to do with. It does not stop every phishing link (a site's owner can add anyone's
+	// account to their own property); the confirmation page covers that case. Set false only in an emergency
+	// (e.g. the providers' site list API is down for everyone).
 	'verify_site_ownership' => true,
 
 	// Leave false. Set true only if live testing shows Bing does not return `state` on its callback.
