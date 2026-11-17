@@ -247,11 +247,15 @@ class SureRank extends Source
 		$no_index  = is_array($settings['no_index'] ?? null) ? $settings['no_index'] : [];
 		$no_follow = is_array($settings['no_follow'] ?? null) ? $settings['no_follow'] : [];
 
+		/*
+		 * Only what SureRank's lists switch on. Anything not in a list is left to CrawlWP's own
+		 * default: writing "off" would, for one, take the noindex off search result pages.
+		 */
 		$robots = static function (string $name) use ($no_index, $no_follow): array {
-			return [
-				'noindex'  => in_array($name, $no_index, true) ? 'on' : 'off',
-				'nofollow' => in_array($name, $no_follow, true) ? 'on' : 'off',
-			];
+			return array_filter([
+				'noindex'  => in_array($name, $no_index, true) ? 'on' : '',
+				'nofollow' => in_array($name, $no_follow, true) ? 'on' : '',
+			]);
 		};
 
 		foreach (Entities::post_types() as $post_type) {
