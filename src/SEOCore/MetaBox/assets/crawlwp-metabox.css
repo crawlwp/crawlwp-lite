@@ -202,6 +202,18 @@
   box-shadow:0 6px 20px rgba(0,0,0,.12);padding:5px;
 }
 .cwp-var-menu.is-open{display:block;}
+
+/* ---------- focus keyword suggestions ---------- */
+.cwp-kw-suggest-wrap{position:relative;}
+.cwp-kw-suggest{
+  position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:30;
+  max-height:280px;overflow-y:auto;background:#fff;border:1px solid var(--cwp-line);
+  border-radius:7px;box-shadow:0 6px 20px rgba(0,0,0,.12);padding:5px;
+}
+.cwp-kw-suggest-title{padding:4px 8px 6px;font-size:11px;color:var(--cwp-ink-4);}
+.cwp-kw-suggest-item{padding:7px 8px;border-radius:5px;cursor:pointer;font-size:13px;color:var(--cwp-ink-2, #3c434a);}
+.cwp-kw-suggest-item b{font-weight:600;color:var(--cwp-ink-1, #1d2327);}
+.cwp-kw-suggest-item.is-active{background:var(--cwp-accent-soft);}
 /* Tokens stack above their description so long ones like
    {{ post.auto_description }} never wrap mid-token. */
 .cwp-var-item{
