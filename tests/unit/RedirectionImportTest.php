@@ -82,6 +82,14 @@ class RedirectionImportTest extends TestCase
 		$this->assertSame(0, $exact['ignore_query_string']);
 		$this->assertTrue($exact['matches_more']);
 
+		// A source with its own query string is compared in full: flagged when Redirection ignored extra parameters.
+		$own = Redirection::map_row($this->row(['url' => '/old/?ref=a', 'match_data' => '{"source":{"flag_query":"pass"}}']), $group);
+		$this->assertSame(0, $own['ignore_query_string']);
+		$this->assertTrue($own['matches_less']);
+		$this->assertFalse($own['matches_more']);
+		$this->assertFalse($pass['matches_less']);
+		$this->assertFalse($exact['matches_less']);
+
 		// A source with its own query string is compared in full, whatever the flag.
 		$own = Redirection::map_row($this->row(['url' => '/old-page/?ref=a', 'match_data' => '{"source":{"flag_query":"ignore"}}']), $group);
 		$this->assertSame(0, $own['ignore_query_string']);

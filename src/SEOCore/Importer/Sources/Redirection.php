@@ -116,7 +116,11 @@ class Redirection extends Source
 				$redirect['note'] .= ' ' . __('(In Redirection this only matched the address without a query string. Here it also matches it with one, and passes the query string on.)', 'mihdan-index-now');
 			}
 
-			unset($redirect['matches_more']);
+			if (! empty($redirect['matches_less'])) {
+				$redirect['note'] .= ' ' . __('(In Redirection this also matched the address with extra query parameters. Here the query string must be exactly the one in the rule.)', 'mihdan-index-now');
+			}
+
+			unset($redirect['matches_more'], $redirect['matches_less']);
 
 			$manager->insert($redirect) ? $imported++ : $skipped++;
 		}
@@ -130,7 +134,7 @@ class Redirection extends Source
 	 * @param array<string,mixed>                       $row
 	 * @param array{module: int, enabled: bool}|null    $group
 	 *
-	 * @return array{from_url: string, to_url: string, redirect_type: int, match_type: string, note: string, ignore_query_string: int, enabled: int, matches_more: bool}|null
+	 * @return array{from_url: string, to_url: string, redirect_type: int, match_type: string, note: string, ignore_query_string: int, enabled: int, matches_more: bool, matches_less: bool}|null
 	 */
 	public static function map_row(array $row, ?array $group, string $default_query_flag = 'exact'): ?array
 	{
@@ -182,6 +186,8 @@ class Redirection extends Source
 		$source_has_query = ! $regex && strpos($from, '?') !== false;
 		$ignore_query     = (! $regex && ! $source_has_query && $query === 'ignore') ? 1 : 0;
 		$matches_more     = ! $regex && ! $source_has_query && ! in_array($query, ['ignore', 'pass'], true);
+		/* Redirection matched "/old/?ref=a" with "ignore" or "pass" against "/old/?ref=a&utm=1" too; CrawlWP compares the whole query. */
+		$matches_less     = $source_has_query && in_array($query, ['ignore', 'pass'], true);
 
 		$enabled = ($row['status'] ?? 'enabled') === 'enabled' && ($group === null || $group['enabled']);
 
@@ -194,6 +200,7 @@ class Redirection extends Source
 			'ignore_query_string' => $ignore_query,
 			'enabled'             => $enabled ? 1 : 0,
 			'matches_more'        => $matches_more,
+			'matches_less'        => $matches_less,
 		];
 	}
 
