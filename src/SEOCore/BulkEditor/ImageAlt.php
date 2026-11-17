@@ -17,9 +17,17 @@ class ImageAlt
 	{
 		add_action('wp_ajax_crawlwp_bulk_editor_images', [$this, 'ajax_list']);
 
-		/* The missing-alt count is cached: forget it when alt text or the set of images changes. */
+		/*
+		 * The missing-alt count is cached. A change to one image's alt text moves the cached
+		 * numbers by one instead of throwing them away (the recount is a heavy query on a large
+		 * media library); a new or deleted image forgets them.
+		 */
+		add_action('add_post_meta', [__CLASS__, 'note_alt_before_add'], 10, 2);
+		add_action('update_post_meta', [__CLASS__, 'note_alt_before'], 10, 3);
+		add_action('delete_post_meta', [__CLASS__, 'note_alt_before'], 10, 3);
+
 		foreach (['added_post_meta', 'updated_post_meta', 'deleted_post_meta'] as $hook) {
-			add_action($hook, [__CLASS__, 'forget_count_on_meta'], 10, 3);
+			add_action($hook, [__CLASS__, 'adjust_count_on_meta'], 10, 3);
 		}
 		add_action('add_attachment', [__CLASS__, 'forget_count']);
 		add_action('delete_attachment', [__CLASS__, 'forget_count']);
@@ -28,16 +36,81 @@ class ImageAlt
 	/** Cached missing-alt counts: one entry per scope (everyone's images, or one user's uploads). */
 	const COUNT_TRANSIENT = 'crawlwp_missing_alt_counts';
 
+	/** @var array<int,bool> Whether an image had no alt text before the change now being made. */
+	private static $was_missing = [];
+
+	/**
+	 * @param int    $object_id
+	 * @param string $meta_key
+	 */
+	public static function note_alt_before_add($object_id, $meta_key): void
+	{
+		self::note_alt_before(0, $object_id, $meta_key);
+	}
+
 	/**
 	 * @param int|int[] $meta_id
 	 * @param int       $object_id
 	 * @param string    $meta_key
 	 */
-	public static function forget_count_on_meta($meta_id, $object_id, $meta_key): void
+	public static function note_alt_before($meta_id, $object_id, $meta_key): void
 	{
 		if ($meta_key === self::META_KEY) {
-			self::forget_count();
+			self::$was_missing[(int) $object_id] = (string) get_post_meta((int) $object_id, self::META_KEY, true) === '';
 		}
+	}
+
+	/**
+	 * @param int|int[] $meta_id
+	 * @param int       $object_id
+	 * @param string    $meta_key
+	 */
+	public static function adjust_count_on_meta($meta_id, $object_id, $meta_key): void
+	{
+		if ($meta_key !== self::META_KEY) {
+			return;
+		}
+
+		$object_id = (int) $object_id;
+		$counts    = get_transient(self::COUNT_TRANSIENT);
+
+		if (! is_array($counts) || ! array_diff_key($counts, ['_at' => 1])) {
+			unset(self::$was_missing[$object_id]);
+
+			return;
+		}
+
+		$post = get_post($object_id);
+
+		/* Not known what it was before, or not an image the count covers: recount next time. */
+		if (! isset(self::$was_missing[$object_id]) || ! $post || $post->post_type !== 'attachment' || $post->post_status !== 'inherit' || strpos((string) $post->post_mime_type, 'image/') !== 0) {
+			unset(self::$was_missing[$object_id]);
+
+			if ($post && $post->post_type === 'attachment') {
+				self::forget_count();
+			}
+
+			return;
+		}
+
+		$before = self::$was_missing[$object_id];
+		$after  = (string) get_post_meta($object_id, self::META_KEY, true) === '';
+		unset(self::$was_missing[$object_id]);
+
+		if ($before === $after) {
+			return;
+		}
+
+		$delta = $after ? 1 : -1;
+
+		foreach (['all', 'u' . (int) $post->post_author] as $scope) {
+			if (isset($counts[$scope])) {
+				$counts[$scope] = max(0, (int) $counts[$scope] + $delta);
+			}
+		}
+
+		/* count_missing() recounts once the '_at' time inside is 12 hours old, however often this re-stores it. */
+		set_transient(self::COUNT_TRANSIENT, $counts, 12 * HOUR_IN_SECONDS);
 	}
 
 	public static function forget_count(): void
@@ -94,6 +167,11 @@ class ImageAlt
 		$counts = get_transient(self::COUNT_TRANSIENT);
 		$counts = is_array($counts) ? $counts : [];
 
+		/* Counts nudged by adjust_count_on_meta() are re-stored, so their age is kept inside: recount after 12 hours. */
+		if (isset($counts['_at']) && time() - (int) $counts['_at'] > 12 * HOUR_IN_SECONDS) {
+			$counts = [];
+		}
+
 		if (isset($counts[$scope])) {
 			return (int) $counts[$scope];
 		}
@@ -105,6 +183,7 @@ class ImageAlt
 			$counts = [];
 		}
 
+		$counts += ['_at' => time()];
 		$counts[$scope] = (int) $query->found_posts;
 		set_transient(self::COUNT_TRANSIENT, $counts, 12 * HOUR_IN_SECONDS);
 
@@ -227,6 +306,7 @@ class ImageAlt
 				. '</div></div></div></td>';
 			$html .= '<td class="cwp-bulk-col-alt" colspan="2"><div class="cwp-bulk-field">'
 				. '<textarea class="cwp-bulk-input cwp-bulk-input--alt" rows="2" data-field="alt" '
+				. 'aria-label="' . esc_attr(sprintf(/* translators: %s: file name */ __('Alt text for %s', 'mihdan-index-now'), $file)) . '" '
 				. 'placeholder="' . esc_attr__('Describe the image for people who can’t see it', 'mihdan-index-now') . '" '
 				. 'data-original="' . esc_attr($alt) . '">' . esc_textarea($alt) . '</textarea>'
 				. $ai

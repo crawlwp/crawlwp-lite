@@ -29,6 +29,13 @@
 	// The running "Write with AI" job, if any.
 	var aiJob = null;
 
+	// A save is in flight: the Save button stays off until it answers.
+	var saving = false;
+
+	// The list request in flight and its number, so a slow earlier answer can't overwrite a newer one.
+	var listXhr = null;
+	var listSeq = 0;
+
 	// -------------------------------------------------------------------------
 	// DOM refs (resolved after DOMContentLoaded)
 	// -------------------------------------------------------------------------
@@ -105,7 +112,7 @@
 
 			$wrap.find('.cwp-bulk-view').each(function () {
 				var on = $(this).data('view') === view;
-				$(this).toggleClass('is-active', on).attr('aria-selected', on ? 'true' : 'false');
+				$(this).toggleClass('is-active', on).attr('aria-pressed', on ? 'true' : 'false');
 			});
 
 			$('#cwp-bulk-post-type, #cwp-bulk-filter').toggle(view === 'posts');
@@ -259,8 +266,14 @@
 		toggleSaveButton();
 
 		var images = state.view === 'images';
+		var seq    = ++listSeq;
 
-		$.post(cfg.ajaxUrl, {
+		// Only the newest request may fill the table: a slower earlier one would show rows of another view or page.
+		if (listXhr && listXhr.abort) {
+			listXhr.abort();
+		}
+
+		listXhr = $.post(cfg.ajaxUrl, {
 			action:    images ? 'crawlwp_bulk_editor_images' : 'crawlwp_bulk_editor_list',
 			nonce:     cfg.nonce,
 			search:    state.search,
@@ -269,13 +282,19 @@
 			per_page:  state.per_page,
 			page:      state.page
 		}, function (resp) {
-			if (!resp.success) {
-				$tbody.html('<tr><td colspan="4">' + escapeHtml((resp.data && resp.data.message) ? resp.data.message : (i18n.error || 'Error')) + '</td></tr>');
+			if (seq !== listSeq) {
+				return;
+			}
+
+			if (!resp || !resp.success) {
+				$tbody.html('<tr><td colspan="4">' + escapeHtml((resp && resp.data && resp.data.message) ? resp.data.message : (i18n.error || 'Error')) + '</td></tr>');
 				return;
 			}
 
 			var data = resp.data;
 			$tbody.html(data.html);
+			// The rows know which list they came from, so a save can't send them as the other kind.
+			$tbody.attr('data-view', images ? 'images' : 'posts');
 
 			if (typeof data.missing !== 'undefined') {
 				updateMissingBadge(data.missing);
@@ -290,6 +309,13 @@
 			$totalInfo.text(data.total_label || String(data.total));
 
 			renderPagination(data.page, data.pages);
+		}).fail(function (xhr, status) {
+			if (seq !== listSeq || status === 'abort') {
+				return;
+			}
+
+			var expired = xhr && (xhr.status === 401 || xhr.status === 403);
+			$tbody.html('<tr><td colspan="4">' + escapeHtml(expired ? (i18n.sessionExpired || i18n.error || 'Error') : (i18n.loadError || i18n.error || 'Error')) + '</td></tr>');
 		});
 	}
 
@@ -300,16 +326,21 @@
 	function saveChanges() {
 		var ids = Object.keys(dirty);
 
-		if (!ids.length) {
+		if (!ids.length || saving || aiJob) {
 			return;
 		}
 
+		// What is sent, per row: only these values count as saved when the answer comes back.
+		var sent = {};
 		var rows = ids.map(function (id) {
+			sent[id] = $.extend({}, dirty[id]);
 			return $.extend({ id: id }, dirty[id]);
 		});
 
-		var images = state.view === 'images';
+		// The kind of rows on screen, not the view button: they differ while another list is loading.
+		var images = ($tbody.attr('data-view') || state.view) === 'images';
 
+		saving = true;
 		$saveBtn.prop('disabled', true).text(i18n.saving || 'Saving…');
 		hideNotice();
 
@@ -319,27 +350,50 @@
 			type:   images ? 'images' : 'posts',
 			rows:   rows
 		}, function (resp) {
-			$saveBtn.text(i18n.saveChanges || 'Save Changes');
+			saving = false;
 
-			if (!resp.success) {
-				markFailedRows((resp.data && resp.data.failed) ? resp.data.failed : []);
-				showNotice((resp.data && resp.data.message) ? resp.data.message : (i18n.saveError || 'Save failed.'), true);
-				$saveBtn.prop('disabled', false);
+			if (!resp || !resp.success) {
+				markFailedRows((resp && resp.data && resp.data.failed) ? resp.data.failed : []);
+				showNotice((resp && resp.data && resp.data.message) ? resp.data.message : (i18n.saveError || 'Save failed.'), true);
+				toggleSaveButton();
 				return;
 			}
 
-			// Mark saved rows as clean.
+			// Mark saved rows as clean, unless a field changed while the save was on its way.
 			var savedIds = (resp.data && resp.data.saved) ? resp.data.saved : [];
 			savedIds.forEach(function (id) {
-				delete dirty[String(id)];
+				var values = sent[String(id)] || {};
+				var $row   = $tbody.find('tr[data-id="' + id + '"]');
+				var same   = true;
 
-				var $row = $tbody.find('tr[data-id="' + id + '"]');
 				$row.find('.cwp-bulk-input').each(function () {
-					$(this).data('original', $(this).val()).attr('data-original', $(this).val());
+					var $field = $(this);
+					var name   = $field.data('field');
+
+					if (typeof values[name] === 'undefined') {
+						return;
+					}
+
+					// The stored value is the one that was sent.
+					$field.data('original', values[name]).attr('data-original', values[name]);
+
+					if ($field.val() === values[name]) {
+						$field.closest('td').removeClass('is-ai').find('.cwp-bulk-ai-tag').remove();
+					} else {
+						same = false;
+					}
 				});
-				$row.removeClass('is-dirty is-failed');
+
+				$row.removeClass('is-failed');
 				$row.find('.cwp-bulk-row-error').remove();
-				$row.find('.is-ai').removeClass('is-ai').find('.cwp-bulk-ai-tag').remove();
+
+				if (same || !$row.length) {
+					delete dirty[String(id)];
+					$row.removeClass('is-dirty');
+				} else {
+					// Typed or written by AI after the save was sent: still unsaved.
+					refreshDirty($row);
+				}
 			});
 
 			if (images) {
@@ -355,9 +409,10 @@
 			var message = (resp.data && resp.data.message) ? resp.data.message : (i18n.saved || 'Saved.');
 
 			showNotice(message, failedIds.length > 0);
-		}).fail(function () {
-			$saveBtn.prop('disabled', false).text(i18n.saveChanges || 'Save Changes');
-			showNotice(i18n.saveError || 'Save failed.', true);
+		}).fail(function (xhr) {
+			saving = false;
+			toggleSaveButton();
+			showNotice(xhr && (xhr.status === 401 || xhr.status === 403) ? (i18n.sessionExpired || i18n.saveError || 'Save failed.') : (i18n.saveError || 'Save failed.'), true);
 		});
 	}
 
@@ -383,7 +438,8 @@
 
 			$row.addClass('is-failed');
 
-			var $cell = $row.find('.cwp-bulk-col-post');
+			// The first cell after the checkbox: the post in one view, the image in the other.
+			var $cell = $row.children('td').eq(1);
 
 			if (!$cell.find('.cwp-bulk-row-error').length) {
 				$cell.append($('<span class="cwp-bulk-row-error"></span>').text(label));
@@ -406,6 +462,19 @@
 
 		// Editing the row clears a previous failure marker.
 		$row.removeClass('is-failed').find('.cwp-bulk-row-error').remove();
+
+		refreshDirty($row);
+	}
+
+	/**
+	 * Work out from its fields whether a row has unsaved changes.
+	 */
+	function refreshDirty($row) {
+		var id = $row.data('id');
+
+		if (!id) {
+			return;
+		}
 
 		var values  = {};
 		var changed = false;
@@ -434,7 +503,13 @@
 	function toggleSaveButton() {
 		var count = Object.keys(dirty).length;
 
-		$saveBtn.prop('disabled', count === 0);
+		// Off while a save or a "Write with AI" run is going: a real disabled button, so the keyboard can't press it either.
+		$saveBtn.prop('disabled', count === 0 || saving || !!aiJob);
+
+		if (saving) {
+			$saveBtn.text(i18n.saving || 'Saving…');
+			return;
+		}
 
 		var label = i18n.saveChanges || 'Save Changes';
 		$saveBtn.text(count > 0 ? label + ' (' + count + ')' : label);
@@ -494,7 +569,7 @@
 	// -------------------------------------------------------------------------
 
 	function renderHead() {
-		var check = '<th class="cwp-bulk-col-check"><input type="checkbox" class="cwp-bulk-check-all"></th>';
+		var check = $('<th class="cwp-bulk-col-check"></th>').append($('<input type="checkbox" class="cwp-bulk-check-all">').attr('aria-label', i18n.selectAll || 'Select all rows'));
 		var cols  = state.view === 'images'
 			? [['cwp-bulk-col-image', i18n.image], ['cwp-bulk-col-alt', i18n.altText, 2]]
 			: [['cwp-bulk-col-post', i18n.post], ['cwp-bulk-col-title', i18n.seoTitle], ['cwp-bulk-col-desc', i18n.metaDescription]];
@@ -564,7 +639,12 @@
 		// Many fields.
 		$wrap.on('click', '#cwp-bulk-ai-btn', function () {
 			if (!cfg.batchAI) {
-				showNotice(i18n.aiPremium, true, cfg.upgradeUrl, i18n.aiUpgrade);
+				// People who already have Premium need its update, not a pricing page.
+				if (cfg.hasPremium) {
+					showNotice(i18n.aiUpdatePremium || i18n.aiPremium, true);
+				} else {
+					showNotice(i18n.aiPremium, true, cfg.upgradeUrl, i18n.aiUpgrade);
+				}
 				return;
 			}
 
@@ -581,6 +661,11 @@
 		$wrap.on('click', '.cwp-bulk-progress__stop', function () {
 			if (aiJob) {
 				aiJob.stopped = true;
+
+				// Don't wait for a request that may never answer.
+				if (aiJob.xhr && aiJob.xhr.abort) {
+					aiJob.xhr.abort();
+				}
 			}
 		});
 	}
@@ -591,7 +676,8 @@
 	 *
 	 * @param {jQuery}   $input
 	 * @param {boolean}  batch
-	 * @param {Function} done   Called with {ok, error, connectUrl, rateLimited}.
+	 * @param {Function} done   Called with {ok, error, connectUrl, rateLimited, status, aborted}.
+	 * @return {Object} The request, so a run can abort it.
 	 */
 	function writeField($input, batch, done) {
 		var $td    = $input.closest('td');
@@ -604,10 +690,12 @@
 		$td.find('.cwp-bulk-field').append($('<span class="cwp-bulk-ai-wait"></span>').text(label || ''));
 		$td.find('.cwp-bulk-ai-error').remove();
 
-		$.ajax({
-			url:  cfg.ajaxUrl,
-			type: 'POST',
-			data: {
+		return $.ajax({
+			url:     cfg.ajaxUrl,
+			type:    'POST',
+			// Writing from an image can take a while, but a request that never answers must not lock the table.
+			timeout: 120000,
+			data:    {
 				action:   'crawlwp_bulk_editor_ai',
 				nonce:    cfg.nonce,
 				id:       $input.closest('tr').data('id'),
@@ -631,10 +719,19 @@
 			var data = resp && resp.data ? resp.data : {};
 			fieldError($td, data.message || i18n.aiError);
 			done({ error: data.message || i18n.aiError, connectUrl: data.connectUrl, stop: !!data.stop });
-		}).fail(function (xhr) {
-			var data = xhr && xhr.responseJSON && xhr.responseJSON.data ? xhr.responseJSON.data : {};
-			fieldError($td, data.message || i18n.aiError);
-			done({ error: data.message || i18n.aiError, connectUrl: data.connectUrl, rateLimited: xhr && xhr.status === 429, dailyLimit: !!data.dailyLimit });
+		}).fail(function (xhr, status) {
+			if (status === 'abort') {
+				done({ aborted: true });
+				return;
+			}
+
+			var data    = xhr && xhr.responseJSON && xhr.responseJSON.data ? xhr.responseJSON.data : {};
+			var code    = xhr ? xhr.status : 0;
+			var expired = (code === 401 || code === 403) && !data.message;
+			var message = data.message || (expired ? i18n.sessionExpired : '') || i18n.aiError;
+
+			fieldError($td, message);
+			done({ error: message, connectUrl: data.connectUrl, rateLimited: code === 429, dailyLimit: !!data.dailyLimit, status: code });
 		}).always(function () {
 			$td.removeClass('is-ai-busy').find('.cwp-bulk-ai-wait').remove();
 		});
@@ -684,10 +781,10 @@
 			? [['alt', i18n.aiAlts]]
 			: [['seo_title', i18n.aiTitles], ['seo_description', i18n.aiDescriptions]];
 
-		var $dialog = $('<div class="cwp-bulk-dialog" role="dialog" aria-modal="true"></div>');
+		var $dialog = $('<div class="cwp-bulk-dialog" role="dialog" aria-modal="true" aria-labelledby="cwp-bulk-dialog-title"></div>');
 		var $box    = $('<div class="cwp-bulk-dialog__box"></div>').appendTo($dialog);
 
-		$box.append($('<h2 class="cwp-bulk-dialog__title"></h2>').html(cfg.aiIcon || '').append($('<span></span>').text(i18n.aiDialogTitle)));
+		$box.append($('<h2 class="cwp-bulk-dialog__title" id="cwp-bulk-dialog-title"></h2>').html(cfg.aiIcon || '').append($('<span></span>').text(i18n.aiDialogTitle)));
 
 		var $body = $('<div class="cwp-bulk-dialog__body"></div>').appendTo($box);
 
@@ -750,8 +847,31 @@
 			}
 		});
 		$(document).on('keydown.cwpAiDialog', function (e) {
-			if (e.key === 'Escape') {
+			if (e.key === 'Escape' || e.which === 27) {
 				close();
+				return;
+			}
+
+			// Keep Tab inside the dialog while it is open.
+			if (e.key === 'Tab' || e.which === 9) {
+				var $focusable = $box.find('input, button').filter(':visible').not(':disabled');
+				var first      = $focusable.get(0);
+				var last       = $focusable.get($focusable.length - 1);
+
+				if (!first) {
+					return;
+				}
+
+				if (!$.contains($box.get(0), document.activeElement)) {
+					e.preventDefault();
+					first.focus();
+				} else if (e.shiftKey && document.activeElement === first) {
+					e.preventDefault();
+					last.focus();
+				} else if (!e.shiftKey && document.activeElement === last) {
+					e.preventDefault();
+					first.focus();
+				}
 			}
 		});
 		$start.on('click', function () {
@@ -774,9 +894,10 @@
 	function runBatch(targets) {
 		var $progress = $('#cwp-bulk-progress');
 		var label     = state.view === 'images' ? i18n.aiProgressAlt : i18n.aiProgressPosts;
-		var job       = { stopped: false, done: 0, ok: 0, failed: 0 };
+		var job       = { stopped: false, done: 0, ok: 0, failed: 0, streak: 0, xhr: null };
 
 		aiJob = job;
+		toggleSaveButton();
 		hideNotice();
 		$wrap.addClass('is-ai-running');
 		$progress.css('display', 'flex');
@@ -790,6 +911,7 @@
 
 		function finish(message, isError, linkUrl) {
 			aiJob = null;
+			toggleSaveButton();
 			$wrap.removeClass('is-ai-running');
 			$progress.hide();
 			showNotice(message, isError, linkUrl);
@@ -808,16 +930,38 @@
 
 			var $input = targets[job.done];
 
-			writeField($input, true, function (result) {
+			job.xhr = writeField($input, true, function (result) {
+				job.xhr = null;
+
+				// Stopped while this request was out: nothing was written for it.
+				if (result.aborted) {
+					finish(i18n.aiStopped, false);
+					return;
+				}
+
 				job.done++;
 
 				if (result.ok) {
 					job.ok++;
+					job.streak = 0;
 				} else {
 					job.failed++;
+					job.streak++;
 				}
 
 				render();
+
+				// Signed out or the page is too old: every further request would be refused the same way.
+				if (result.status === 401 || result.status === 403) {
+					finish(result.error, true);
+					return;
+				}
+
+				// Several failures in a row (server error, connection lost): stop instead of sending the rest.
+				if (job.streak >= 3 && !result.rateLimited && !result.connectUrl && !result.stop) {
+					finish(i18n.aiTooManyErrors || result.error, true);
+					return;
+				}
 
 				if (result.rateLimited) {
 					/* The daily cap lasts until midnight: the server's message says so, "wait a few minutes" would not. */
