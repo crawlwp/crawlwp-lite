@@ -12,7 +12,13 @@
     var state = { type: cfg.value.type || '', fields: {} };
     var memory = {}; // values per type, kept while switching types
 
-    if (state.type) memory[state.type] = cfg.value.fields || {};
+    // PHP prints an empty field list as [] (json_decode's array form). Values set on an array are
+    // dropped by JSON.stringify, so only a plain object is used as the starting values.
+    function plainObject(v) {
+        return v && typeof v === 'object' && Object.prototype.toString.call(v) !== '[object Array]' ? v : {};
+    }
+
+    if (state.type) memory[state.type] = plainObject(cfg.value.fields);
 
     function el(tag, attrs, children) {
         var node = document.createElement(tag);
@@ -134,6 +140,20 @@
             save();
             status();
         });
+
+        if (field.type === 'date' || field.type === 'datetime') {
+            // A half-typed date makes the input invalid, and the browser then refuses to submit the
+            // classic editor's form without saying why when this tab is hidden. Empty it on leaving.
+            c.addEventListener('blur', function () {
+                if (!c.validity || !c.validity.badInput) return;
+                c.value = '';
+                delete current()[key];
+                save();
+                status();
+                var note = app.querySelector('[data-invalid="' + key + '"]');
+                if (note) { note.textContent = i18n.notDate || ''; note.hidden = note.textContent === ''; }
+            });
+        }
 
         return c;
     }

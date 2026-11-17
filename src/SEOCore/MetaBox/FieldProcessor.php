@@ -92,7 +92,7 @@ class FieldProcessor
 					break;
 
 				case self::TYPE_JSON:
-					$values[$key] = self::json($raw);
+					$values[$key] = self::json($raw, ! isset($spec['strip_tags']) || $spec['strip_tags']);
 					break;
 			}
 		}
@@ -149,9 +149,14 @@ class FieldProcessor
 	 * result is re-encoded — so markup pasted into a schema field can never
 	 * reach the front end inside the JSON-LD block.
 	 *
+	 * With $strip_tags false the decoded values are re-encoded as they are. Only for a
+	 * field whose values are each sanitised afterwards (the rich result fields, by
+	 * RichResults::sanitize()): wp_strip_all_tags() would cut "Bake at <200C for 10 min"
+	 * down to "Bake at".
+	 *
 	 * @param mixed $raw
 	 */
-	public static function json($raw): string
+	public static function json($raw, bool $strip_tags = true): string
 	{
 		$json = trim((string) wp_unslash((string) $raw));
 
@@ -165,7 +170,7 @@ class FieldProcessor
 			return wp_strip_all_tags($json);
 		}
 
-		$encoded = wp_json_encode(self::strip_tags_deep($decoded), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+		$encoded = wp_json_encode($strip_tags ? self::strip_tags_deep($decoded) : $decoded, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 
 		return is_string($encoded) ? $encoded : '';
 	}

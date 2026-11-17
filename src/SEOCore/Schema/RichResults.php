@@ -135,6 +135,21 @@ class RichResults
 	}
 
 	/**
+	 * WordPress's text sanitising turns a lone "<" ("Bake at <200C", "I <3 coffee") into
+	 * "&lt;", which would then be printed as those four characters in the structured data.
+	 * Put the "<" back, but only where it can't begin a tag (not before a letter, "/",
+	 * "!" or "?"), and only when the entity wasn't typed in.
+	 */
+	private static function keep_less_than(string $raw, string $clean): string
+	{
+		if (strpos($raw, '<') === false || strpos($raw, '&lt;') !== false) {
+			return $clean;
+		}
+
+		return (string) preg_replace('/&lt;(?![a-zA-Z\/!?])/', '<', $clean);
+	}
+
+	/**
 	 * Clean one value for storage (the form's own format, e.g. "2026-11-18T14:00").
 	 *
 	 * @param mixed $raw
@@ -150,7 +165,7 @@ class RichResults
 		switch ($field['type'] ?? 'text') {
 			case 'textarea':
 			case 'list':
-				return sanitize_textarea_field($raw);
+				return self::keep_less_than($raw, sanitize_textarea_field($raw));
 			case 'url':
 				return (string) esc_url_raw($raw, ['http', 'https']);
 			case 'number':
@@ -178,7 +193,7 @@ class RichResults
 			case 'select':
 				return array_key_exists($raw, (array) ($field['options'] ?? [])) ? $raw : '';
 			default:
-				return mb_substr(sanitize_text_field($raw), 0, 500);
+				return mb_substr(self::keep_less_than($raw, sanitize_text_field($raw)), 0, 500);
 		}
 	}
 
@@ -307,6 +322,14 @@ class RichResults
 	 */
 	public static function nodes_for_post(\WP_Post $post, string $webpage_id = ''): array
 	{
+		/*
+		 * A password-protected post shows visitors a password form, so its price, dates,
+		 * address or salary must not be readable in the page source either.
+		 */
+		if ((string) $post->post_password !== '') {
+			return [];
+		}
+
 		return self::build($post, self::get($post->ID), $webpage_id)['nodes'];
 	}
 
@@ -529,6 +552,18 @@ class RichResults
 	/**
 	 * Data the metabox needs: type definitions without callbacks, defaults, the post's choice.
 	 */
+	/**
+	 * The stored value in the shape the editor script needs: `fields` is always an
+	 * object, so an empty list is printed as {} and not [] (values the script then
+	 * sets on an array would be lost when it writes the JSON back).
+	 */
+	public static function editor_value(array $value): array
+	{
+		$value['fields'] = (object) $value['fields'];
+
+		return $value;
+	}
+
 	public static function editor_data(\WP_Post $post): array
 	{
 		$types = [];
@@ -551,7 +586,7 @@ class RichResults
 
 		return [
 			'types'      => $types,
-			'value'      => self::get($post->ID),
+			'value'      => self::editor_value(self::get($post->ID)),
 			'defaults'   => $defaults,
 			'testUrl'    => 'https://search.google.com/test/rich-results?url=' . rawurlencode($defaults['url']),
 			'upgradeUrl' => $pro_active ? admin_url('plugins.php') : 'https://crawlwp.com/pricing/?utm_source=wp_dashboard&utm_medium=upgrade&utm_campaign=rich-results',
@@ -573,6 +608,7 @@ class RichResults
 				'upgrade'     => __('Upgrade to Premium', 'mihdan-index-now'),
 				'update'      => __('Update CrawlWP Premium to use it', 'mihdan-index-now'),
 				'notNumber'   => __('Not a number, so it won\'t be saved.', 'mihdan-index-now'),
+				'notDate'     => __('The date was incomplete, so it was cleared.', 'mihdan-index-now'),
 				'wholeNumber' => __('Use a whole number of minutes. This won\'t be saved.', 'mihdan-index-now'),
 				'notUrl'      => __('Not a web address (it should start with https://), so it won\'t be saved.', 'mihdan-index-now'),
 				/* translators: 1: lowest allowed number, 2: highest allowed number */

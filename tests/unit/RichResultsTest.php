@@ -160,6 +160,49 @@ class RichResultsTest extends TestCase
 		$this->assertSame('', RichResults::decode(wp_unslash(RichResults::sanitize($posted)))['type']);
 	}
 
+	public function test_a_less_than_sign_does_not_cut_the_text_off(): void
+	{
+		$posted = json_encode(['type' => 'Recipe', 'fields' => [
+			'name'         => 'I <3 Coffee Cake',
+			'instructions' => "Mix the flour\nBake at <200C for 10 min\nLeave to cool",
+			'ingredients'  => "1 cup <b>flour</b>\n<script>alert(1)</script>2 eggs\n<img src=x onerror=alert(1)",
+		]]);
+
+		/* The same path as MetaFields::save(): the JSON field, then the per-value clean-up. */
+		$json   = \Mihdan\IndexNow\SEOCore\MetaBox\FieldProcessor::json(wp_slash($posted), false);
+		$fields = RichResults::decode(RichResults::sanitize($json))['fields'];
+
+		$this->assertSame('I <3 Coffee Cake', $fields['name']);
+		$this->assertSame("Mix the flour\nBake at <200C for 10 min\nLeave to cool", $fields['instructions']);
+
+		/* Markup is still removed, and a "<" that could begin a tag stays encoded. */
+		$this->assertStringNotContainsString('<b>', $fields['ingredients']);
+		$this->assertStringNotContainsString('<script', $fields['ingredients']);
+		$this->assertStringNotContainsString('<img', $fields['ingredients']);
+		$this->assertStringContainsString('1 cup flour', $fields['ingredients']);
+	}
+
+	public function test_password_protected_post_outputs_no_rich_result(): void
+	{
+		$post                = new \WP_Post();
+		$post->ID            = 4521;
+		$post->post_password = 'secret';
+
+		update_post_meta($post->ID, '_crawlwp_schema_rich', json_encode(['type' => 'Product', 'fields' => ['name' => 'Mug', 'price' => '12', 'currency' => 'USD']]));
+
+		$this->assertSame([], RichResults::nodes_for_post($post));
+	}
+
+	public function test_editor_gets_an_empty_field_list_as_an_object(): void
+	{
+		/* A type saved with nothing filled in: [] here would make the editor script lose every value typed later. */
+		$stored = RichResults::sanitize(json_encode(['type' => 'Recipe', 'fields' => []]));
+
+		$this->assertStringContainsString('"fields":{}', json_encode(RichResults::editor_value(RichResults::decode($stored))));
+		$this->assertStringContainsString('"fields":{"name":"Pancakes"}', json_encode(RichResults::editor_value(['type' => 'Recipe', 'fields' => ['name' => 'Pancakes']])));
+		$this->assertStringContainsString('"fields":{}', json_encode(RichResults::editor_value(RichResults::decode(''))));
+	}
+
 	public function test_numbers_must_be_finite_and_in_range(): void
 	{
 		$field = ['type' => 'number', 'min' => 1, 'max' => 5];

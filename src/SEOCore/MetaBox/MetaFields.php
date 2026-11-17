@@ -220,7 +220,8 @@ class MetaFields
 
 		$fields[self::PRIMARY_CATEGORY] = ['type' => FieldProcessor::TYPE_INT];
 		$fields[self::SCHEMA_CUSTOM]    = ['type' => FieldProcessor::TYPE_JSON];
-		$fields[self::SCHEMA_RICH]      = ['type' => FieldProcessor::TYPE_JSON];
+		/* Not tag-stripped here: save() hands it to RichResults::sanitize(), which cleans every value by its field type. */
+		$fields[self::SCHEMA_RICH]      = ['type' => FieldProcessor::TYPE_JSON, 'strip_tags' => false];
 
 		/*
 		 * Checkbox and robots-advanced fields are only touched when the SEO form

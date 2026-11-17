@@ -500,6 +500,11 @@ if (!function_exists('add_rewrite_rule')) {
 if (!function_exists('sanitize_text_field')) {
 	function sanitize_text_field($str)
 	{
+		// As WordPress does: a "<" that doesn't close as a tag becomes &lt; before tags are stripped.
+		$str = preg_replace_callback('%<[^>]*?((?=<)|>|$)%', static function ($m) {
+			return strpos($m[0], '>') === false ? htmlspecialchars($m[0], ENT_QUOTES) : $m[0];
+		}, (string)$str);
+
 		return trim(strip_tags((string)$str));
 	}
 }
@@ -514,6 +519,11 @@ if (!function_exists('wp_timezone')) {
 if (!function_exists('sanitize_textarea_field')) {
 	function sanitize_textarea_field($str)
 	{
+		// As WordPress does: a "<" that doesn't close as a tag becomes &lt; before tags are stripped.
+		$str = preg_replace_callback('%<[^>]*?((?=<)|>|$)%', static function ($m) {
+			return strpos($m[0], '>') === false ? htmlspecialchars($m[0], ENT_QUOTES) : $m[0];
+		}, (string)$str);
+
 		return trim(strip_tags((string)$str));
 	}
 }
