@@ -159,15 +159,16 @@ class ImageSitemap extends \WP_Sitemaps_Provider
 	 * or a product gallery.
 	 *
 	 * Finding that out reads the content of every published post of a type that has none, so
-	 * the answer is kept outside the page cache (which is emptied on every edit): "yes" until a
-	 * sitemap page turns out empty, "no" for a day or until a post of that type gets an image
-	 * (see note_post()).
+	 * the answer is kept outside the page cache (which is emptied on every edit): "yes" for a
+	 * week or until every sitemap page of the type turns out empty, "no" for a day or until a
+	 * post of that type gets an image (see note_post()).
 	 */
 	private function has_images(string $post_type): bool
 	{
 		$known = self::known_types();
 		$entry = $known[$post_type] ?? null;
-		$fresh = is_array($entry) && isset($entry[0], $entry[1]) && ($entry[0] || (int) $entry[1] > time() - DAY_IN_SECONDS);
+		/* "No" is checked again after a day, "yes" after a week (its images may all have been removed since). */
+		$fresh = is_array($entry) && isset($entry[0], $entry[1]) && (int) $entry[1] > time() - ($entry[0] ? WEEK_IN_SECONDS : DAY_IN_SECONDS);
 
 		if ($fresh) {
 			$found = (bool) $entry[0];
@@ -413,6 +414,28 @@ class ImageSitemap extends \WP_Sitemaps_Provider
 		return preg_match('#^https?://#i', $url) ? esc_url_raw($url) : '';
 	}
 
+	/**
+	 * Whether every sitemap page of a post type is known to be empty, given that $empty_page
+	 * just turned out empty. Only pages already built (and cached as empty) count, so nothing
+	 * is built to find out; a type with very many pages is left alone.
+	 */
+	private function all_pages_empty(string $subtype, int $empty_page): bool
+	{
+		$pages = $this->get_max_num_pages($subtype);
+
+		if ($pages < 1 || $pages > 50) {
+			return false;
+		}
+
+		for ($page = 1; $page <= $pages; $page++) {
+			if ($page !== $empty_page && get_transient(self::cache_key($subtype . '|' . $page)) !== self::EMPTY_PAGE) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
 	public function maybe_render(): void
 	{
 		if (get_query_var('sitemap') !== self::PROVIDER_NAME) {
@@ -438,9 +461,10 @@ class ImageSitemap extends \WP_Sitemaps_Provider
 			$xml = $entries === [] ? self::EMPTY_PAGE : self::xml($entries);
 			set_transient($key, $xml, DAY_IN_SECONDS);
 
-			/* The only page of this post type is empty (its posts with images are all noindexed
-			   or protected): take the type out of the sitemap index until one of its posts changes. */
-			if ($entries === [] && $page === 1 && $this->get_max_num_pages($subtype) === 1) {
+			/* Every page of this post type is empty (its posts with images are all noindexed or
+			   protected, or the images are gone): take the type out of the sitemap index until one
+			   of its posts changes. */
+			if ($entries === [] && $this->all_pages_empty($subtype, $page)) {
 				self::remember_type($subtype, false);
 				set_transient(self::cache_key('n|' . $subtype), 'n:0', DAY_IN_SECONDS);
 			}
