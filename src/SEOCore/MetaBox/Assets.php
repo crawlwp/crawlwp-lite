@@ -152,6 +152,14 @@ class Assets
 			'postId'           => $post instanceof \WP_Post ? $post->ID : 0,
 			'featuredImageUrl' => $post instanceof \WP_Post ? (get_the_post_thumbnail_url($post->ID, 'medium') ?: '') : '',
 			'featuredImageFull' => $post instanceof \WP_Post ? (get_the_post_thumbnail_url($post->ID, 'full') ?: '') : '',
+			/**
+			 * Image social networks get when the post has no social image of its own,
+			 * shown in the Social tab previews. CrawlWP Premium's share images use it.
+			 *
+			 * @param array         $fallback url: image URL ('' for the featured image), always: true to use it even when there is a featured image.
+			 * @param \WP_Post|null $post     Post being edited.
+			 */
+			'socialFallback'   => (array) apply_filters('crawlwp_metabox_social_fallback', ['url' => '', 'always' => false], $post instanceof \WP_Post ? $post : null),
 			'language'         => get_bloginfo('language'),
 			'websiteId'        => home_url('/') . '#website',
 			'publisherId'      => home_url('/') . '#' . ((string) SiteInfoSettings::get('site_type', 'organization') === 'person' ? 'person' : 'organization'),

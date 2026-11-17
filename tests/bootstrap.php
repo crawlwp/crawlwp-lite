@@ -1630,3 +1630,18 @@ $crawlwp_pro_autoload = dirname(CRAWLWP_TESTS_PLUGIN_DIR) . '/mihdan-index-now-p
 if (file_exists($crawlwp_pro_autoload)) {
 	require_once $crawlwp_pro_autoload;
 }
+
+// Uninstall removes Premium's share images (uploads/crawlwp-social) and their queue event.
+if (!function_exists('wp_unschedule_hook')) {
+	function wp_unschedule_hook($hook) {
+		$GLOBALS['crawlwp_test_state']['unscheduled_hooks'][] = $hook;
+		return 0;
+	}
+}
+
+if (!function_exists('wp_get_upload_dir')) {
+	function wp_get_upload_dir() {
+		$base = $GLOBALS['crawlwp_test_state']['upload_basedir'] ?? sys_get_temp_dir() . '/crawlwp-test-uploads';
+		return ['basedir' => $base, 'baseurl' => 'https://example.com/wp-content/uploads', 'error' => false];
+	}
+}

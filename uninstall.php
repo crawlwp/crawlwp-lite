@@ -44,6 +44,8 @@ function crawlwp_lite_pro_owned_options()
 		'names'    => [
 			'crawlwp_auto_index',
 			'crawlwp_auto_index_stat',
+			// Role Manager: which roles may use which part of CrawlWP.
+			'crawlwp_role_grid',
 			'crawlwp_plc_queued_data',
 			'crawlwp_email_reports',
 			'crawlwp_email_reports_sent',
@@ -65,6 +67,10 @@ function crawlwp_lite_pro_owned_options()
 			'pand-' . md5('crawlwp_catch_late_event_notice'),
 		],
 		'prefixes' => [
+			// Automatic share images: settings, background queue and bulk-run state.
+			'crawlwp_social_images',
+			// SEO Indexing: where the noindex clean-up has got to.
+			'crawlwp_noindex_cleanup',
 			'crawlwp_pro_',
 			'crawlwp_license',
 		],
@@ -187,6 +193,27 @@ function crawlwp_lite_mo_uninstall_function($force = false)
 		);
 	}
 
+	if ( ! $keep_pro) {
+		// Premium's automatic share images: the background queue and the image files.
+		wp_unschedule_hook('crawlwp_social_images_run');
+
+		$uploads    = wp_get_upload_dir();
+		$social_dir = trailingslashit($uploads['basedir']) . 'crawlwp-social';
+
+		if (is_dir($social_dir) && ! is_link($social_dir)) {
+			$files = new \RecursiveIteratorIterator(
+				new \RecursiveDirectoryIterator($social_dir, \FilesystemIterator::SKIP_DOTS),
+				\RecursiveIteratorIterator::CHILD_FIRST
+			);
+
+			foreach ($files as $file) {
+				$file->isDir() && ! $file->isLink() ? @rmdir($file->getPathname()) : @unlink($file->getPathname());
+			}
+
+			@rmdir($social_dir);
+		}
+	}
+
 	// Post, term, user and comment meta written by the plugin (see SEOCore\MetaBox\MetaFields),
 	// plus the unprefixed "last submission" meta (Indexing::LAST_UPDATE_META).
 	$meta_tables = [
@@ -198,13 +225,28 @@ function crawlwp_lite_mo_uninstall_function($force = false)
 
 	$meta_like = $wpdb->esc_like('_crawlwp_') . '%';
 
+	// While Premium stays installed its share-image files are kept, so keep the meta that points to them.
+	// _crawlwp_location holds each Premium location's address and hours: its posts are kept, so keep it too.
+	$keep_meta_sql = $keep_pro
+		? $wpdb->prepare(' AND meta_key NOT LIKE %s AND meta_key <> %s', $wpdb->esc_like('_crawlwp_social_image') . '%', '_crawlwp_location')
+		: '';
+
+	if ( ! $keep_pro) {
+		// Premium's business locations (a post type nothing registers any more) and their meta.
+		// their revisions and autosaves go first, while the parent rows are still there to find them by.
+		$wpdb->query($wpdb->prepare("DELETE pm FROM {$wpdb->postmeta} pm INNER JOIN {$wpdb->prefix}posts r ON r.ID = pm.post_id INNER JOIN {$wpdb->prefix}posts p ON p.ID = r.post_parent WHERE r.post_type = %s AND p.post_type = %s", 'revision', 'crawlwp_location'));
+		$wpdb->query($wpdb->prepare("DELETE r FROM {$wpdb->prefix}posts r INNER JOIN {$wpdb->prefix}posts p ON p.ID = r.post_parent WHERE r.post_type = %s AND p.post_type = %s", 'revision', 'crawlwp_location'));
+		$wpdb->query($wpdb->prepare("DELETE pm FROM {$wpdb->postmeta} pm INNER JOIN {$wpdb->prefix}posts p ON p.ID = pm.post_id WHERE p.post_type = %s", 'crawlwp_location'));
+		$wpdb->query($wpdb->prepare("DELETE FROM {$wpdb->prefix}posts WHERE post_type = %s", 'crawlwp_location'));
+	}
+
 	foreach ($meta_tables as $meta_table) {
 		$wpdb->query(
 			$wpdb->prepare(
-				"DELETE FROM {$meta_table} WHERE meta_key LIKE %s OR meta_key = %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				"DELETE FROM {$meta_table} WHERE (meta_key LIKE %s OR meta_key = %s)", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				$meta_like,
 				'crawlwp_last_update'
-			)
+			) . $keep_meta_sql // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 		);
 	}
 
