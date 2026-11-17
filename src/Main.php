@@ -16,6 +16,7 @@ use Mihdan\IndexNow\SEOCore\FeatureGate\FeatureGate;
 use Mihdan\IndexNow\SEOCore\Notifications\Notifications;
 use Mihdan\IndexNow\SEOCore\SEOCoreInit;
 use Mihdan\IndexNow\Views\Settings;
+use Mihdan\IndexNow\Views\SubmitUrls;
 use Mihdan\IndexNow\Views\UpsellAdminPages;
 use Mihdan\IndexNow\Views\WPOSA;
 use WP_List_Table;
@@ -102,6 +103,7 @@ class Main
 		($this->container->make(Hooks::class))->setup_hooks();
 
 		($this->container->make(Settings::class))->setup_hooks();
+		(new SubmitUrls($this->container))->setup_hooks();
 		($this->container->make(Cron::class))->setup_hooks();
 		($this->container->make(YandexIndexNow::class))->setup_hooks();
 		($this->container->make(BingIndexNow::class))->setup_hooks();
