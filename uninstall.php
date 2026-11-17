@@ -208,6 +208,18 @@ function crawlwp_lite_mo_uninstall_function($force = false)
 		);
 	}
 
+	if ( ! $keep_pro) {
+		// Premium's saved Google inspection results (its meta key has no leading underscore).
+		foreach ([$wpdb->postmeta, $wpdb->termmeta] as $meta_table) {
+			$wpdb->query(
+				$wpdb->prepare(
+					"DELETE FROM {$meta_table} WHERE meta_key = %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					'crawlwp_google_inspection_response'
+				)
+			);
+		}
+	}
+
 	wp_cache_flush();
 }
 
