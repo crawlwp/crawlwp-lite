@@ -1119,11 +1119,18 @@
       }
       $('#cwpSitemapNotice').on('click', '[data-cwp-goto]', function(e) {
         e.preventDefault();
+        if (!self.canOpenAdvancedTab()) return;
         var $target = $('#' + $(this).attr('data-cwp-goto'));
         self.$mb.find('.cwp-tab[data-panel="advanced"]').trigger('click');
         if ($target.length) $target.trigger('focus');
       });
       this.updateSitemapNotice();
+    },
+
+    /* The Advanced tab is hidden for roles not allowed the advanced SEO fields: nothing to send them to. */
+    canOpenAdvancedTab: function() {
+      var $tab = this.$mb.find('.cwp-tab[data-panel="advanced"]');
+      return $tab.length > 0 && $tab.css('display') !== 'none';
     },
 
     /* The same order as SitemapStatus::for_post(). */
@@ -1181,7 +1188,7 @@
       var html = '<div class="cwp-sitemap-notice is-' + tone + '"><span class="cwp-sitemap-icon" aria-hidden="true">' + (tone === 'warn' ? '!' : 'i') + '</span><div>'
         + '<b>' + this.escHtml(title) + '</b> ' + this.escHtml(text);
       if (label && link) html += ' <a href="' + this.escAttr(link) + '">' + this.escHtml(label) + '</a>';
-      else if (label && goTo) html += ' <a href="#" data-cwp-goto="' + goTo + '">' + this.escHtml(label) + '</a>';
+      else if (label && goTo && this.canOpenAdvancedTab()) html += ' <a href="#" data-cwp-goto="' + goTo + '">' + this.escHtml(label) + '</a>';
       $box.html(html + '</div></div>').show();
     },
 
