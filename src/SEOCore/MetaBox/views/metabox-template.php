@@ -446,6 +446,10 @@ $cwp_templates = \Mihdan\IndexNow\SEOCore\MetaBox\Assets::title_meta_templates($
 
   <!-- SCHEMA -->
   <div class="cwp-panel" id="cwp-panel-schema" role="tabpanel">
+    <?php
+    /** Fires at the top of the Schema tab, e.g. for the Author and "Reviewed by" fields. */
+    do_action('crawlwp_metabox_schema_top', $post, $data);
+    ?>
     <div class="cwp-section">
       <h4 class="cwp-section-title"><?php esc_html_e('Structured data', 'mihdan-index-now'); ?></h4>
       <p class="cwp-section-desc"><?php esc_html_e('CrawlWP outputs this as JSON-LD in the page head. Google, Bing and Yandex all read it.', 'mihdan-index-now'); ?></p>
