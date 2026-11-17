@@ -2,6 +2,7 @@
 
 namespace Mihdan\IndexNow;
 
+use Mihdan\IndexNow\OAuth\OAuth;
 use Mihdan\IndexNow\Logger\Logger;
 use Mihdan\IndexNow\Migrations\Migrations;
 use Mihdan\IndexNow\Providers\Bing\BingIndexNow;
@@ -122,6 +123,8 @@ class Main
 		$GLOBALS['CRAWLWP_YANDEX_WEBMASTER']->setup_hooks();
 		$GLOBALS['CRAWLWP_BING_WEBMASTER']->setup_hooks();
 		$GLOBALS['CRAWLWP_GOOGLE_WEBMASTER']->setup_hooks();
+
+		OAuth::setup_hooks();
 	}
 
 	/**

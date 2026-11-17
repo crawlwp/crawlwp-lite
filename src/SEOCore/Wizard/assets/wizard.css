@@ -1101,3 +1101,32 @@
 		align-items: stretch;
 	}
 }
+
+/* Connect Google & Bing card (Complete step) */
+.cwp-connect-card {
+	margin: 20px 0;
+	padding: 16px 18px;
+	border: 1px solid #dcdcde;
+	border-radius: 8px;
+	background: #f6f7f7;
+}
+
+.cwp-connect-card p {
+	margin: 6px 0 12px;
+}
+
+.cwp-connect-card__row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+	align-items: center;
+	margin-bottom: 10px;
+}
+
+.cwp-connect-card__done {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	color: #00a32a;
+	font-weight: 600;
+}

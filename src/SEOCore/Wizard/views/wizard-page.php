@@ -715,6 +715,27 @@ $primary_active = !empty($active_sources) ? reset($active_sources) : (!empty($av
 					<?php endforeach; ?>
 				<?php endif; ?>
 
+				<!-- Optional: connect Google & Bing (on this step so no unsaved wizard input is lost when leaving to sign in) -->
+				<div class="cwp-connect-card">
+					<strong><?php esc_html_e('Connect Google & Bing (optional)', 'mihdan-index-now'); ?></strong>
+					<p><?php esc_html_e('Sign in to see your search performance and indexing status in WordPress. No API keys or Google Cloud project needed.', 'mihdan-index-now'); ?></p>
+					<div class="cwp-connect-card__row">
+						<?php foreach (['google' => 'Google', 'bing' => 'Bing'] as $cwp_provider => $cwp_label) : ?>
+							<?php if (\Mihdan\IndexNow\OAuth\OAuth::is_connected($cwp_provider)) : ?>
+								<span class="cwp-connect-card__done">
+									<span class="dashicons dashicons-yes-alt" aria-hidden="true"></span>
+									<?php /* translators: %s: Google or Bing */ echo esc_html(sprintf(__('%s connected', 'mihdan-index-now'), $cwp_label)); ?>
+								</span>
+							<?php else : ?>
+								<a class="button button-secondary" href="<?php echo esc_url(\Mihdan\IndexNow\OAuth\OAuth::connect_url($cwp_provider, \Mihdan\IndexNow\SEOCore\Wizard\Wizard::wizard_url('ready'))); ?>">
+									<?php /* translators: %s: Google or Bing */ echo esc_html(sprintf(__('Connect %s', 'mihdan-index-now'), $cwp_label)); ?>
+								</a>
+							<?php endif; ?>
+						<?php endforeach; ?>
+					</div>
+					<p class="cwp-field-desc"><?php esc_html_e('To submit pages to Google with the Indexing API, Google requires a service account key. You can add one later under API Settings.', 'mihdan-index-now'); ?></p>
+				</div>
+
 				<!-- Helpful Links / Next Steps -->
 				<div class="cwp-next-steps-grid">
 					<a href="<?php echo esc_url(admin_url('admin.php?page=crawlwp')); ?>" class="cwp-next-card">

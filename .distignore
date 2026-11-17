@@ -42,3 +42,4 @@ assets/src
 custom
 tools
 Makefile
+oauth-proxy

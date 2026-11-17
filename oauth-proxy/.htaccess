@@ -1,0 +1,9 @@
+# Send every path to index.php: Bing's documented error redirect can add a path (e.g. /auth) to the redirect URI.
+Options -Indexes
+RewriteEngine On
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^ index.php [L,QSA]
+
+<Files "config*.php">
+	Require all denied
+</Files>
