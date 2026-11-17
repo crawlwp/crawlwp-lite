@@ -30,7 +30,9 @@ $providers = [
 		'authorize' => 'https://accounts.google.com/o/oauth2/v2/auth',
 		'token'     => 'https://oauth2.googleapis.com/token',
 		'scope'     => 'openid email https://www.googleapis.com/auth/webmasters.readonly',
-		'extra'     => ['access_type' => 'offline', 'prompt' => 'consent', 'include_granted_scopes' => 'true'],
+		// No include_granted_scopes: a site only gets the permissions it asked for, not everything this
+		// Google account ever granted to CrawlWP on other sites. The plugin re-requests what a site already had.
+		'extra'     => ['access_type' => 'offline', 'prompt' => 'consent'],
 		'sites'     => 'https://www.googleapis.com/webmasters/v3/sites',
 		'required'  => 'https://www.googleapis.com/auth/webmasters.readonly',
 	],
@@ -54,8 +56,6 @@ if ( ! defined('CRAWLWP_OAUTH_PROXY_LIB_ONLY')) {
 	// HTTPS only from the first visit on (also stops cookies being planted over plain HTTP).
 	header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
 
-	gc_handoffs($config['storage_dir']);
-
 	$action = $_GET['action'] ?? '';
 
 	if ($action === 'health') {
@@ -68,6 +68,13 @@ if ( ! defined('CRAWLWP_OAUTH_PROXY_LIB_ONLY')) {
 	}
 
 	rate_limit($config);
+
+	// Housekeeping scans the storage folder, so it runs after the rate limit and not on every request:
+	// always when a hand-off is written or collected (so token files never outlive the next sign-in),
+	// otherwise on about 1 request in 100.
+	if ($action === 'fetch' || isset($_GET['code']) || random_int(1, 100) === 1) {
+		gc_handoffs($config['storage_dir']);
+	}
 
 	if ($action === 'authorize') {
 		authorize($providers, $config);
@@ -114,13 +121,14 @@ function authorize(array $providers, array $config): void
 		confirm_page($provider, $return_url, $site_state);
 	}
 
-	if ( ! hash_equals((string)($_COOKIE[CONFIRM] ?? ''), (string)($_POST['confirm'] ?? '')) || empty($_POST['confirm'])) {
+	// One confirm cookie per provider, so the Google and Bing pages can be open in two tabs at once.
+	if ( ! hash_equals((string)($_COOKIE[CONFIRM . '_' . $provider] ?? ''), (string)($_POST['confirm'] ?? '')) || empty($_POST['confirm'])) {
 		fail(400, 'This confirmation has expired. Go back to your WordPress dashboard and click Connect again.');
 	}
 
 	$nonce = bin2hex(random_bytes(16));
 
-	setcookie(CONFIRM, '', cookie_options(1));
+	setcookie(CONFIRM . '_' . $provider, '', cookie_options(1));
 	setcookie(COOKIE . '_' . $provider, sign(['p' => $provider, 'r' => $return_url, 's' => $site_state, 'n' => $nonce, 't' => time()], $config), cookie_options(time() + FLOW_TTL));
 
 	$p = $providers[$provider];
@@ -140,7 +148,7 @@ function authorize(array $providers, array $config): void
 function confirm_page(string $provider, string $return_url, string $site_state): void
 {
 	$token = bin2hex(random_bytes(16));
-	setcookie(CONFIRM, $token, cookie_options(time() + FLOW_TTL));
+	setcookie(CONFIRM . '_' . $provider, $token, cookie_options(time() + FLOW_TTL));
 
 	$site    = site_label($return_url);
 	$service = $provider === 'google' ? 'Google Search Console' : 'Bing Webmaster Tools';
@@ -158,12 +166,12 @@ function confirm_page(string $provider, string $return_url, string $site_state):
 		. 'body{font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#f0f0f1;color:#1d2327;margin:0;padding:48px 16px}'
 		. '.box{max-width:480px;margin:0 auto;background:#fff;border:1px solid #dcdcde;border-radius:8px;padding:28px}'
 		. 'h1{font-size:20px;margin:0 0 12px}.host{display:block;font-size:22px;word-break:break-all}.site{font-weight:600;word-break:break-all;background:#f6f7f7;border-radius:4px;padding:8px 10px;display:block;margin:12px 0}'
-		. 'p{margin:0 0 12px}.warn{font-size:14px;color:#50575e}button{font:inherit;background:#2271b1;color:#fff;border:0;border-radius:4px;padding:10px 18px;cursor:pointer}'
+		. 'p{margin:0 0 12px}.warn{font-size:14px;color:#50575e;border-left:4px solid #dba617;padding-left:10px}button{font:inherit;background:#2271b1;color:#fff;border:0;border-radius:4px;padding:10px 18px;cursor:pointer}'
 		. 'a{color:#2271b1;margin-left:14px}</style></head><body><div class="box">'
 		. '<h1>Connect ' . $e($service) . ' to CrawlWP</h1>'
-		. '<p>This gives the following WordPress site access to your ' . $e($service) . ' data:</p>'
+		. '<p>The WordPress site below is asking to read the ' . $e($service) . ' data of the account you sign in with next. That covers every site in that account, not only this one:</p>'
 		. '<span class="site"><span class="host">' . $e(strtolower((string)parse_url($return_url, PHP_URL_HOST))) . '</span>' . $e($site) . '</span>'
-		. '<p class="warn">Only continue if this is your site and you just clicked “Connect” in its dashboard. If someone sent you this link, close this page.</p>'
+		. '<p class="warn"><strong>Only continue if you just clicked “Connect” in this site’s own WordPress dashboard.</strong> If you got here from a link in an email, a message or another website, close this page: whoever runs the site above would get your data, even if the site is listed in your account.</p>'
 		. '<form method="post" action="?action=authorize">'
 		. '<input type="hidden" name="provider" value="' . $e($provider) . '">'
 		. '<input type="hidden" name="return_url" value="' . $e($return_url) . '">'
@@ -246,9 +254,11 @@ function callback(array $providers, array $config): void
 		$back(['crawlwp_oauth_error' => 'token_exchange_failed']);
 	}
 
-	// Only hand tokens to a site this account manages in Search Console / Bing Webmaster Tools. Anyone can
-	// build an authorize link to their own domain, so without this a phishing link could collect a victim's
-	// tokens through CrawlWP's verified app. The tokens are dropped, never written, when the check fails.
+	// Only hand tokens to a site this account has in Search Console / Bing Webmaster Tools. This stops
+	// connecting with the wrong account and links to a site the account has nothing to do with. It is not a
+	// phishing defence on its own: a site's owner can add any account as a user of their property without
+	// that account agreeing, so the confirmation page is what tells the user which site gets access.
+	// The tokens are dropped, never written, when the check fails.
 	$owned = site_check($providers[$provider], $tokens, (string)$flow['r'], $config);
 
 	if ($owned !== 'ok') {
@@ -306,7 +316,7 @@ function rate_limit(array $config): void
 		return;
 	}
 
-	$file = rtrim($config['storage_dir'], '/') . '/rl-' . sha1($ip) . '-' . intdiv(time(), 60) . '.cnt';
+	$file = rtrim($config['storage_dir'], '/') . '/rl-' . sha1(rate_limit_key($ip)) . '-' . intdiv(time(), 60) . '.cnt';
 	$fh   = fopen($file, 'c+');
 
 	if ( ! $fh) {
@@ -325,6 +335,17 @@ function rate_limit(array $config): void
 		header('Retry-After: 60');
 		json(429, ['error' => 'rate_limited']);
 	}
+}
+
+/**
+ * What the rate limit counts by: the address itself for IPv4, the /64 network for IPv6 (one
+ * subscriber gets a whole /64, so counting single addresses would let them rotate past the limit).
+ */
+function rate_limit_key(string $ip): string
+{
+	$packed = strpos($ip, ':') !== false ? @inet_pton($ip) : false;
+
+	return is_string($packed) && strlen($packed) === 16 ? 'v6:' . bin2hex(substr($packed, 0, 8)) : $ip;
 }
 
 function fetch_handoff(array $config): void
@@ -407,8 +428,12 @@ function revoke(array $providers, array $config): void
 		'client_secret' => $config[$provider]['client_secret'],
 	]);
 
-	if ( ! empty($tokens['access_token']) && file_put_contents(revoked_path($config, $provider, $token), (string)time(), LOCK_EX) === false) {
-		json(500, ['error' => 'storage_failed']);
+	if ( ! empty($tokens['access_token'])) {
+		$path = revoked_path($config, $provider, $token);
+
+		if (( ! is_dir(dirname($path)) && ! @mkdir(dirname($path), 0700) && ! is_dir(dirname($path))) || file_put_contents($path, (string)time(), LOCK_EX) === false) {
+			json(500, ['error' => 'storage_failed']);
+		}
 	}
 
 	json(200, ['revoked' => true]);
@@ -416,15 +441,21 @@ function revoke(array $providers, array $config): void
 
 function is_revoked(array $config, string $provider, string $token): bool
 {
-	return is_file(revoked_path($config, $provider, $token));
+	// Entries written before the deny list moved to its own folder are still honoured.
+	return is_file(revoked_path($config, $provider, $token)) || is_file(revoked_path($config, $provider, $token, true));
 }
 
 /**
- * Only a keyed hash of the token is kept, so the deny list itself leaks nothing.
+ * Only a keyed hash of the token is kept, so the deny list itself leaks nothing. The list is permanent,
+ * so it lives in its own "revoked" folder and the housekeeping scans of the storage folder never read it.
+ *
+ * @param bool $legacy The old location, straight in the storage folder.
  */
-function revoked_path(array $config, string $provider, string $token): string
+function revoked_path(array $config, string $provider, string $token, bool $legacy = false): string
 {
-	return rtrim($config['storage_dir'], '/') . '/revoked-' . hash_hmac('sha256', $provider . '|' . $token, (string)$config['secret']) . '.txt';
+	$name = 'revoked-' . hash_hmac('sha256', $provider . '|' . $token, (string)$config['secret']) . '.txt';
+
+	return rtrim($config['storage_dir'], '/') . ($legacy ? '/' : '/revoked/') . $name;
 }
 
 /* ---------- site ownership ---------- */
@@ -555,9 +586,17 @@ function site_matches(array $site_urls, string $host, string $path = '/'): bool
 
 function is_valid_return_url(string $url): bool
 {
+	// No control characters or spaces, and no fragment: the handle is appended to this URL, and a "#"
+	// would keep it out of the request to WordPress and leave it sitting in the browser.
+	if ($url === '' || preg_match('/[\x00-\x20\x7f#]/', $url)) {
+		return false;
+	}
+
 	$parts = parse_url($url);
 
 	return $parts
+		// exactly the address the plugin sends, so the handle can't be steered to another admin-post action.
+		&& ($parts['query'] ?? '') === 'action=crawlwp_oauth_return'
 		&& in_array($parts['scheme'] ?? '', ['http', 'https'], true)
 		&& ! empty($parts['host'])
 		// letters, digits, dots and hyphens only (IDNs arrive as punycode): no "\" or other tricks that
