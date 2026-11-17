@@ -26,6 +26,9 @@ class Author
 	/** @var array<int, array<string, mixed>|null> */
 	private static array $cache = [];
 
+	/** @var array<int, bool> Whether each user has a published post, per request. */
+	private static array $has_posts = [];
+
 	/**
 	 * Whether the site itself is an organisation an author can work for.
 	 */
@@ -268,9 +271,46 @@ class Author
 	 */
 	public static function has_posts(int $user_id): bool
 	{
+		if (isset(self::$has_posts[$user_id])) {
+			return self::$has_posts[$user_id];
+		}
+
 		$types = array_values(array_diff(get_post_types(['public' => true]), ['attachment']));
 
-		return (int) count_user_posts($user_id, $types, true) > 0;
+		/* The usual case costs nothing: the page being viewed is one of their published posts. */
+		$viewed = function_exists('is_singular') && is_singular() ? get_queried_object() : null;
+
+		if ($viewed instanceof \WP_Post && (int) $viewed->post_author === $user_id && $viewed->post_status === 'publish' && in_array($viewed->post_type, $types, true)) {
+			return self::$has_posts[$user_id] = true;
+		}
+
+		/*
+		 * Otherwise look for one post and stop, rather than counting them all (a count reads
+		 * every row the author owns, on every page view). Kept in the object cache until any
+		 * post changes.
+		 */
+		$key   = 'author_has_posts:' . $user_id . ':' . wp_cache_get_last_changed('posts');
+		$found = wp_cache_get($key, 'crawlwp');
+
+		if ($found === false) {
+			$ids = get_posts([
+				'author'                 => $user_id,
+				'post_type'              => $types,
+				'post_status'            => 'publish',
+				'posts_per_page'         => 1,
+				'fields'                 => 'ids',
+				'orderby'                => 'none',
+				'no_found_rows'          => true,
+				'update_post_meta_cache' => false,
+				'update_post_term_cache' => false,
+				'suppress_filters'       => true,
+			]);
+
+			$found = $ids !== [] ? 'yes' : 'no';
+			wp_cache_set($key, $found, 'crawlwp', DAY_IN_SECONDS);
+		}
+
+		return self::$has_posts[$user_id] = $found === 'yes';
 	}
 
 	/**
@@ -278,7 +318,7 @@ class Author
 	 */
 	public static function flush(int $user_id): void
 	{
-		unset(self::$cache[$user_id]);
+		unset(self::$cache[$user_id], self::$has_posts[$user_id]);
 	}
 
 	/**

@@ -34,7 +34,18 @@ class AuthorProfile
 			return;
 		}
 
+		/*
+		 * The media scripts list the months that have uploads, which reads every attachment
+		 * (seconds on a large library) on each load of this screen. The photo chooser doesn't
+		 * need the date filter, so hand WordPress an empty list instead.
+		 */
+		$no_months = static function ($months) {
+			return is_array($months) ? $months : [];
+		};
+
+		add_filter('media_library_months_with_files', $no_months);
 		wp_enqueue_media();
+		remove_filter('media_library_months_with_files', $no_months);
 
 		wp_enqueue_script(
 			'crawlwp-author-profile',

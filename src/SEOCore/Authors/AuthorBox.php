@@ -27,6 +27,8 @@ class AuthorBox
 		/* Priority 6: right after Site Information. */
 		add_action('crawlwp_setup_fields', [$this, 'settings_fields'], 6, 2);
 
+		add_action('admin_init', [$this, 'autoload_settings']);
+
 		add_action('wp_enqueue_scripts', [$this, 'enqueue']);
 		add_filter('the_content', [$this, 'append'], 20);
 		add_shortcode('crawlwp_author_box', [$this, 'shortcode']);
@@ -141,6 +143,26 @@ class AuthorBox
 		$options = get_option('crawlwp_' . self::SECTION, []);
 
 		return is_array($options) && isset($options[$field]) ? $options[$field] : $default;
+	}
+
+	/**
+	 * The settings are read on every single post view. Keep them in an autoloaded option, so
+	 * that read needs no query: an option that is missing, or stored without autoload as the
+	 * settings screen creates it, costs one query per page view on sites without an object cache.
+	 */
+	public function autoload_settings(): void
+	{
+		$name = 'crawlwp_' . self::SECTION;
+
+		if (array_key_exists($name, wp_load_alloptions())) {
+			return;
+		}
+
+		if (get_option($name, null) === null) {
+			add_option($name, [], '', true);
+		} elseif (function_exists('wp_set_option_autoload')) {
+			wp_set_option_autoload($name, true);
+		}
 	}
 
 	// -------------------------------------------------------------------------
