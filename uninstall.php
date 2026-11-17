@@ -234,10 +234,10 @@ function crawlwp_lite_mo_uninstall_function($force = false)
 	if ( ! $keep_pro) {
 		// Premium's business locations (a post type nothing registers any more) and their meta.
 		// their revisions and autosaves go first, while the parent rows are still there to find them by.
-		$wpdb->query($wpdb->prepare("DELETE pm FROM {$wpdb->postmeta} pm INNER JOIN {$wpdb->posts} r ON r.ID = pm.post_id INNER JOIN {$wpdb->posts} p ON p.ID = r.post_parent WHERE r.post_type = %s AND p.post_type = %s", 'revision', 'crawlwp_location'));
-		$wpdb->query($wpdb->prepare("DELETE r FROM {$wpdb->posts} r INNER JOIN {$wpdb->posts} p ON p.ID = r.post_parent WHERE r.post_type = %s AND p.post_type = %s", 'revision', 'crawlwp_location'));
-		$wpdb->query($wpdb->prepare("DELETE pm FROM {$wpdb->postmeta} pm INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id WHERE p.post_type = %s", 'crawlwp_location'));
-		$wpdb->query($wpdb->prepare("DELETE FROM {$wpdb->posts} WHERE post_type = %s", 'crawlwp_location'));
+		$wpdb->query($wpdb->prepare("DELETE pm FROM {$wpdb->postmeta} pm INNER JOIN {$wpdb->prefix}posts r ON r.ID = pm.post_id INNER JOIN {$wpdb->prefix}posts p ON p.ID = r.post_parent WHERE r.post_type = %s AND p.post_type = %s", 'revision', 'crawlwp_location'));
+		$wpdb->query($wpdb->prepare("DELETE r FROM {$wpdb->prefix}posts r INNER JOIN {$wpdb->prefix}posts p ON p.ID = r.post_parent WHERE r.post_type = %s AND p.post_type = %s", 'revision', 'crawlwp_location'));
+		$wpdb->query($wpdb->prepare("DELETE pm FROM {$wpdb->postmeta} pm INNER JOIN {$wpdb->prefix}posts p ON p.ID = pm.post_id WHERE p.post_type = %s", 'crawlwp_location'));
+		$wpdb->query($wpdb->prepare("DELETE FROM {$wpdb->prefix}posts WHERE post_type = %s", 'crawlwp_location'));
 	}
 
 	foreach ($meta_tables as $meta_table) {
