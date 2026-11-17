@@ -2021,8 +2021,10 @@
         }
       }
 
-      /* 14. Readability: avg sentence length */
-      if (d.sentences.length >= 3) {
+      /* 14. Readability: avg sentence length. Thai, Lao, Khmer and Myanmar end sentences with a
+         space, not a full stop, so sentences can't be told apart there: no check, rather than
+         a false "too long" from a few stray full stops. */
+      if (d.sentences.length >= 3 && (d.cjkText || this.unspacedShare(d.plainText) <= 0.5)) {
         var lenLabel = d.cjkText ? this.fmt(L.readabilityChars, d.avgSentenceLen * 2) : this.fmt(L.readability, d.avgSentenceLen);
         if (d.avgSentenceLen <= 20) {
           addCheck('good', lenLabel, L.readabilityGoodD);
