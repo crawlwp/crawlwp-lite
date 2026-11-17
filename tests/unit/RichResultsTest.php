@@ -182,6 +182,33 @@ class RichResultsTest extends TestCase
 		$this->assertStringContainsString('1 cup flour', $fields['ingredients']);
 	}
 
+	public function test_quotes_and_ampersands_after_a_less_than_sign_are_kept_as_typed(): void
+	{
+		$text = ['type' => 'text'];
+
+		$this->assertSame('Kids <5 don\'t pay & "eat" free', RichResults::clean_value('Kids <5 don\'t pay & "eat" free', $text));
+		$this->assertSame("Step 1: heat to <90C\nDon't stir & \"rest\"", RichResults::clean_value("Step 1: heat to <90C\nDon't stir & \"rest\"", ['type' => 'textarea']));
+
+		/* A typed entity means the value is left exactly as WordPress cleaned it. */
+		$this->assertSame('5 &lt; 6 &amp; 7 &lt;8', RichResults::clean_value('5 &lt; 6 &amp; 7 <8', $text));
+
+		/* Nothing that could begin a tag comes back, with or without a closing bracket. */
+		foreach ([
+			'<script>alert("x")</script> a <3 b',
+			'a <3 <img src=x onerror=alert(\'1\')',
+			'a <3 <svg/onload=alert(1)',
+			'"><script>alert(1)</script> <5',
+			'a <3 </textarea><script>x</script',
+			'a <3 <!-- x',
+			'a <3 <?php x',
+			"a <3 <\0script>",
+		] as $hostile) {
+			foreach (['text', 'textarea', 'list'] as $type) {
+				$this->assertDoesNotMatchRegularExpression('/<[a-zA-Z\/!?]/', RichResults::clean_value($hostile, ['type' => $type]), $hostile);
+			}
+		}
+	}
+
 	public function test_password_protected_post_outputs_no_rich_result(): void
 	{
 		$post                = new \WP_Post();

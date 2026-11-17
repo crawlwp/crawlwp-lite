@@ -138,15 +138,23 @@ class RichResults
 	 * WordPress's text sanitising turns a lone "<" ("Bake at <200C", "I <3 coffee") into
 	 * "&lt;", which would then be printed as those four characters in the structured data.
 	 * Put the "<" back, but only where it can't begin a tag (not before a letter, "/",
-	 * "!" or "?"), and only when the entity wasn't typed in.
+	 * "!" or "?"), and only when no entity was typed in.
+	 *
+	 * WordPress escapes everything from such a "<" to the end of the value, so quotes,
+	 * apostrophes and "&" after it come back as entities too ("don&#039;t"). With no entity
+	 * in what was typed, every one of those in the result was added by that escaping, so
+	 * they are put back as well. None of them can form a tag.
 	 */
 	private static function keep_less_than(string $raw, string $clean): string
 	{
-		if (strpos($raw, '<') === false || strpos($raw, '&lt;') !== false) {
+		if (strpos($raw, '<') === false || preg_match('/&(?:[a-zA-Z][a-zA-Z0-9]*|#[0-9]+|#[xX][0-9a-fA-F]+);/', $raw)) {
 			return $clean;
 		}
 
-		return (string) preg_replace('/&lt;(?![a-zA-Z\/!?])/', '<', $clean);
+		$clean = (string) preg_replace('/&lt;(?![a-zA-Z\/!?])/', '<', $clean);
+
+		/* "&amp;" last, so "&amp;quot;" can't turn into a quote in two steps. */
+		return str_replace(['&quot;', '&#039;', '&amp;'], ['"', "'", '&'], $clean);
 	}
 
 	/**
