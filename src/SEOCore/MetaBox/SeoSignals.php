@@ -311,8 +311,8 @@ class SeoSignals
 		$secondaries = array_slice($keywords, 1);
 
 		$needle  = self::normalize_text($primary);
-		/* The same filter the automatic description uses, so page builder content (Divi, Avada, Bricks) is read like the SEO box reads it. */
-		$content = (string) apply_filters('crawlwp_post_content_for_text', (string) $post->post_content, $post);
+		/* Lets the page builder integration hand over the page's text (Divi, Avada, Bricks), as the SEO box reads it. */
+		$content = (string) apply_filters('crawlwp_post_content_for_analysis', (string) $post->post_content, $post);
 		$content = self::normalize_text(wp_strip_all_tags(strip_shortcodes($content)));
 
 		$in_title   = mb_stripos(self::normalize_text($resolved_title), $needle) !== false;
