@@ -42,7 +42,7 @@
     }
 
     /*
-     * Why a number won't be saved, or ''. The server applies the same rules
+     * Why a number or web address won't be saved, or ''. The server applies the same rules
      * (RichResults::clean_value()); the inputs are plain text fields because the
      * browser's own number checks would silently block the editor's Update button
      * when the Schema tab is hidden.
@@ -51,6 +51,8 @@
         v = String(v).trim();
         if (v === '') return '';
         if (field.type === 'minutes') return /^\d+$/.test(v) ? '' : i18n.wholeNumber;
+        // Web addresses: the server keeps http and https only, and adds http:// to "www.example.com".
+        if (field.type === 'url') return /\s/.test(v) || (/^[a-z][a-z0-9+.-]*:/i.test(v) && !/^https?:\/\//i.test(v)) ? i18n.notUrl : '';
         if (field.type !== 'number') return '';
         var n = Number(v);
         if (!/^[+-]?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$/i.test(v) || !isFinite(n)) return i18n.notNumber;
@@ -112,11 +114,12 @@
             c = el('textarea', { className: 'cwp-textarea', id: id, rows: field.type === 'list' ? '5' : '3' });
             c.value = stored;
         } else {
-            // Numbers are text inputs: see invalid() for why the browser mustn't check them.
-            var types = { url: 'url', datetime: 'datetime-local', date: 'date' };
+            // Numbers and web addresses are text inputs: see invalid() for why the browser mustn't check them.
+            var types = { datetime: 'datetime-local', date: 'date' };
             c = el('input', { className: 'cwp-input', id: id, type: types[field.type] || 'text' });
             if (field.type === 'number') c.setAttribute('inputmode', 'decimal');
             if (field.type === 'minutes') c.setAttribute('inputmode', 'numeric');
+            if (field.type === 'url') c.setAttribute('inputmode', 'url');
             if (field.type === 'currency') { c.setAttribute('maxlength', '3'); c.style.textTransform = 'uppercase'; }
             c.value = stored;
         }

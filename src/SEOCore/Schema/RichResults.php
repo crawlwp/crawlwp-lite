@@ -9,6 +9,7 @@ namespace Mihdan\IndexNow\SEOCore\Schema;
 
 use Mihdan\IndexNow\SEOCore\MetaBox\MetaFields;
 use Mihdan\IndexNow\SEOCore\SiteInfoSettings\SiteInfoSettings;
+use Mihdan\IndexNow\SEOCore\TitleMeta\Variables;
 
 /**
  * One rich result type per post, chosen in the Schema tab and stored as JSON
@@ -191,8 +192,16 @@ class RichResults
 		$image = (string) get_the_post_thumbnail_url($post, 'full');
 
 		$description = (string) MetaFields::get($post->ID, MetaFields::SEO_DESCRIPTION, '');
-		if ($description === '' || strpos($description, '{{') !== false) {
-			$description = has_excerpt($post) ? (string) get_the_excerpt($post) : wp_trim_words(wp_strip_all_tags((string) $post->post_content), 30, '…');
+		$context     = ['post' => $post];
+
+		/* A description may hold variables: resolve them as the meta description does. */
+		if (strpos($description, '{{') !== false) {
+			$description = Variables::replace($description, $context);
+		}
+
+		/* None set: the excerpt or the start of the content, without shortcode or page builder markup. */
+		if (trim($description) === '') {
+			$description = Variables::replace('{{post.auto_description}}', $context);
 		}
 
 		$author = get_userdata((int) $post->post_author);
@@ -565,6 +574,7 @@ class RichResults
 				'update'      => __('Update CrawlWP Premium to use it', 'mihdan-index-now'),
 				'notNumber'   => __('Not a number, so it won\'t be saved.', 'mihdan-index-now'),
 				'wholeNumber' => __('Use a whole number of minutes. This won\'t be saved.', 'mihdan-index-now'),
+				'notUrl'      => __('Not a web address (it should start with https://), so it won\'t be saved.', 'mihdan-index-now'),
 				/* translators: 1: lowest allowed number, 2: highest allowed number */
 				'between'     => __('Use a number from %1$s to %2$s. This won\'t be saved.', 'mihdan-index-now'),
 				/* translators: %s: lowest allowed number */
