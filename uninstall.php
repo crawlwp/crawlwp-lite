@@ -44,6 +44,8 @@ function crawlwp_lite_pro_owned_options()
 		'names'    => [
 			'crawlwp_auto_index',
 			'crawlwp_auto_index_stat',
+			// Role Manager: which roles may use which part of CrawlWP.
+			'crawlwp_role_grid',
 			'crawlwp_plc_queued_data',
 			'crawlwp_email_reports',
 			'crawlwp_email_reports_sent',
@@ -66,6 +68,10 @@ function crawlwp_lite_pro_owned_options()
 		],
 		'prefixes' => [
 			'crawlwp_pro_',
+			// Automatic share images: settings, background queue and bulk-run state.
+			'crawlwp_social_images',
+			// SEO Indexing: where the noindex clean-up has got to.
+			'crawlwp_noindex_cleanup',
 			'crawlwp_license',
 		],
 	];
@@ -219,13 +225,24 @@ function crawlwp_lite_mo_uninstall_function($force = false)
 
 	$meta_like = $wpdb->esc_like('_crawlwp_') . '%';
 
+	// While Premium stays installed its share-image files are kept, so keep the meta that points to them.
+	$keep_meta_sql = $keep_pro
+		? $wpdb->prepare(' AND meta_key NOT LIKE %s', $wpdb->esc_like('_crawlwp_social_image') . '%')
+		: '';
+
+	if ( ! $keep_pro) {
+		// Premium's business locations (a post type nothing registers any more) and their meta.
+		$wpdb->query($wpdb->prepare("DELETE pm FROM {$wpdb->postmeta} pm INNER JOIN {$wpdb->prefix}posts p ON p.ID = pm.post_id WHERE p.post_type = %s", 'crawlwp_location'));
+		$wpdb->query($wpdb->prepare("DELETE FROM {$wpdb->prefix}posts WHERE post_type = %s", 'crawlwp_location'));
+	}
+
 	foreach ($meta_tables as $meta_table) {
 		$wpdb->query(
 			$wpdb->prepare(
-				"DELETE FROM {$meta_table} WHERE meta_key LIKE %s OR meta_key = %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				"DELETE FROM {$meta_table} WHERE (meta_key LIKE %s OR meta_key = %s)", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				$meta_like,
 				'crawlwp_last_update'
-			)
+			) . $keep_meta_sql // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 		);
 	}
 
