@@ -94,7 +94,11 @@ class SubmissionQueueLockTest extends TestCase {
 
 	protected function setUp(): void {
 		parent::setUp();
-		unset( $GLOBALS['crawlwp_test_state']['options'][ Hooks::QUEUE_LOCK ], $GLOBALS['crawlwp_test_state']['options'][ Hooks::QUEUE_OPTION ] );
+		foreach ( array_keys( $GLOBALS['crawlwp_test_state']['options'] ) as $name ) {
+			if ( strpos( (string) $name, Hooks::QUEUE_OPTION ) === 0 || strpos( (string) $name, 'crawlwp_submission_' ) === 0 ) {
+				unset( $GLOBALS['crawlwp_test_state']['options'][ $name ] );
+			}
+		}
 
 		$this->wpdb      = $GLOBALS['wpdb'] ?? null;
 		$GLOBALS['wpdb'] = new QueueLockDb();
@@ -148,59 +152,219 @@ class SubmissionQueueLockTest extends TestCase {
 		$this->assertArrayHasKey( Hooks::QUEUE_LOCK, $GLOBALS['crawlwp_test_state']['options'] );
 	}
 
-	public function test_read_queue_returns_what_is_stored(): void {
-		$GLOBALS['crawlwp_test_state']['options'][ Hooks::QUEUE_OPTION ] = [ 'post:5' => [ 'crawlwp/post_updated', [ 5 ] ] ];
-
-		$this->assertSame( [ 'post:5' => [ 'crawlwp/post_updated', [ 5 ] ] ], Hooks::read_queue() );
-
-		$GLOBALS['crawlwp_test_state']['options'][ Hooks::QUEUE_OPTION ] = 'junk';
-
-		$this->assertSame( [], Hooks::read_queue() );
+	private function options(): array {
+		return array_filter(
+			$GLOBALS['crawlwp_test_state']['options'],
+			static function ( $name ) {
+				return strpos( (string) $name, Hooks::QUEUE_OPTION ) === 0;
+			},
+			ARRAY_FILTER_USE_KEY
+		);
 	}
 
-	public function test_a_batch_is_claimed_with_removals_last(): void {
-		$queue = [
-			'deleted:1' => [ 'crawlwp/post_deleted', [ 1, 'https://example.test/a/' ] ],
-			'post:2'    => [ 'crawlwp/post_added', [ 2 ] ],
-			'post:3'    => [ 'crawlwp/post_updated', [ 3 ] ],
-		];
+	private function fresh_index(): array {
+		return [ 'v' => 2, 'q' => [ 1, 0 ], 'd' => [ 1, 0 ], 'n' => 0 ];
+	}
 
-		[ $batch, $rest ] = Hooks::claim_batch( $queue, [], 2, 1000 );
+	public function test_items_are_stored_in_buckets_with_removals_in_their_own_lane(): void {
+		$index = $this->fresh_index();
+
+		$dropped = Hooks::enqueue(
+			[
+				'deleted:1' => [ 'crawlwp/post_deleted', [ 1, 'https://example.test/a/' ] ],
+				'post:2'    => [ 'crawlwp/post_updated', [ 2 ] ],
+				'term:3:category' => [ 'crawlwp/term_updated', [ 3, 'category' ] ],
+			],
+			$index
+		);
+
+		$this->assertSame( 0, $dropped );
+		$this->assertSame( [ 'v' => 2, 'q' => [ 1, 1 ], 'd' => [ 1, 1 ], 'n' => 3 ], $index );
+		$this->assertSame( [ 'post:2', 'term:3:category' ], array_keys( $this->options()[ Hooks::bucket_name( 'q', 1 ) ] ) );
+		$this->assertSame( [ 'deleted:1' ], array_keys( $this->options()[ Hooks::bucket_name( 'd', 1 ) ] ) );
+	}
+
+	public function test_a_post_already_waiting_is_merged_and_added_wins(): void {
+		$index = $this->fresh_index();
+
+		Hooks::enqueue( [ 'post:2' => [ 'crawlwp/post_updated', [ 2 ], 0, 2000, 900 ] ], $index );
+		Hooks::enqueue( [ 'post:2' => [ 'crawlwp/post_added', [ 2 ], 1, 0, 950 ] ], $index );
+		Hooks::enqueue( [ 'post:2' => [ 'crawlwp/comment_updated', [ 2 ] ] ], $index );
+
+		$bucket = $this->options()[ Hooks::bucket_name( 'q', 1 ) ];
+
+		$this->assertSame( 1, $index['n'] );
+		// "added" won, the try is kept, it may go now, and it is still dated from when it was first queued.
+		$this->assertSame( [ 'post:2' => [ 'crawlwp/post_added', [ 2 ], 1, 0, 900 ] ], $bucket );
+	}
+
+	public function test_a_full_bucket_starts_the_next_one_and_only_the_last_is_written(): void {
+		$index = $this->fresh_index();
+		$items = [];
+
+		for ( $i = 1; $i <= Hooks::BUCKET_SIZE + 1; $i++ ) {
+			$items[ 'post:' . $i ] = [ 'crawlwp/post_added', [ $i ] ];
+		}
+
+		Hooks::enqueue( $items, $index );
+
+		$this->assertSame( [ 1, 2 ], $index['q'] );
+		$this->assertSame( Hooks::BUCKET_SIZE + 1, $index['n'] );
+		$this->assertCount( Hooks::BUCKET_SIZE, $this->options()[ Hooks::bucket_name( 'q', 1 ) ] );
+		$this->assertCount( 1, $this->options()[ Hooks::bucket_name( 'q', 2 ) ] );
+
+		// The first bucket is not touched again.
+		$GLOBALS['crawlwp_test_state']['options'][ Hooks::bucket_name( 'q', 1 ) ] = 'untouched';
+		Hooks::enqueue( [ 'post:9001' => [ 'crawlwp/post_added', [ 9001 ] ] ], $index );
+
+		$this->assertSame( 'untouched', $this->options()[ Hooks::bucket_name( 'q', 1 ) ] );
+		$this->assertCount( 2, $this->options()[ Hooks::bucket_name( 'q', 2 ) ] );
+	}
+
+	public function test_a_full_queue_takes_no_new_items(): void {
+		$index      = $this->fresh_index();
+		$index['n'] = Hooks::MAX_QUEUE;
+
+		$this->assertSame( 1, Hooks::enqueue( [ 'post:2' => [ 'crawlwp/post_added', [ 2 ] ] ], $index ) );
+		$this->assertSame( [], $this->options() );
+
+		// Items that were queued once (put back after a run) still fit.
+		$this->assertSame( 0, Hooks::enqueue( [ 'post:2' => [ 'crawlwp/post_added', [ 2 ] ] ], $index, true ) );
+		$this->assertSame( Hooks::MAX_QUEUE + 1, $index['n'] );
+	}
+
+	public function test_a_batch_is_taken_with_removals_last_and_nothing_is_written_yet(): void {
+		$index = $this->fresh_index();
+
+		Hooks::enqueue(
+			[
+				'deleted:1' => [ 'crawlwp/post_deleted', [ 1, 'https://example.test/a/' ] ],
+				'post:2'    => [ 'crawlwp/post_added', [ 2 ] ],
+				'post:3'    => [ 'crawlwp/post_updated', [ 3 ] ],
+				'post:4'    => [ 'crawlwp/post_updated', [ 4 ] ],
+			],
+			$index
+		);
+
+		$before = $this->options();
+
+		[ $batch, $next_due, $changes ] = Hooks::take_batch( $index, 2, 1000 );
 
 		$this->assertSame( [ 'post:2', 'post:3' ], array_keys( $batch ) );
-		$this->assertSame( [ 'deleted:1' ], array_keys( $rest ) );
+		$this->assertSame( 0, $next_due );
+		$this->assertSame( 2, $index['n'] );
+		$this->assertSame( $before, $this->options() );
+		$this->assertSame( Hooks::bucket_name( 'q', 1 ), $changes[0][0] );
+		$this->assertSame( [ 'post:4' ], array_keys( $changes[0][1] ) );
+
+		// With room for everything: the rest of the content, then the removal; both lanes end up empty.
+		$GLOBALS['crawlwp_test_state']['options'][ $changes[0][0] ] = $changes[0][1];
+
+		[ $batch, , $changes ] = Hooks::take_batch( $index, 200, 1000 );
+
+		$this->assertSame( [ 'post:4', 'deleted:1' ], array_keys( $batch ) );
+		$this->assertSame( [ [ Hooks::bucket_name( 'q', 1 ), null ], [ Hooks::bucket_name( 'd', 1 ), null ] ], $changes );
+		$this->assertSame( $this->fresh_index(), $index );
 	}
 
-	public function test_nothing_is_claimed_while_another_run_is_sending(): void {
-		$queue = [ 'post:2' => [ 'crawlwp/post_added', [ 2 ] ] ];
-		$claim = [ 'at' => 1000 - 30, 'items' => [ 'post:9' => [ 'crawlwp/post_added', [ 9 ] ] ] ];
+	public function test_a_post_still_waiting_for_its_seo_box_is_left_in_the_queue(): void {
+		$index = $this->fresh_index();
 
-		[ $batch, $rest ] = Hooks::claim_batch( $queue, $claim, 200, 1000 );
+		Hooks::enqueue(
+			[
+				'post:2' => [ 'crawlwp/post_added', [ 2 ], 0, 1045 ],
+				'post:3' => [ 'crawlwp/post_updated', [ 3 ] ],
+			],
+			$index
+		);
 
-		$this->assertNull( $batch );
-		$this->assertSame( $queue, $rest );
+		[ $batch, $next_due, $changes ] = Hooks::take_batch( $index, 200, 1000 );
+
+		$this->assertSame( [ 'post:3' ], array_keys( $batch ) );
+		$this->assertSame( 1045, $next_due );
+		$this->assertSame( [ 'post:2' ], array_keys( $changes[0][1] ) );
+		$this->assertSame( 1, $index['n'] );
+
+		$again = $this->fresh_index();
+		$again['q'] = [ 1, 1 ];
+		$again['n'] = 2;
+
+		$this->assertSame( [ 'post:2', 'post:3' ], array_keys( Hooks::take_batch( $again, 200, 1000, true )[0] ) );
+		$this->assertSame( [ 'post:2', 'post:3' ], array_keys( Hooks::take_batch( $index, 200, 1045 )[0] ) );
 	}
 
-	public function test_a_dead_runs_batch_is_sent_again_but_not_forever(): void {
+	public function test_nothing_is_recovered_while_another_run_is_sending(): void {
+		$claim = [ 'at' => 1000 - 900, 'owner' => 'a', 'items' => [ 'post:9' => [ 'crawlwp/post_added', [ 9 ] ] ] ];
+
+		// The claim itself is old, but its run reported in 30 seconds ago.
+		$this->assertNull( Hooks::recover_claim( $claim, [ 'owner' => 'a', 'at' => 1000 - 30, 'flushed' => 0, 'from' => 0, 'to' => 1 ], 1000 ) );
+		// Another run's report says nothing about this claim.
+		$this->assertNotNull( Hooks::recover_claim( $claim, [ 'owner' => 'b', 'at' => 1000 - 30 ], 1000 ) );
+		$this->assertSame( [ 'requeue' => [], 'dropped' => [], 'found' => false ], Hooks::recover_claim( [], [], 1000 ) );
+	}
+
+	public function test_a_dead_run_only_counts_a_try_against_the_item_it_was_sending(): void {
+		$now   = 100000;
+		$claim = [
+			'at'    => $now - Hooks::CLAIM_TTL - 1,
+			'owner' => 'a',
+			'items' => [
+				'post:1' => [ 'crawlwp/post_added', [ 1 ] ],
+				'post:2' => [ 'crawlwp/post_added', [ 2 ] ],
+				// the run died while sending this one, for the third time.
+				'post:3' => [ 'crawlwp/post_added', [ 3 ], Hooks::MAX_TRIES - 1 ],
+				'post:4' => [ 'crawlwp/post_added', [ 4 ], 1, 0, 77 ],
+			],
+		];
+		$beat  = [ 'owner' => 'a', 'at' => $now - Hooks::CLAIM_TTL - 1, 'flushed' => 1, 'from' => 2, 'to' => 3 ];
+
+		$result = Hooks::recover_claim( $claim, $beat, $now );
+
+		// post:1 went out; post:2 was handled but its IndexNow request had not gone yet; post:3 is dropped; post:4 never got its turn.
+		$this->assertSame( [ 'post:2', 'post:4' ], array_keys( $result['requeue'] ) );
+		$this->assertSame( 0, $result['requeue']['post:2'][2] );
+		$this->assertSame( [ 'crawlwp/post_added', [ 4 ], 1, 0, 77 ], $result['requeue']['post:4'] );
+		$this->assertSame( [ 'post:3' ], $result['dropped'] );
+	}
+
+	public function test_a_dead_run_that_left_no_position_counts_a_try_against_every_item(): void {
 		$now   = 100000;
 		$claim = [
 			'at'    => $now - Hooks::CLAIM_TTL - 1,
 			'items' => [
 				'post:9'  => [ 'crawlwp/post_added', [ 9 ] ],
-				// already part of two dead runs: this would be the third.
 				'post:10' => [ 'crawlwp/post_added', [ 10 ], Hooks::MAX_TRIES - 1 ],
-				// saved again since: the waiting entry is the one that is sent.
-				'post:2'  => [ 'crawlwp/comment_updated', [ 2 ] ],
 			],
 		];
-		$queue = [ 'post:2' => [ 'crawlwp/post_updated', [ 2 ] ] ];
 
-		[ $batch, $rest ] = Hooks::claim_batch( $queue, $claim, 200, $now );
+		$result = Hooks::recover_claim( $claim, [], $now );
 
-		$this->assertSame( [], $rest );
-		$this->assertSame( [ 'crawlwp/post_updated', [ 2 ] ], $batch['post:2'] );
-		$this->assertSame( [ 'crawlwp/post_added', [ 9 ], 1 ], $batch['post:9'] );
-		$this->assertArrayNotHasKey( 'post:10', $batch );
+		$this->assertSame( 1, $result['requeue']['post:9'][2] );
+		$this->assertSame( [ 'post:10' ], $result['dropped'] );
+	}
+
+	public function test_a_run_that_reported_its_own_death_is_recovered_at_once(): void {
+		$claim = [ 'at' => 1000 - 5, 'owner' => 'a', 'items' => [ 'post:9' => [ 'crawlwp/post_added', [ 9 ] ], 'post:10' => [ 'crawlwp/post_added', [ 10 ] ] ] ];
+		$beat  = [ 'owner' => 'a', 'at' => 1000 - 1, 'flushed' => 0, 'from' => 1, 'to' => 2, 'dead' => true ];
+
+		$result = Hooks::recover_claim( $claim, $beat, 1000 );
+
+		$this->assertSame( 0, $result['requeue']['post:9'][2] );
+		$this->assertSame( 1, $result['requeue']['post:10'][2] );
+	}
+
+	public function test_a_single_option_queue_is_moved_into_buckets_once(): void {
+		$GLOBALS['crawlwp_test_state']['options'][ Hooks::QUEUE_OPTION ] = [
+			'post:5'    => [ 'crawlwp/post_updated', [ 5 ] ],
+			'deleted:6' => [ 'crawlwp/post_deleted', [ 6, 'https://example.test/b/' ] ],
+		];
+
+		$index = Hooks::read_index();
+
+		$this->assertSame( [ 'v' => 2, 'q' => [ 1, 1 ], 'd' => [ 1, 1 ], 'n' => 2 ], $index );
+		$this->assertArrayNotHasKey( Hooks::QUEUE_OPTION, $this->options() );
+		$this->assertSame( $index, $this->options()[ Hooks::QUEUE_INDEX ] );
+		$this->assertSame( $index, Hooks::read_index() );
 	}
 }
 }

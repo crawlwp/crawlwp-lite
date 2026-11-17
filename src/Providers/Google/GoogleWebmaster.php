@@ -111,6 +111,16 @@ class GoogleWebmaster extends WebmasterAbstract
 		// A post still being deleted (before_delete_post, when sent straight away) counts as removed.
 		if ($post instanceof \WP_Post && $post->post_status !== 'trash' && ! doing_action('before_delete_post')) return;
 
+		// The address is in use again (another page was published under it since): telling Google it is gone would remove a live page.
+		$live_id = (int) url_to_postid($permalink);
+
+		if ($live_id > 0 && $live_id !== $post_id && in_array(get_post_status($live_id), ['publish', 'inherit'], true)) {
+			/* translators: %s: URL */
+			$this->log_submission($permalink, sprintf(__('%s (removed)', 'mihdan-index-now'), $permalink), 0, __('Not sent: another published page now uses this address.', 'mihdan-index-now'));
+
+			return;
+		}
+
 		if ($this->is_paused(self::RATE_LIMIT_OPTION, $permalink)) return;
 
 		/**

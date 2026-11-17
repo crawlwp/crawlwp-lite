@@ -37,37 +37,74 @@ class Hooks {
 	public const RECOVER_EVENT = 'crawlwp_background_submission_recover';
 
 	/**
-	 * Submissions waiting for the background event (not autoloaded). One queue and
-	 * one event, however many posts change: a bulk trash or an import of thousands
-	 * of posts doesn't fill the cron option with an event per post.
+	 * Prefix of the options holding submissions that wait for the background event (none autoloaded).
+	 * The queue is kept in buckets of BUCKET_SIZE items ("crawlwp_submission_queue_q_1", "_q_2"…;
+	 * removals in "_d_1"…), so adding to it or taking a batch from it reads and writes one small
+	 * option, however long the queue is. An option with exactly this name is the single-option
+	 * queue of development builds; it is moved into buckets the first time the queue is used.
 	 */
 	public const QUEUE_OPTION = 'crawlwp_submission_queue';
+
+	/** Where the queue starts and ends: [ 'v' => 2, 'q' => [ first, last ], 'd' => [ first, last ], 'n' => items ]. */
+	public const QUEUE_INDEX = 'crawlwp_submission_queue_index';
+
+	/** Items per queue bucket. */
+	public const BUCKET_SIZE = 500;
+
+	/** Most items the queue holds; more are not queued (and logged). */
+	public const MAX_QUEUE = 50000;
 
 	/** Held (a few milliseconds) while the queue is read and written, so writers can't overwrite each other. */
 	public const QUEUE_LOCK = 'crawlwp_submission_queue_lock';
 
 	/**
-	 * The batch a background run is sending now (not autoloaded): [ 'at' => time, 'items' => [...] ].
-	 * It stays until the run finishes, so a run that dies loses nothing (see claim_batch()).
+	 * The batch a background run is sending now (not autoloaded):
+	 * [ 'at' => time, 'owner' => run token, 'items' => [...] ]. It stays until the run finishes,
+	 * so a run that dies loses nothing (see recover_claim()).
 	 */
 	public const CLAIM_OPTION = 'crawlwp_submission_claimed';
+
+	/**
+	 * How far the run that owns the claim has got (small, written often):
+	 * [ 'owner', 'at', 'flushed' => items fully sent, 'from' / 'to' => items being sent now ].
+	 */
+	public const CLAIM_BEAT = 'crawlwp_submission_claim_beat';
 
 	/** A claim not updated for this long belongs to a run that died. */
 	public const CLAIM_TTL = 600;
 
-	/** Dead runs an item may be part of before it is dropped. */
+	/** Dead runs an item may cause (or, when unknown, be part of) before it is dropped. */
 	public const MAX_TRIES = 3;
 
 	/**
-	 * Submissions sent per background run; the rest wait for the next run.
+	 * Sites without WP-Cron only: when the first held submission may be sent (autoloaded, 0 when
+	 * nothing waits), so later requests can send it without a query.
 	 */
-	private const BATCH_SIZE = 200;
+	public const WAITING_OPTION = 'crawlwp_submission_waiting';
+
+	/**
+	 * Seconds a post saved through the REST API (the block editor) waits before it is sent: the
+	 * editor saves the SEO box (noindex) in a second request, a moment after the post itself.
+	 */
+	public const SAVE_DELAY = 45;
+
+	/**
+	 * Submissions sent per background run; the rest wait for the next run. IndexNow takes
+	 * thousands of URLs per request, so a run with only IndexNow sends many.
+	 */
+	private const BATCH_SIZE = 1000;
 
 	/** Batch size when a webmaster API makes a request per post (see batch_size()). */
 	private const BATCH_SIZE_SLOW = 50;
 
-	/** Items sent per IndexNow request within a run; the claim is updated after each chunk. */
-	private const CHUNK_SIZE = 25;
+	/** Items collected per IndexNow request within a run. */
+	private const CHUNK_SIZE = 500;
+
+	/** The same when a webmaster API is on: small, so little is sent twice after a run dies. */
+	private const CHUNK_SIZE_SLOW = 5;
+
+	/** Without a webmaster API the run's position is saved once per this many items. */
+	private const BEAT_EVERY = 25;
 
 	/** Queued items a request keeps in memory before writing them out early. */
 	private const PENDING_FLUSH = 100;
@@ -91,11 +128,36 @@ class Hooks {
 	private $spawn_cron = false;
 
 	/**
-	 * Submissions queued in this request, written to the stored queue on shutdown.
+	 * Submissions queued in this request, per site (multisite: a post can be saved in another
+	 * site with switch_to_blog()), written to that site's stored queue on shutdown.
 	 *
-	 * @var array<string, array>
+	 * @var array<int, array<string, array>>
 	 */
 	private $pending = [];
+
+	/** @var int Number of items in $pending. */
+	private $pending_count = 0;
+
+	/**
+	 * Posts to look at again at the end of the request, per site: [ post ID => action ]. The SEO
+	 * box (noindex) is saved after the post's status changes, sometimes in a request of its own.
+	 *
+	 * @var array<int, array<int, string>>
+	 */
+	private $recheck = [];
+
+	/**
+	 * The background run in progress: [ 'owner', 'flushed', 'current', 'beat_at' ], or null.
+	 *
+	 * @var array|null
+	 */
+	private $run = null;
+
+	/** @var bool Whether the shutdown function that records a run's position is registered. */
+	private $run_guard = false;
+
+	/** @var int When the first item left waiting by the last run may be sent, 0 when none. */
+	private $next_due = 0;
 
 	/**
 	 * Value of the queue lock this request holds, or empty.
@@ -121,7 +183,7 @@ class Hooks {
 		add_action( self::DELAYED_TERM_EVENT, [ $this, 'delayed_term_ping' ], 10, 2 );
 		add_action( self::BACKGROUND_EVENT, [ $this, 'run_queue' ], 10, 2 );
 		add_action( self::RECOVER_EVENT, [ $this, 'run_queue' ], 10, 0 );
-		add_action( 'shutdown', [ $this, 'flush_pending' ], 9 );
+		add_action( 'shutdown', [ $this, 'on_shutdown' ], 9 );
 		add_action( 'shutdown', [ $this, 'maybe_spawn_cron' ] );
 		add_action( 'admin_notices', [ Indexing::class, 'pause_admin_notice' ] );
 	}
@@ -205,11 +267,20 @@ class Hooks {
 			return;
 		}
 
-		if ( ! empty( $_REQUEST['meta-box-loader'] ) ) { // phpcs:ignore
+		if ( wp_is_post_revision( $post ) || wp_is_post_autosave( $post ) ) {
 			return;
 		}
 
-		if ( wp_is_post_revision( $post ) || wp_is_post_autosave( $post ) ) {
+		$is_update = $old_status === $new_status;
+
+		if ( ! empty( $_REQUEST['meta-box-loader'] ) ) { // phpcs:ignore
+			/*
+			 * The block editor's second request, which saves the SEO box. The post itself was
+			 * handled by the first one; it is looked at again when this request ends, in case
+			 * its noindex setting has just changed (see recheck_posts()).
+			 */
+			$this->recheck[ get_current_blog_id() ][ $post->ID ] = 'crawlwp/post_updated';
+
 			return;
 		}
 
@@ -218,13 +289,18 @@ class Hooks {
 			return;
 		}
 
-		$is_update = $old_status === $new_status;
+		$action = $is_update ? 'crawlwp/post_updated' : 'crawlwp/post_added';
 
 		if ( ! Indexing::is_on( $is_update ? 'ping_on_post_updated' : 'ping_on_post', 'general' ) ) {
 			return;
 		}
 
 		if ( Indexing::get_post_skip_reason( $post ) !== '' ) {
+			// Noindex now, but the SEO box is saved after the status change: looked at again when the request ends.
+			if ( $post->post_status === 'publish' && Indexing::get_post_noindex_source( $post ) !== '' ) {
+				$this->recheck[ get_current_blog_id() ][ $post->ID ] = $action;
+			}
+
 			return;
 		}
 
@@ -232,7 +308,7 @@ class Hooks {
 			return;
 		}
 
-		$this->submit( $is_update ? 'crawlwp/post_updated' : 'crawlwp/post_added', [ $post->ID ] );
+		$this->submit( $action, [ $post->ID ] );
 	}
 
 	/**
@@ -463,7 +539,7 @@ class Hooks {
 
 	/**
 	 * Whether submissions are sent in the background. Requests that nobody waits
-	 * on (WP-Cron, WP-CLI) send them straight away. So do sites with WP-Cron
+	 * on (WP-Cron, WP-CLI) send them when the request ends. So do sites with WP-Cron
 	 * disabled, since nothing may ever run the queue there; a site with a server
 	 * cron can opt in with the filter.
 	 */
@@ -483,14 +559,35 @@ class Hooks {
 	}
 
 	/**
-	 * Fire a submission action now, or add it to the background queue.
+	 * Whether this request is the REST API. The block editor saves a post through it, and the
+	 * SEO box in a second request a moment later.
+	 */
+	private static function is_rest(): bool {
+
+		return defined( 'REST_REQUEST' ) && REST_REQUEST;
+	}
+
+	/**
+	 * Seconds a post saved through the REST API waits before it is sent.
+	 */
+	private static function save_delay(): int {
+
+		/**
+		 * Filter how long a post saved through the REST API (the block editor) waits before it
+		 * is sent, so its SEO box settings, saved in a second request, are in place. 0 to not wait.
+		 *
+		 * @param int $seconds Default 45.
+		 */
+		return max( 0, (int) apply_filters( 'crawlwp/submission_save_delay', self::SAVE_DELAY ) );
+	}
+
+	/**
+	 * Queue a submission. Nothing is sent while the post, term or comment is being saved: the
+	 * item is kept in memory and, when the request ends (see flush_pending()), written to the
+	 * stored queue for the background event, or sent there and then on sites without one.
 	 *
-	 * Only IDs and strings are queued; objects are loaded again when the queue
-	 * runs, so the submission uses the post as it is then.
-	 *
-	 * Queued items are kept in memory and written to the stored queue once, at the end
-	 * of the request (see flush_pending()), so an import of thousands of posts doesn't
-	 * rewrite the whole queue for every post.
+	 * Only IDs and strings are queued; objects are loaded again when the item is sent, so the
+	 * submission uses the post as it is then (a post set to noindex in the meantime is skipped).
 	 *
 	 * @param string $action Submission action.
 	 * @param array  $args   Action arguments (IDs and strings).
@@ -499,18 +596,46 @@ class Hooks {
 	 */
 	private function submit( string $action, array $args ): void {
 
-		if ( ! $this->in_background() ) {
-			$this->background_submission( $action, $args );
-
-			return;
-		}
-
-		self::add_to_queue( $this->pending, self::queue_key( $action, $args ), [ $action, $args ] );
-
 		// A very long request (an import) is written out in parts, so little is lost if it is killed.
-		if ( count( $this->pending ) >= self::PENDING_FLUSH ) {
-			$this->flush_pending();
+		if ( $this->pending_count >= self::PENDING_FLUSH ) {
+			$this->flush_pending( false );
 		}
+
+		$delay = self::is_rest() && in_array( $action, [ 'crawlwp/post_added', 'crawlwp/post_updated' ], true ) ? self::save_delay() : 0;
+
+		$this->add_pending( $action, $args, $delay > 0 ? time() + $delay : 0 );
+	}
+
+	/**
+	 * Remember a submission for the end of the request, under the site it belongs to.
+	 *
+	 * @param string $action     Submission action.
+	 * @param array  $args       Action arguments.
+	 * @param int    $not_before Earliest time to send it, 0 for as soon as possible.
+	 */
+	private function add_pending( string $action, array $args, int $not_before ): void {
+
+		$blog_id = get_current_blog_id();
+
+		if ( ! isset( $this->pending[ $blog_id ] ) ) {
+			$this->pending[ $blog_id ] = [];
+		}
+
+		if ( self::add_to_queue( $this->pending[ $blog_id ], self::queue_key( $action, $args ), [ $action, $args, 0, $not_before, (int) current_time( 'timestamp' ) ] ) ) {
+			++$this->pending_count;
+		}
+	}
+
+	/**
+	 * A queue item with every field: [ action, args, tries, not before (time), queued at (site time) ].
+	 *
+	 * @param mixed $item Stored item.
+	 */
+	private static function normalize_item( $item ): array {
+
+		$item = (array) $item;
+
+		return [ (string) ( $item[0] ?? '' ), array_values( (array) ( $item[1] ?? [] ) ), (int) ( $item[2] ?? 0 ), (int) ( $item[3] ?? 0 ), (int) ( $item[4] ?? 0 ) ];
 	}
 
 	/**
@@ -520,71 +645,279 @@ class Hooks {
 	 *
 	 * @param array  $queue Queue to change.
 	 * @param string $key   Queue key.
-	 * @param array  $item  [ action, args ].
+	 * @param array  $item  Queue item.
+	 *
+	 * @return bool Whether the key is new in this queue.
 	 */
-	private static function add_to_queue( array &$queue, string $key, array $item ): void {
+	private static function add_to_queue( array &$queue, string $key, array $item ): bool {
 
-		if ( ! isset( $queue[ $key ] ) || self::action_rank( (string) $item[0] ) > self::action_rank( (string) ( $queue[ $key ][0] ?? '' ) ) ) {
-			$queue[ $key ] = [ (string) $item[0], (array) ( $item[1] ?? [] ) ];
+		$item = self::normalize_item( $item );
+
+		if ( ! isset( $queue[ $key ] ) ) {
+			$queue[ $key ] = $item;
+
+			return true;
+		}
+
+		$old = self::normalize_item( $queue[ $key ] );
+
+		if ( self::action_rank( $item[0] ) > self::action_rank( $old[0] ) ) {
+			$old[0] = $item[0];
+			$old[1] = $item[1];
+		}
+
+		$old[2] = max( $old[2], $item[2] );
+		// A new save through the REST API waits again; anything else lets the entry go now.
+		$old[3] = $item[3] === 0 ? 0 : max( $old[3], $item[3] );
+
+		$queue[ $key ] = $old;
+
+		return false;
+	}
+
+	/**
+	 * End of the request: write out what was queued, then, on sites without WP-Cron, send
+	 * held submissions that are due.
+	 *
+	 * @return void
+	 */
+	public function on_shutdown(): void {
+
+		$this->flush_pending();
+		$this->run_waiting();
+	}
+
+	/**
+	 * Posts whose status change was not queued because they were noindex at that moment, and
+	 * posts saved by the block editor's second (SEO box) request: looked at again now that the
+	 * SEO box has been saved, and queued when they can be submitted after all.
+	 */
+	private function recheck_posts(): void {
+
+		$recheck       = $this->recheck;
+		$this->recheck = [];
+		$current       = get_current_blog_id();
+
+		foreach ( $recheck as $blog_id => $posts ) {
+			$switched = is_multisite() && (int) $blog_id !== $current;
+
+			if ( $switched ) {
+				switch_to_blog( (int) $blog_id );
+			}
+
+			try {
+				foreach ( $posts as $post_id => $action ) {
+					$post = get_post( (int) $post_id );
+
+					if ( ! $post instanceof WP_Post || $post->post_status !== 'publish' ) {
+						continue;
+					}
+
+					if ( ! Indexing::is_on( $action === 'crawlwp/post_added' ? 'ping_on_post' : 'ping_on_post_updated', 'general' ) ) {
+						continue;
+					}
+
+					if ( Indexing::get_post_skip_reason( $post ) !== '' || $this->defer_post_if_throttled( $post ) ) {
+						continue;
+					}
+
+					$this->add_pending( (string) $action, [ $post->ID ], 0 );
+				}
+			} finally {
+				if ( $switched ) {
+					restore_current_blog();
+				}
+			}
 		}
 	}
 
 	/**
-	 * Write this request's queued submissions to the stored queue (one read and one write,
-	 * under the lock) and make sure the background event is scheduled. Runs on shutdown.
+	 * Write this request's queued submissions to the stored queue of the site each belongs to
+	 * (one small read and write per site, under the lock) and make sure the background event
+	 * is scheduled. Runs on shutdown, and earlier in very long requests.
+	 *
+	 * @param bool $final Whether the request is ending (false for an early write).
 	 *
 	 * @return void
 	 */
-	public function flush_pending(): void {
+	public function flush_pending( $final = true ): void {
+
+		if ( $final !== false ) {
+			$this->recheck_posts();
+		}
 
 		if ( $this->pending === [] ) {
 			return;
 		}
 
-		$pending       = $this->pending;
-		$this->pending = [];
+		$pending             = $this->pending;
+		$this->pending       = [];
+		$this->pending_count = 0;
+		$current             = get_current_blog_id();
+
+		foreach ( $pending as $blog_id => $items ) {
+			if ( ! $items ) {
+				continue;
+			}
+
+			// Saved while another site was current (switch_to_blog()): it goes to that site's queue.
+			$switched = is_multisite() && (int) $blog_id !== $current;
+
+			if ( $switched ) {
+				switch_to_blog( (int) $blog_id );
+			}
+
+			try {
+				$this->flush_site( $items, $switched );
+			} finally {
+				if ( $switched ) {
+					restore_current_blog();
+				}
+			}
+		}
+	}
+
+	/**
+	 * Store (or, without a background event, send) the current site's queued submissions.
+	 *
+	 * @param array $items    Queue items by key.
+	 * @param bool  $switched Whether the current site is not the request's own.
+	 */
+	private function flush_site( array $items, bool $switched ): void {
+
+		$background = $this->in_background();
+
+		if ( ! $background && self::waiting_since() === 0 ) {
+			/*
+			 * No background event: send now, except posts just saved through the REST API (the
+			 * block editor), which are held until their SEO box has been saved by the editor's
+			 * second request or the delay has passed.
+			 */
+			$hold = [];
+
+			if ( self::is_rest() ) {
+				foreach ( $items as $key => $item ) {
+					if ( (int) ( $item[3] ?? 0 ) > time() ) {
+						$hold[ $key ] = $item;
+					}
+				}
+			}
+
+			$now = array_diff_key( $items, $hold );
+
+			if ( $now ) {
+				$this->send_items( $now );
+			}
+
+			if ( ! $hold ) {
+				return;
+			}
+
+			$items = $hold;
+		}
+
+		$earliest = PHP_INT_MAX;
+
+		foreach ( $items as $item ) {
+			$earliest = min( $earliest, (int) ( $item[3] ?? 0 ) );
+		}
 
 		if ( ! self::lock_queue() ) {
 			// The queue stayed locked (a stuck request): send these now rather than lose them.
-			$this->send_items( $pending );
+			$this->send_items( $items );
 
 			return;
 		}
 
 		try {
-			$queue = self::read_queue();
-
-			foreach ( $pending as $key => $item ) {
-				self::add_to_queue( $queue, (string) $key, $item );
-			}
-
-			update_option( self::QUEUE_OPTION, $queue, false );
+			$index   = self::read_index();
+			$dropped = self::enqueue( $items, $index );
+			self::save_index( $index );
 		} finally {
 			self::unlock_queue();
 		}
 
-		if ( wp_next_scheduled( self::BACKGROUND_EVENT ) ) {
+		if ( $dropped > 0 ) {
+			/* translators: 1: number of submissions, 2: queue limit */
+			self::log( sprintf( __( 'Not queued: %1$d submissions to search engines were left out because %2$d are already waiting to be sent.', 'mihdan-index-now' ), $dropped, self::MAX_QUEUE ) );
+		}
+
+		if ( ! $background ) {
+			// Held items of this site go out through the stored queue: what is due now, the rest later.
+			$this->drain_inline();
+
 			return;
 		}
 
-		if ( wp_schedule_single_event( time(), self::BACKGROUND_EVENT ) ) {
-			$this->spawn_cron = true;
-		} else {
+		$at   = max( time(), $earliest );
+		$next = wp_next_scheduled( self::BACKGROUND_EVENT );
+
+		if ( $next && $next <= $at ) {
+			return;
+		}
+
+		if ( $next ) {
+			// Scheduled for later than these items need (it was waiting for a post's SEO box): moved forward.
+			wp_clear_scheduled_hook( self::BACKGROUND_EVENT );
+		}
+
+		if ( ! wp_schedule_single_event( $at, self::BACKGROUND_EVENT ) ) {
 			// Could not schedule the queue: send it now rather than lose it.
-			$this->run_queue();
+			$this->process_queue( true );
+		} elseif ( $at <= time() ) {
+			if ( $switched ) {
+				// The event belongs to the switched-to site, so its cron is started while it is current.
+				if ( self::can_spawn_cron() ) {
+					spawn_cron();
+				}
+			} else {
+				$this->spawn_cron = true;
+			}
 		}
 	}
 
 	/**
-	 * The queue as stored now, not this request's cached copy of it.
-	 *
-	 * @return array<string, array>
+	 * Sites without WP-Cron: when the first held submission may be sent, 0 when nothing waits.
+	 * Read from the autoloaded options, so it never costs a query.
 	 */
-	public static function read_queue(): array {
+	private static function waiting_since(): int {
 
-		$queue = self::read_fresh_option( self::QUEUE_OPTION );
+		$options = wp_load_alloptions();
 
-		return is_array( $queue ) ? $queue : [];
+		return (int) ( $options[ self::WAITING_OPTION ] ?? 0 );
+	}
+
+	/**
+	 * Sites without WP-Cron: send the stored submissions that are due and remember when the
+	 * rest is, for a later request (see run_waiting()).
+	 */
+	private function drain_inline(): void {
+
+		$this->next_due = 0;
+		$this->process_queue();
+
+		$left = self::peek_count();
+		$at   = $left > 0 ? ( $this->next_due > 0 ? $this->next_due : time() + MINUTE_IN_SECONDS ) : 0;
+
+		if ( self::waiting_since() !== $at ) {
+			update_option( self::WAITING_OPTION, $at, true );
+		}
+	}
+
+	/**
+	 * Sites without WP-Cron: at the end of any later request, send held submissions that are due.
+	 */
+	private function run_waiting(): void {
+
+		if ( $this->in_background() ) {
+			return;
+		}
+
+		$due = self::waiting_since();
+
+		if ( $due > 0 && $due <= time() ) {
+			$this->drain_inline();
+		}
 	}
 
 	/**
@@ -606,6 +939,301 @@ class Hooks {
 		}
 
 		return get_option( $name, [] );
+	}
+
+	/**
+	 * Name of a queue bucket option.
+	 *
+	 * @param string $lane   'q' (new and updated content) or 'd' (removals).
+	 * @param int    $number Bucket number.
+	 */
+	public static function bucket_name( string $lane, int $number ): string {
+
+		return self::QUEUE_OPTION . '_' . $lane . '_' . $number;
+	}
+
+	/**
+	 * A queue bucket as stored now.
+	 *
+	 * @return array<string, array>
+	 */
+	private static function read_bucket( string $lane, int $number ): array {
+
+		$bucket = self::read_fresh_option( self::bucket_name( $lane, $number ) );
+
+		return is_array( $bucket ) ? $bucket : [];
+	}
+
+	/**
+	 * Where the queue starts and ends. Call with the queue lock held: the first call moves a
+	 * single-option queue of a development build into buckets.
+	 *
+	 * @return array{v: int, q: array{0: int, 1: int}, d: array{0: int, 1: int}, n: int}
+	 */
+	public static function read_index(): array {
+
+		$stored = self::read_fresh_option( self::QUEUE_INDEX );
+		$known  = is_array( $stored ) && (int) ( $stored['v'] ?? 0 ) === 2;
+		$index  = [ 'v' => 2, 'q' => [ 1, 0 ], 'd' => [ 1, 0 ], 'n' => 0 ];
+
+		if ( $known ) {
+			foreach ( [ 'q', 'd' ] as $lane ) {
+				if ( isset( $stored[ $lane ][0], $stored[ $lane ][1] ) ) {
+					$index[ $lane ] = [ max( 1, (int) $stored[ $lane ][0] ), max( 0, (int) $stored[ $lane ][1] ) ];
+				}
+			}
+
+			$index['n'] = max( 0, (int) ( $stored['n'] ?? 0 ) );
+
+			return $index;
+		}
+
+		$legacy = self::read_fresh_option( self::QUEUE_OPTION );
+
+		if ( is_array( $legacy ) && $legacy ) {
+			self::enqueue( $legacy, $index, true );
+		}
+
+		if ( $legacy !== [] ) {
+			delete_option( self::QUEUE_OPTION );
+		}
+
+		self::save_index( $index );
+
+		return $index;
+	}
+
+	private static function save_index( array $index ): void {
+
+		update_option( self::QUEUE_INDEX, $index, false );
+	}
+
+	/**
+	 * Items waiting in the stored queue (as counted; used to decide whether to come back).
+	 */
+	private static function peek_count(): int {
+
+		$stored = self::read_fresh_option( self::QUEUE_INDEX );
+
+		return is_array( $stored ) ? max( 0, (int) ( $stored['n'] ?? 0 ) ) : 0;
+	}
+
+	/**
+	 * Add items to the end of the stored queue: removals to their own lane, so they are sent
+	 * after new and updated content without the queue ever being sorted. Only the last bucket
+	 * of a lane is read and written. An item whose post or term is already in that bucket is
+	 * merged into it; one in an earlier bucket is left there, and the later copy is skipped
+	 * when it is sent (see sent_since_queued()).
+	 *
+	 * Call with the queue lock held.
+	 *
+	 * @param array $items  Queue items by key.
+	 * @param array $index  Queue index, updated.
+	 * @param bool  $no_cap Whether to add past MAX_QUEUE (items that were already queued once).
+	 *
+	 * @return int Items left out because the queue is full.
+	 */
+	public static function enqueue( array $items, array &$index, bool $no_cap = false ): int {
+
+		$dropped = 0;
+		$open    = [];
+
+		foreach ( $items as $key => $item ) {
+			if ( ! is_array( $item ) || ! isset( $item[0] ) ) {
+				continue;
+			}
+
+			$key  = (string) $key;
+			$lane = (string) $item[0] === 'crawlwp/post_deleted' ? 'd' : 'q';
+
+			if ( ! isset( $open[ $lane ] ) ) {
+				[ $head, $tail ] = $index[ $lane ];
+
+				$number = $tail >= $head ? $tail : $tail + 1;
+				$bucket = self::read_bucket( $lane, $number );
+
+				if ( count( $bucket ) >= self::BUCKET_SIZE ) {
+					++$number;
+					// Read, not assumed empty: a request that died may have left it behind.
+					$bucket = self::read_bucket( $lane, $number );
+				}
+
+				$open[ $lane ] = [ $number, $bucket, false ];
+			}
+
+			if ( ! isset( $open[ $lane ][1][ $key ] ) && ! $no_cap && $index['n'] >= self::MAX_QUEUE ) {
+				++$dropped;
+
+				continue;
+			}
+
+			if ( self::add_to_queue( $open[ $lane ][1], $key, $item ) ) {
+				++$index['n'];
+			}
+
+			$open[ $lane ][2] = true;
+
+			if ( count( $open[ $lane ][1] ) >= self::BUCKET_SIZE ) {
+				update_option( self::bucket_name( $lane, $open[ $lane ][0] ), $open[ $lane ][1], false );
+
+				$index[ $lane ][1] = $open[ $lane ][0];
+				$open[ $lane ]     = [ $open[ $lane ][0] + 1, self::read_bucket( $lane, $open[ $lane ][0] + 1 ), false ];
+			}
+		}
+
+		foreach ( $open as $lane => [ $number, $bucket, $dirty ] ) {
+			if ( $dirty && $bucket ) {
+				update_option( self::bucket_name( $lane, $number ), $bucket, false );
+
+				$index[ $lane ][1] = $number;
+			}
+		}
+
+		return $dropped;
+	}
+
+	/**
+	 * Work out the next batch: items that are due, from the front of the queue, new and updated
+	 * content before removals. Only the buckets the batch comes from are read. Nothing is
+	 * written here: the caller stores the claim first and then applies the returned bucket
+	 * changes, so a request that dies in between sends an item twice rather than not at all.
+	 *
+	 * Call with the queue lock held.
+	 *
+	 * @param array $index   Queue index, updated.
+	 * @param int   $size    Batch size.
+	 * @param int   $now     Current time.
+	 * @param bool  $all_due Whether to take items that are still waiting too.
+	 *
+	 * @return array{0: array, 1: int, 2: array} The batch, when the first item left waiting is due (0: none), and the bucket changes ([ name, items or null to delete ]).
+	 */
+	public static function take_batch( array &$index, int $size, int $now, bool $all_due = false ): array {
+
+		$batch    = [];
+		$next_due = 0;
+		$changes  = [];
+		$size     = max( 1, $size );
+
+		foreach ( [ 'q', 'd' ] as $lane ) {
+			while ( count( $batch ) < $size && $index[ $lane ][0] <= $index[ $lane ][1] ) {
+				$number = $index[ $lane ][0];
+				$keep   = [];
+				$taken  = 0;
+
+				foreach ( self::read_bucket( $lane, $number ) as $key => $item ) {
+					if ( ! is_array( $item ) || ! isset( $item[0] ) ) {
+						++$taken;
+
+						continue;
+					}
+
+					$not_before = (int) ( $item[3] ?? 0 );
+
+					if ( count( $batch ) >= $size ) {
+						$keep[ $key ] = $item;
+					} elseif ( $not_before > $now && ! $all_due ) {
+						$keep[ $key ] = $item;
+						$next_due     = $next_due > 0 ? min( $next_due, $not_before ) : $not_before;
+					} else {
+						++$taken;
+
+						if ( ! isset( $batch[ $key ] ) ) {
+							$batch[ $key ] = $item;
+						}
+					}
+				}
+
+				$index['n'] = max( 0, $index['n'] - $taken );
+
+				if ( $keep ) {
+					$changes[] = [ self::bucket_name( $lane, $number ), $keep ];
+
+					// Items of this bucket are still waiting: later buckets wait behind them.
+					break;
+				}
+
+				$changes[] = [ self::bucket_name( $lane, $number ), null ];
+				++$index[ $lane ][0];
+			}
+
+			if ( $index[ $lane ][0] > $index[ $lane ][1] ) {
+				$index[ $lane ] = [ 1, 0 ];
+			}
+		}
+
+		if ( $index['q'] === [ 1, 0 ] && $index['d'] === [ 1, 0 ] ) {
+			$index['n'] = 0;
+		}
+
+		return [ $batch, $next_due, $changes ];
+	}
+
+	/**
+	 * What to do with the batch another run claimed.
+	 *
+	 * A claim that was updated within CLAIM_TTL belongs to a run that is still sending: null.
+	 * Otherwise that run died (time limit, memory, a fatal error in a listener), and its unsent
+	 * items go back to the queue. The run's last recorded position says which items were fully
+	 * sent (left out) and which it was sending when it died: only those count a try, so one item
+	 * that kills every run is dropped after MAX_TRIES without taking the rest of its batch along.
+	 * When the run never recorded a position, every item counts a try.
+	 *
+	 * @param mixed $claim Stored CLAIM_OPTION.
+	 * @param mixed $beat  Stored CLAIM_BEAT.
+	 * @param int   $now   Current time.
+	 *
+	 * @return array{requeue: array, dropped: string[], found: bool}|null
+	 */
+	public static function recover_claim( $claim, $beat, int $now ): ?array {
+
+		$result = [ 'requeue' => [], 'dropped' => [], 'found' => false ];
+
+		if ( ! is_array( $claim ) || empty( $claim['items'] ) || ! is_array( $claim['items'] ) ) {
+			$result['found'] = is_array( $claim ) && $claim !== [];
+
+			return $result;
+		}
+
+		$result['found'] = true;
+
+		$owner    = (string) ( $claim['owner'] ?? '' );
+		$has_beat = is_array( $beat ) && $owner !== '' && (string) ( $beat['owner'] ?? '' ) === $owner;
+		$dead     = $has_beat && ! empty( $beat['dead'] );
+		$alive_at = max( (int) ( $claim['at'] ?? 0 ), $has_beat ? (int) ( $beat['at'] ?? 0 ) : 0 );
+
+		if ( ! $dead && $alive_at >= $now - self::CLAIM_TTL ) {
+			return null;
+		}
+
+		$flushed = $has_beat ? max( 0, (int) ( $beat['flushed'] ?? 0 ) ) : 0;
+		$from    = $has_beat ? (int) ( $beat['from'] ?? 0 ) : 0;
+		$to      = $has_beat ? (int) ( $beat['to'] ?? 0 ) : PHP_INT_MAX;
+		$i       = -1;
+
+		foreach ( $claim['items'] as $key => $item ) {
+			++$i;
+
+			if ( $i < $flushed || ! is_array( $item ) || ! isset( $item[0] ) ) {
+				continue;
+			}
+
+			$item = self::normalize_item( $item );
+
+			if ( $i >= $from && $i < $to ) {
+				++$item[2];
+			}
+
+			if ( $item[2] >= self::MAX_TRIES ) {
+				$result['dropped'][] = (string) $key;
+
+				continue;
+			}
+
+			$item[3]                           = 0;
+			$result['requeue'][ (string) $key ] = $item;
+		}
+
+		return $result;
 	}
 
 	/**
@@ -699,67 +1327,26 @@ class Hooks {
 	}
 
 	/**
-	 * Take the next batch out of the stored queue and remember it as "being sent".
-	 *
-	 * The batch stays in CLAIM_OPTION until it has been sent, so a run that dies (time limit,
-	 * memory, a fatal error in a listener) loses nothing: the next run finds the old claim and
-	 * puts its items back. An item that was in MAX_TRIES dead runs is dropped, so one that
-	 * crashes every run can't block the queue forever.
-	 *
-	 * Call with the queue lock held.
-	 *
-	 * @param array $queue Stored queue.
-	 * @param mixed $claim Stored claim ([ 'at' => time, 'items' => [...] ]) or anything else when there is none.
-	 * @param int   $size  Batch size.
-	 * @param int   $now   Current time.
-	 *
-	 * @return array{0: array|null, 1: array} The batch (null: another run is still sending its own) and the rest of the queue.
+	 * Whether a webmaster API (Google, Bing, Yandex) is on: those make a request per post while
+	 * the run waits.
 	 */
-	public static function claim_batch( array $queue, $claim, int $size, int $now ): array {
-
-		if ( is_array( $claim ) && ! empty( $claim['items'] ) && is_array( $claim['items'] ) ) {
-			if ( (int) ( $claim['at'] ?? 0 ) >= $now - self::CLAIM_TTL ) {
-				return [ null, $queue ];
-			}
-
-			foreach ( $claim['items'] as $key => $item ) {
-				$tries = (int) ( $item[2] ?? 0 ) + 1;
-
-				// A newer entry for the same post or term is already waiting: that one is sent.
-				if ( ! is_array( $item ) || ! isset( $item[0] ) || $tries >= self::MAX_TRIES || isset( $queue[ $key ] ) ) {
-					continue;
-				}
-
-				$queue[ $key ] = [ (string) $item[0], (array) ( $item[1] ?? [] ), $tries ];
-			}
-		}
-
-		// New and updated content first, removals last.
-		uasort(
-			$queue,
-			static function ( $a, $b ) {
-				return ( (string) ( $a[0] ?? '' ) === 'crawlwp/post_deleted' ) <=> ( (string) ( $b[0] ?? '' ) === 'crawlwp/post_deleted' );
-			}
-		);
-
-		$batch = array_slice( $queue, 0, max( 1, $size ), true );
-
-		return [ $batch, array_diff_key( $queue, $batch ) ];
-	}
-
-	/**
-	 * Submissions sent per background run. Smaller when a webmaster API (Google, Bing, Yandex)
-	 * is on: those make a request per post while the run waits, so a big batch could outlast
-	 * the server's time limit.
-	 */
-	private static function batch_size(): int {
+	private static function has_slow_listeners(): bool {
 
 		/**
 		 * Filter whether listeners that make a request per submission are active.
 		 *
 		 * @param bool $slow Default false; the webmaster APIs set it to true.
 		 */
-		$slow = (bool) apply_filters( 'crawlwp/submission_slow_listeners', false );
+		return (bool) apply_filters( 'crawlwp/submission_slow_listeners', false );
+	}
+
+	/**
+	 * Submissions sent per background run. Smaller when a webmaster API is on, so a batch
+	 * can't outlast the server's time limit.
+	 */
+	private static function batch_size(): int {
+
+		$slow = self::has_slow_listeners();
 
 		/**
 		 * Filter how many queued submissions one background run sends.
@@ -784,11 +1371,6 @@ class Hooks {
 	 * Send queued submissions: new and updated content first, removals last, so a
 	 * mass trash can't use up a search engine's quota before new posts are sent.
 	 *
-	 * IndexNow engines collect the URLs between crawlwp/submission_batch_start and
-	 * crawlwp/submission_batch_end and send them in one request (see IndexNowAbstract).
-	 * The batch is sent in chunks, so IndexNow gets each chunk's URLs as soon as that
-	 * chunk is done instead of only at the very end of the run.
-	 *
 	 * Also accepts the action and arguments of events queued one by one by earlier
 	 * versions, so those still go out after an update.
 	 *
@@ -805,6 +1387,19 @@ class Hooks {
 			return;
 		}
 
+		$this->process_queue();
+	}
+
+	/**
+	 * Claim the next batch and send it.
+	 *
+	 * The batch is kept in CLAIM_OPTION until it has been sent, so a run that dies loses
+	 * nothing: the next run puts the unsent part back (see recover_claim()).
+	 *
+	 * @param bool $all_due Whether to also send items that are still waiting for their SEO box.
+	 */
+	private function process_queue( bool $all_due = false ): void {
+
 		if ( ! self::lock_queue() ) {
 			// Another request holds the queue: try again shortly.
 			self::schedule_next_run();
@@ -812,39 +1407,85 @@ class Hooks {
 			return;
 		}
 
-		try {
-			// Claimed under the lock from what is stored now, so an overlapping run (or a request
-			// holding an old copy) can't send the same items again or drop new ones.
-			[ $batch, $rest ] = self::claim_batch( self::read_queue(), self::read_fresh_option( self::CLAIM_OPTION ), self::batch_size(), time() );
+		$owner   = wp_generate_password( 12, false );
+		$dropped = [];
 
-			if ( $batch === null ) {
+		try {
+			// Claimed under the lock from what is stored now, so an overlapping run can't send the same items again.
+			$recovered = self::recover_claim( self::read_fresh_option( self::CLAIM_OPTION ), self::read_fresh_option( self::CLAIM_BEAT ), time() );
+
+			if ( $recovered === null ) {
 				// Another run is still sending its batch.
 				self::schedule_next_run();
 
 				return;
 			}
 
-			if ( $rest ) {
-				update_option( self::QUEUE_OPTION, $rest, false );
-				self::schedule_next_run();
-			} else {
-				delete_option( self::QUEUE_OPTION );
+			$index   = self::read_index();
+			$dropped = $recovered['dropped'];
+
+			if ( $recovered['requeue'] ) {
+				self::enqueue( $recovered['requeue'], $index, true );
+				self::save_index( $index );
 			}
 
-			if ( $batch === [] ) {
+			[ $batch, $this->next_due, $changes ] = self::take_batch( $index, self::batch_size(), time(), $all_due );
+
+			if ( $batch ) {
+				update_option( self::CLAIM_OPTION, [ 'at' => time(), 'owner' => $owner, 'items' => $batch ], false );
+			} elseif ( $recovered['found'] ) {
 				delete_option( self::CLAIM_OPTION );
-
-				return;
+				delete_option( self::CLAIM_BEAT );
 			}
 
-			update_option( self::CLAIM_OPTION, [ 'at' => time(), 'items' => $batch ], false );
+			foreach ( $changes as [ $name, $items ] ) {
+				if ( $items === null ) {
+					delete_option( $name );
+				} else {
+					update_option( $name, $items, false );
+				}
+			}
 
-			if ( ! wp_next_scheduled( self::RECOVER_EVENT ) ) {
+			self::save_index( $index );
+
+			if ( $index['n'] > 0 ) {
+				self::schedule_next_run( ! $batch && $this->next_due > 0 ? $this->next_due : 0 );
+			}
+
+			if ( $batch && ! wp_next_scheduled( self::RECOVER_EVENT ) ) {
 				wp_schedule_single_event( time() + self::CLAIM_TTL + MINUTE_IN_SECONDS, self::RECOVER_EVENT );
 			}
 		} finally {
 			self::unlock_queue();
 		}
+
+		if ( $dropped ) {
+			/* translators: 1: number of tries, 2: list of queue entries, e.g. post:12 */
+			self::log( sprintf( __( 'Not sent: these submissions to search engines were dropped after the background run stopped while sending them %1$d times: %2$s', 'mihdan-index-now' ), self::MAX_TRIES, implode( ', ', $dropped ) ) );
+		}
+
+		if ( $batch ) {
+			$this->send_claimed( $batch, $owner );
+		}
+	}
+
+	/**
+	 * Send a claimed batch.
+	 *
+	 * IndexNow engines collect the URLs between crawlwp/submission_batch_start and
+	 * crawlwp/submission_batch_end and send them in one request (see IndexNowAbstract), so the
+	 * batch is sent in chunks: each chunk's URLs go to IndexNow when that chunk is done. The time
+	 * budget is checked after every item, and the chunk in progress is closed (its URLs sent)
+	 * before the run stops.
+	 *
+	 * The position is recorded as the run goes (before every item when a webmaster API makes each
+	 * one slow, otherwise every BEAT_EVERY items, and exactly when the request is dying), which
+	 * also shows other runs that this one is alive.
+	 *
+	 * @param array  $batch Queue items by key.
+	 * @param string $owner This run's token, as stored in the claim.
+	 */
+	private function send_claimed( array $batch, string $owner ): void {
 
 		// One query for the batch's posts instead of one per post (All in One SEO's own table).
 		$post_ids = [];
@@ -859,71 +1500,242 @@ class Hooks {
 			ThirdPartyRobots::prime( $post_ids );
 		}
 
+		$keys    = array_keys( $batch );
+		$total   = count( $keys );
+		$slow    = self::has_slow_listeners();
+		$chunk   = $slow ? self::CHUNK_SIZE_SLOW : self::CHUNK_SIZE;
+		$step    = $slow ? 1 : self::BEAT_EVERY;
+		$budget  = self::time_budget();
 		$started = time();
-		$left    = $batch;
+		$retry   = [];
+		$i       = 0;
+		$stop    = false;
 
-		foreach ( array_chunk( $batch, self::CHUNK_SIZE, true ) as $chunk ) {
-			$this->send_items( $chunk );
+		$this->run = [ 'owner' => $owner, 'flushed' => 0, 'current' => 0, 'beat_at' => $started ];
+		$this->guard_run();
 
-			$left = array_diff_key( $left, $chunk );
+		while ( $i < $total && ! $stop ) {
+			$end = min( $total, $i + $chunk );
 
-			if ( $left === [] ) {
-				break;
-			}
+			do_action( 'crawlwp/submission_batch_start' );
 
-			// Sent items leave the claim, which also shows other runs this one is alive.
-			update_option( self::CLAIM_OPTION, [ 'at' => time(), 'items' => $left ], false );
+			try {
+				while ( $i < $end ) {
+					if ( ( $i - $this->run['flushed'] ) % $step === 0 && ! $this->beat( $i, min( $total, $i + $step ) ) ) {
+						// Another run took this batch over (this one was taken for dead): it sends the rest.
+						$this->run = null;
 
-			if ( time() - $started >= self::time_budget() ) {
-				break;
-			}
-		}
+						return;
+					}
 
-		if ( $left === [] ) {
-			delete_option( self::CLAIM_OPTION );
-			wp_clear_scheduled_hook( self::RECOVER_EVENT );
+					$this->run['current'] = $i;
 
-			return;
-		}
+					try {
+						$this->send_item( $batch[ $keys[ $i ] ] );
+					} catch ( \Throwable $e ) {
+						// A listener failed on this item: the rest still goes out, this one is tried again later.
+						$retry[ $keys[ $i ] ] = $e->getMessage();
+					}
 
-		// Out of time: the unsent items go back to the queue for the next run.
-		if ( ! self::lock_queue() ) {
-			// Left in the claim; the next run after CLAIM_TTL picks them up.
-			self::schedule_next_run();
+					++$i;
 
-			return;
-		}
+					if ( time() - $started >= $budget ) {
+						$stop = true;
 
-		try {
-			$queue = self::read_queue();
-
-			foreach ( $left as $key => $item ) {
-				if ( ! isset( $queue[ $key ] ) ) {
-					$queue[ $key ] = $item;
+						break;
+					}
 				}
+			} finally {
+				// Also when stopping early: the chunk's URLs collected so far are sent to IndexNow.
+				do_action( 'crawlwp/submission_batch_end' );
 			}
 
-			update_option( self::QUEUE_OPTION, $queue, false );
-			delete_option( self::CLAIM_OPTION );
-			wp_clear_scheduled_hook( self::RECOVER_EVENT );
-		} finally {
-			self::unlock_queue();
+			$this->run['flushed'] = $i;
 		}
 
-		self::schedule_next_run();
+		$this->finish_run( $batch, $keys, $i, $owner, $retry );
 	}
 
-	private static function schedule_next_run(): void {
+	/**
+	 * Record how far the run has got. False when the batch now belongs to another run.
+	 *
+	 * @param int $from First item being sent now.
+	 * @param int $to   One past the last item being sent now.
+	 */
+	private function beat( int $from, int $to ): bool {
+
+		$now = time();
+
+		// Long silence (one very slow request): another run may have taken the batch for dead.
+		if ( $now - (int) $this->run['beat_at'] > self::CLAIM_TTL / 2 && ! self::owns_claim( (string) $this->run['owner'] ) ) {
+			return false;
+		}
+
+		$this->run['beat_at'] = $now;
+
+		update_option(
+			self::CLAIM_BEAT,
+			[
+				'owner'   => $this->run['owner'],
+				'at'      => $now,
+				'flushed' => (int) $this->run['flushed'],
+				'from'    => $from,
+				'to'      => $to,
+			],
+			false
+		);
+
+		return true;
+	}
+
+	private static function owns_claim( string $owner ): bool {
+
+		$claim = self::read_fresh_option( self::CLAIM_OPTION );
+
+		return is_array( $claim ) && (string) ( $claim['owner'] ?? '' ) === $owner;
+	}
+
+	/**
+	 * When the request dies in the middle of an item (time limit, memory, a fatal error), record
+	 * which one, so only that item counts a try and the next run can pick the batch up at once.
+	 */
+	private function guard_run(): void {
+
+		if ( $this->run_guard ) {
+			return;
+		}
+
+		$this->run_guard = true;
+
+		register_shutdown_function(
+			function () {
+				if ( $this->run === null ) {
+					return;
+				}
+
+				$current = (int) $this->run['current'];
+
+				update_option(
+					self::CLAIM_BEAT,
+					[
+						'owner'   => $this->run['owner'],
+						'at'      => time(),
+						'flushed' => (int) $this->run['flushed'],
+						'from'    => $current,
+						'to'      => $current + 1,
+						'dead'    => true,
+					],
+					false
+				);
+			}
+		);
+	}
+
+	/**
+	 * End of a run: put back what was not sent (out of time, or a listener failed on it) and
+	 * release the claim, unless another run has taken the batch over in the meantime.
+	 *
+	 * @param array    $batch Claimed items by key.
+	 * @param string[] $keys  Their keys, in order.
+	 * @param int      $done  Items handled.
+	 * @param string   $owner This run's token.
+	 * @param array    $retry Keys of items a listener failed on => error message.
+	 */
+	private function finish_run( array $batch, array $keys, int $done, string $owner, array $retry ): void {
+
+		$left    = [];
+		$dropped = [];
+		$total   = count( $keys );
+
+		foreach ( $retry as $key => $message ) {
+			$item = self::normalize_item( $batch[ $key ] );
+
+			if ( ++$item[2] >= self::MAX_TRIES ) {
+				$dropped[] = $key . ' (' . $message . ')';
+
+				continue;
+			}
+
+			$item[3]      = time() + MINUTE_IN_SECONDS;
+			$left[ $key ] = $item;
+		}
+
+		for ( $j = $done; $j < $total; $j++ ) {
+			$left[ $keys[ $j ] ] = $batch[ $keys[ $j ] ];
+		}
+
+		$locked = self::lock_queue();
+
+		try {
+			if ( ! self::owns_claim( $owner ) ) {
+				return;
+			}
+
+			if ( $left && ! $locked ) {
+				// The queue can't be changed now: the rest stays claimed, marked for the next run to take at once.
+				update_option( self::CLAIM_OPTION, [ 'at' => 0, 'owner' => $owner, 'items' => $left ], false );
+				update_option( self::CLAIM_BEAT, [ 'owner' => $owner, 'at' => time(), 'flushed' => 0, 'from' => 0, 'to' => 0, 'dead' => true ], false );
+
+				return;
+			}
+
+			if ( $left ) {
+				$index = self::read_index();
+				self::enqueue( $left, $index, true );
+				self::save_index( $index );
+			}
+
+			delete_option( self::CLAIM_OPTION );
+			delete_option( self::CLAIM_BEAT );
+			wp_clear_scheduled_hook( self::RECOVER_EVENT );
+		} finally {
+			if ( $locked ) {
+				self::unlock_queue();
+			}
+
+			$this->run = null;
+
+			if ( $left ) {
+				self::schedule_next_run();
+			}
+
+			if ( $dropped ) {
+				/* translators: 1: number of tries, 2: list of queue entries with the error, e.g. post:12 (error) */
+				self::log( sprintf( __( 'Not sent: these submissions to search engines were dropped after failing %1$d times: %2$s', 'mihdan-index-now' ), self::MAX_TRIES, implode( ', ', $dropped ) ) );
+			}
+		}
+	}
+
+	/**
+	 * Make sure the background event is scheduled.
+	 *
+	 * @param int $at When; 0 for a minute from now.
+	 */
+	private static function schedule_next_run( int $at = 0 ): void {
 
 		if ( ! wp_next_scheduled( self::BACKGROUND_EVENT ) ) {
-			wp_schedule_single_event( time() + MINUTE_IN_SECONDS, self::BACKGROUND_EVENT );
+			wp_schedule_single_event( $at > 0 ? $at : time() + MINUTE_IN_SECONDS, self::BACKGROUND_EVENT );
+		}
+	}
+
+	/**
+	 * Add a line to the plugin's log (Indexing > Log), when the logger is available.
+	 */
+	private static function log( string $message ): void {
+
+		try {
+			if ( class_exists( Logger\Logger::class ) ) {
+				( new Logger\Logger() )->error( $message, [ 'status_code' => 0 ] );
+			}
+		} catch ( \Throwable $e ) {
+			unset( $e );
 		}
 	}
 
 	/**
 	 * Send some queue items as one IndexNow batch.
 	 *
-	 * @param array $items Queue items: [ action, args ].
+	 * @param array $items Queue items.
 	 */
 	private function send_items( array $items ): void {
 
@@ -931,13 +1743,57 @@ class Hooks {
 
 		try {
 			foreach ( $items as $item ) {
-				if ( is_array( $item ) && isset( $item[0] ) ) {
-					$this->background_submission( (string) $item[0], (array) ( $item[1] ?? [] ) );
-				}
+				$this->send_item( $item );
 			}
 		} finally {
 			do_action( 'crawlwp/submission_batch_end' );
 		}
+	}
+
+	/**
+	 * Send one queue item, unless its post or term was already submitted after it was queued
+	 * (a second copy of it, further back in a long queue).
+	 *
+	 * @param mixed $item Queue item.
+	 */
+	private function send_item( $item ): void {
+
+		if ( ! is_array( $item ) || ! isset( $item[0] ) || self::sent_since_queued( $item ) ) {
+			return;
+		}
+
+		$this->background_submission( (string) $item[0], (array) ( $item[1] ?? [] ) );
+	}
+
+	/**
+	 * Whether the item's post or term was submitted after the item was queued.
+	 */
+	private static function sent_since_queued( array $item ): bool {
+
+		$queued = (int) ( $item[4] ?? 0 );
+
+		if ( $queued <= 0 ) {
+			return false;
+		}
+
+		$id = (int) ( $item[1][0] ?? 0 );
+
+		switch ( (string) $item[0] ) {
+			case 'crawlwp/post_added':
+			case 'crawlwp/post_updated':
+			case 'crawlwp/comment_updated':
+				return (int) get_post_meta( $id, Indexing::LAST_UPDATE_META, true ) > $queued;
+
+			case 'crawlwp/term_updated':
+				return (int) get_term_meta( $id, Indexing::LAST_UPDATE_META, true ) > $queued;
+		}
+
+		return false;
+	}
+
+	private static function can_spawn_cron(): bool {
+
+		return ! ( defined( 'DISABLE_WP_CRON' ) && DISABLE_WP_CRON ) && ! ( defined( 'ALTERNATE_WP_CRON' ) && ALTERNATE_WP_CRON );
 	}
 
 	/**
@@ -952,11 +1808,7 @@ class Hooks {
 	 */
 	public function maybe_spawn_cron(): void {
 
-		if (
-			$this->spawn_cron
-			&& ! ( defined( 'DISABLE_WP_CRON' ) && DISABLE_WP_CRON )
-			&& ! ( defined( 'ALTERNATE_WP_CRON' ) && ALTERNATE_WP_CRON )
-		) {
+		if ( $this->spawn_cron && self::can_spawn_cron() ) {
 			$this->spawn_cron = false;
 			spawn_cron();
 		}
