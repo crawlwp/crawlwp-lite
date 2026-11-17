@@ -29,6 +29,20 @@ class Requests
 		 */
 		$limit = (int) apply_filters('crawlwp_ai_rate_limit', 20, $batch);
 
+		/* Check and reserve under one lock, so requests sent at the same moment are all counted. */
+		$locked = self::lock($batch);
+
+		try {
+			return self::check_and_reserve($limit, $batch);
+		} finally {
+			if ($locked) {
+				self::unlock();
+			}
+		}
+	}
+
+	private static function check_and_reserve(int $limit, bool $batch): bool
+	{
 		self::$reason = '';
 
 		if ($limit > 0 && (int) self::state($batch)['count'] >= $limit) {
@@ -80,7 +94,7 @@ class Requests
 		}
 
 		/* Called without checking the limit first: count it now. */
-		self::add($batch, 1);
+		self::locked_add($batch, 1);
 	}
 
 	/**
@@ -91,7 +105,7 @@ class Requests
 	public static function refund_unused(): void
 	{
 		foreach (self::$pending as $batch) {
-			self::add($batch, -1);
+			self::locked_add($batch, -1);
 		}
 
 		self::$pending = [];
@@ -150,8 +164,8 @@ class Requests
 	/**
 	 * A daily counter. With a persistent object cache it is read and changed with
 	 * wp_cache_incr()/wp_cache_decr(), which are atomic there. Without one it is a
-	 * transient read and then written, so two requests in the same instant can both
-	 * pass the limit by one: an accepted, bounded overshoot.
+	 * transient read and then written; lock() keeps two requests from doing that at
+	 * the same moment.
 	 */
 	private static function counter(string $key): int
 	{
@@ -186,6 +200,88 @@ class Requests
 	private static function daily_key(): string
 	{
 		return 'crawlwp_ai_daily_' . gmdate('Ymd');
+	}
+
+	private static function locked_add(bool $batch, int $amount): void
+	{
+		$locked = self::lock($batch);
+
+		try {
+			self::add($batch, $amount);
+		} finally {
+			if ($locked) {
+				self::unlock();
+			}
+		}
+	}
+
+	/**
+	 * A short database lock around reading and changing the counters. Without it two
+	 * requests read the same count and both store count + 1, so one paid generation goes
+	 * uncounted every time requests overlap. If the lock can't be had within a few seconds
+	 * (or the database doesn't offer one) the request carries on as before, unlocked.
+	 */
+	private static function lock(bool $batch): bool
+	{
+		global $wpdb;
+
+		if (! is_object($wpdb) || ! method_exists($wpdb, 'get_var') || ! method_exists($wpdb, 'prepare')) {
+			return false;
+		}
+
+		$locked = (string) $wpdb->get_var($wpdb->prepare('SELECT GET_LOCK(%s, %d)', self::lock_name(), 3)) === '1'; // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+
+		if ($locked) {
+			/* This request may hold counts it read before another request changed them. */
+			foreach ([self::key($batch), self::daily_key(), self::user_daily_key()] as $key) {
+				self::forget($key);
+			}
+		}
+
+		return $locked;
+	}
+
+	private static function unlock(): void
+	{
+		global $wpdb;
+
+		$wpdb->query($wpdb->prepare('SELECT RELEASE_LOCK(%s)', self::lock_name())); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+	}
+
+	/** One lock per site (MySQL lock names are server-wide and at most 64 characters). */
+	private static function lock_name(): string
+	{
+		global $wpdb;
+
+		return 'crawlwp_ai_' . md5((defined('DB_NAME') ? DB_NAME : '') . '|' . (isset($wpdb->options) ? $wpdb->options : ''));
+	}
+
+	/**
+	 * Drop this request's in-memory copy of a transient kept in the options table, so the
+	 * next read comes from the database. With a persistent object cache reads are already shared.
+	 */
+	private static function forget(string $key): void
+	{
+		if (wp_using_ext_object_cache()) {
+			return;
+		}
+
+		$names      = ['_transient_' . $key, '_transient_timeout_' . $key];
+		$notoptions = wp_cache_get('notoptions', 'options');
+		$changed    = false;
+
+		foreach ($names as $name) {
+			wp_cache_delete($name, 'options');
+
+			if (is_array($notoptions) && isset($notoptions[$name])) {
+				unset($notoptions[$name]);
+				$changed = true;
+			}
+		}
+
+		if ($changed) {
+			wp_cache_set('notoptions', $notoptions, 'options');
+		}
 	}
 
 	private static function add(bool $batch, int $amount): void
