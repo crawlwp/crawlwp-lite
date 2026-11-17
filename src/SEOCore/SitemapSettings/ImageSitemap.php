@@ -25,6 +25,12 @@ class ImageSitemap extends \WP_Sitemaps_Provider
 	/** Post meta that decides what a post lists: its featured image, product gallery and noindex setting. */
 	private const WATCHED_META = ['_thumbnail_id', '_product_image_gallery', '_crawlwp_robots_index'];
 
+	/** Which post types have any image at all: [post type => [1 or 0, time checked]]. Kept across cache flushes. */
+	private const TYPES_OPTION = 'crawlwp_image_sitemap_types';
+
+	/** Cached in place of the XML for a page with no posts that have images; such a page answers 404. */
+	private const EMPTY_PAGE = 'none';
+
 	/** @var bool The cache was already emptied in this request. */
 	private $flushed = false;
 
@@ -36,7 +42,8 @@ class ImageSitemap extends \WP_Sitemaps_Provider
 		$this->name        = self::PROVIDER_NAME;
 		$this->object_type = 'post';
 
-		add_action('init', [$this, 'register_provider'], 20);
+		/* Only on sitemap requests, just before WordPress and maybe_render() answer them: see register_provider(). */
+		add_action('template_redirect', [$this, 'register_provider'], 0);
 		add_action('template_redirect', [$this, 'maybe_render'], 1);
 
 		/* Only changes to published, public content can change the sitemap. */
@@ -47,7 +54,7 @@ class ImageSitemap extends \WP_Sitemaps_Provider
 		add_action('delete_attachment', [$this, 'flush_on_attachment']);
 		add_action('attachment_updated', [$this, 'flush_on_attachment']);
 		add_filter('update_attached_file', [$this, 'flush_on_file_change'], 10, 2);
-		add_action('crawlwp_sitemap_settings_saved', [$this, 'flush_cache']);
+		add_action('crawlwp_sitemap_settings_saved', [$this, 'flush_settings']);
 
 		/* Changes that don't save the post: a featured image set from the editor sidebar, noindex written by an importer. */
 		add_action('added_post_meta', [$this, 'flush_on_meta'], 10, 3);
@@ -61,8 +68,17 @@ class ImageSitemap extends \WP_Sitemaps_Provider
 		return (string) SitemapSettings::get('image_sitemap', 'on') === 'on';
 	}
 
+	/**
+	 * Add the image sitemaps to WordPress's sitemap index. Nothing else needs the provider, so
+	 * it is only registered when a sitemap was requested: the on/off setting is in an option
+	 * that isn't autoloaded, and reading it on every page view would cost a query each time.
+	 */
 	public function register_provider(): void
 	{
+		if ((string) get_query_var('sitemap') === '') {
+			return;
+		}
+
 		if (self::is_enabled() && function_exists('wp_register_sitemap_provider')) {
 			wp_register_sitemap_provider(self::PROVIDER_NAME, $this);
 		}
@@ -140,13 +156,44 @@ class ImageSitemap extends \WP_Sitemaps_Provider
 
 	/**
 	 * Whether any published post of this type has an image in its content, a featured image
-	 * or a product gallery. One query that stops at the first match.
+	 * or a product gallery.
+	 *
+	 * Finding that out reads the content of every published post of a type that has none, so
+	 * the answer is kept outside the page cache (which is emptied on every edit): "yes" until a
+	 * sitemap page turns out empty, "no" for a day or until a post of that type gets an image
+	 * (see note_post()).
 	 */
 	private function has_images(string $post_type): bool
 	{
+		$known = self::known_types();
+		$entry = $known[$post_type] ?? null;
+		$fresh = is_array($entry) && isset($entry[0], $entry[1]) && ($entry[0] || (int) $entry[1] > time() - DAY_IN_SECONDS);
+
+		if ($fresh) {
+			$found = (bool) $entry[0];
+		} else {
+			$found = $this->scan_for_images($post_type);
+			self::remember_type($post_type, $found);
+		}
+
+		/**
+		 * Filter whether a post type has images to list. Return true for a post type whose
+		 * images are only added through the crawlwp_image_sitemap_images filter.
+		 *
+		 * @param bool   $found     Whether a published post of this type has an image.
+		 * @param string $post_type Post type.
+		 */
+		return (bool) apply_filters('crawlwp_image_sitemap_has_images', $found, $post_type);
+	}
+
+	/**
+	 * One query that stops at the first published post with an image.
+	 */
+	private function scan_for_images(string $post_type): bool
+	{
 		global $wpdb;
 
-		$found = (bool) $wpdb->get_var(
+		return (bool) $wpdb->get_var(
 			$wpdb->prepare(
 				"SELECT 1 FROM {$wpdb->posts} p
 				WHERE p.post_type = %s AND p.post_status = 'publish'
@@ -159,15 +206,45 @@ class ImageSitemap extends \WP_Sitemaps_Provider
 				'%' . $wpdb->esc_like('<img') . '%'
 			)
 		);
+	}
 
-		/**
-		 * Filter whether a post type has images to list. Return true for a post type whose
-		 * images are only added through the crawlwp_image_sitemap_images filter.
-		 *
-		 * @param bool   $found     Whether a published post of this type has an image.
-		 * @param string $post_type Post type.
-		 */
-		return (bool) apply_filters('crawlwp_image_sitemap_has_images', $found, $post_type);
+	/**
+	 * @return array<string, array{0: int, 1: int}>
+	 */
+	private static function known_types(): array
+	{
+		$known = get_option(self::TYPES_OPTION, []);
+
+		return is_array($known) ? $known : [];
+	}
+
+	private static function remember_type(string $post_type, bool $has_images): void
+	{
+		$known             = self::known_types();
+		$known[$post_type] = [$has_images ? 1 : 0, time()];
+
+		update_option(self::TYPES_OPTION, $known, false);
+	}
+
+	/**
+	 * A published post changed. If its type was down as having no images and this post has one,
+	 * the type has images now: no need to read the whole post type again to find that out.
+	 */
+	private function note_post(\WP_Post $post): void
+	{
+		$entry = self::known_types()[$post->post_type] ?? null;
+
+		if (! is_array($entry) || ! empty($entry[0]) || $post->post_status !== 'publish') {
+			return;
+		}
+
+		if (
+			stripos((string) $post->post_content, '<img') !== false
+			|| (int) get_post_meta($post->ID, '_thumbnail_id', true) > 0
+			|| trim((string) get_post_meta($post->ID, '_product_image_gallery', true), " ,0") !== ''
+		) {
+			self::remember_type($post->post_type, true);
+		}
 	}
 
 	/**
@@ -355,8 +432,24 @@ class ImageSitemap extends \WP_Sitemaps_Provider
 		$xml = get_transient($key);
 
 		if (! is_string($xml) || $xml === '') {
-			$xml = self::xml($this->entries($subtype, $page));
+			$entries = $this->entries($subtype, $page);
+
+			/* A sitemap must list at least one URL: an empty page is remembered as "none". */
+			$xml = $entries === [] ? self::EMPTY_PAGE : self::xml($entries);
 			set_transient($key, $xml, DAY_IN_SECONDS);
+
+			/* The only page of this post type is empty (its posts with images are all noindexed
+			   or protected): take the type out of the sitemap index until one of its posts changes. */
+			if ($entries === [] && $page === 1 && $this->get_max_num_pages($subtype) === 1) {
+				self::remember_type($subtype, false);
+				set_transient(self::cache_key('n|' . $subtype), 'n:0', DAY_IN_SECONDS);
+			}
+		}
+
+		if ($xml === self::EMPTY_PAGE) {
+			status_header(404);
+			nocache_headers();
+			return;
 		}
 
 		if (! headers_sent()) {
@@ -392,6 +485,12 @@ class ImageSitemap extends \WP_Sitemaps_Provider
 
 	public function flush_cache(): void
 	{
+		/* Switched off: there are no cached pages, so a save has nothing to empty. Switching it
+		   on again saves the settings, which empties the cache through flush_settings(). */
+		if (! self::is_enabled()) {
+			return;
+		}
+
 		/* An import or bulk edit changes many posts in one request: empty the cache at the first
 		   change and once more when the request ends, not once per post. */
 		if ($this->flushed) {
@@ -405,6 +504,20 @@ class ImageSitemap extends \WP_Sitemaps_Provider
 
 		$this->flushed = true;
 		$this->flush_now();
+	}
+
+	/**
+	 * The sitemap settings were saved (the image sitemap may have been switched on or off):
+	 * empty the cache whatever the switch says, and check again which post types have images.
+	 */
+	public function flush_settings(): void
+	{
+		delete_option(self::TYPES_OPTION);
+
+		if (! $this->flushed) {
+			$this->flushed = true;
+			$this->flush_now();
+		}
 	}
 
 	public function flush_now(): void
@@ -440,6 +553,7 @@ class ImageSitemap extends \WP_Sitemaps_Provider
 	public function flush_on_status($new_status, $old_status, $post): void
 	{
 		if (($new_status === 'publish' || $old_status === 'publish') && self::listed_type($post)) {
+			$this->note_post($post);
 			$this->flush_cache();
 		}
 	}
@@ -473,6 +587,7 @@ class ImageSitemap extends \WP_Sitemaps_Provider
 		$post = get_post((int) $post_id);
 
 		if ($post instanceof \WP_Post && $post->post_status === 'publish' && self::listed_type($post)) {
+			$this->note_post($post);
 			$this->flush_cache();
 		}
 	}
