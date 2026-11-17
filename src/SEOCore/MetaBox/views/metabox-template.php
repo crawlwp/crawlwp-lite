@@ -156,8 +156,8 @@ $cwp_templates = \Mihdan\IndexNow\SEOCore\MetaBox\Assets::title_meta_templates($
         <span class="cwp-help" title="<?php esc_attr_e('Comma-separated. The first phrase is the primary keyword; additional phrases are secondary keywords.', 'mihdan-index-now'); ?>">?</span>
       </div>
       <div class="cwp-kw-suggest-wrap">
-        <input class="cwp-input" id="cwpKeyword" name="<?php echo esc_attr(MetaFields::FOCUS_KEYWORD); ?>" type="text" value="<?php echo esc_attr($data['focus_keyword']); ?>" placeholder="<?php esc_attr_e('primary keyword, secondary keyword', 'mihdan-index-now'); ?>" autocomplete="off" aria-autocomplete="list" aria-controls="cwpKwSuggest" aria-expanded="false">
-        <div class="cwp-kw-suggest" id="cwpKwSuggest" role="listbox" style="display:none"></div>
+        <input class="cwp-input" id="cwpKeyword" name="<?php echo esc_attr(MetaFields::FOCUS_KEYWORD); ?>" type="text" value="<?php echo esc_attr($data['focus_keyword']); ?>" placeholder="<?php esc_attr_e('primary keyword, secondary keyword', 'mihdan-index-now'); ?>" autocomplete="off" role="combobox" aria-haspopup="listbox" aria-autocomplete="list" aria-controls="cwpKwSuggestList" aria-expanded="false">
+        <div class="cwp-kw-suggest" id="cwpKwSuggest" style="display:none"></div>
       </div>
       <p class="cwp-hint"><?php esc_html_e('Separate secondary keywords with commas. Click each keyword tab below to inspect its individual score.', 'mihdan-index-now'); ?></p>
       <div class="cwp-kw-warning" id="cwpKwWarning" style="display:none">

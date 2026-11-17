@@ -1170,7 +1170,9 @@
         if (!items.length) { close(); return; }
 
         var lower = query.toLowerCase();
-        var html = '<div class="cwp-kw-suggest-title">' + self.escHtml(crawlwpSEO.i18n.kwSuggestTitle) + '</div>';
+        /* The title is outside the listbox (a listbox may only hold options) and names it instead. */
+        var html = '<div class="cwp-kw-suggest-title" aria-hidden="true">' + self.escHtml(crawlwpSEO.i18n.kwSuggestTitle) + '</div>' +
+          '<div role="listbox" id="cwpKwSuggestList" aria-label="' + self.escAttr(crawlwpSEO.i18n.kwSuggestTitle) + '">';
         $.each(items, function(i, s) {
           /* Bold the part Google added, like a search box does. */
           var text = s.toLowerCase().indexOf(lower) === 0
@@ -1178,6 +1180,7 @@
             : self.escHtml(s);
           html += '<div class="cwp-kw-suggest-item" role="option" aria-selected="false" id="cwpKwSuggest-' + i + '" data-index="' + i + '">' + text + '</div>';
         });
+        html += '</div>';
 
         $menu.html(html).show();
         $input.attr('aria-expanded', 'true');
@@ -1200,6 +1203,8 @@
           }).done(function(res) {
             /* Ignore answers to older keystrokes, and to text that has changed since. */
             if (mine !== seq || current() !== query) return;
+            /* Nor after the field was left: the list would open with nothing to close it again. */
+            if (document.activeElement !== $input[0]) return;
             render(query, res && res.success && res.data.suggestions ? res.data.suggestions : []);
           });
         }, 300);
