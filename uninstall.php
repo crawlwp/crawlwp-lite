@@ -67,11 +67,11 @@ function crawlwp_lite_pro_owned_options()
 			'pand-' . md5('crawlwp_catch_late_event_notice'),
 		],
 		'prefixes' => [
-			'crawlwp_pro_',
 			// Automatic share images: settings, background queue and bulk-run state.
 			'crawlwp_social_images',
 			// SEO Indexing: where the noindex clean-up has got to.
 			'crawlwp_noindex_cleanup',
+			'crawlwp_pro_',
 			'crawlwp_license',
 		],
 	];
