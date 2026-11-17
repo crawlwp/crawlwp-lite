@@ -117,6 +117,18 @@ class SitemapSettings
 			'name' => __('Sitemap URL', 'mihdan-index-now'),
 			'desc' => $button_html,
 		]);
+
+		$wposa->add_field(self::SECTION, [
+			'id'      => 'image_sitemap',
+			'type'    => 'switch',
+			'name'    => __('Image sitemap', 'mihdan-index-now'),
+			'default' => 'on',
+			'desc'    => '<p class="description">' . sprintf(
+				/* translators: %s: example sitemap file name */
+				esc_html__('Lists the images on your posts, pages and products, so Google Images can find them. Adds one image sitemap per content type (for example %s) to your sitemap index. Includes the featured image, images in the content and WooCommerce product galleries. Pages hidden from search are left out.', 'mihdan-index-now'),
+				'<code>wp-sitemap-crawlwpimages-post-1.xml</code>'
+			) . '</p>',
+		]);
 	}
 
 
