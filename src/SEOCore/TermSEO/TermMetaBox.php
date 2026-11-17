@@ -30,6 +30,10 @@ class TermMetaBox
 
 	public function render_add(): void
 	{
+		if (! \Mihdan\IndexNow\SEOCore\Permissions::can_term_seo()) {
+			return;
+		}
+
 		wp_nonce_field(MetaFields::NONCE_ACTION, MetaFields::NONCE_NAME);
 		?>
 		<div class="form-field">
@@ -45,6 +49,10 @@ class TermMetaBox
 
 	public function render_edit(\WP_Term $term): void
 	{
+		if (! \Mihdan\IndexNow\SEOCore\Permissions::can_term_seo()) {
+			return;
+		}
+
 		$data       = TermFields::get_all((int) $term->term_id);
 		$entity_key = Entities::taxonomy_key($term->taxonomy);
 		wp_nonce_field(MetaFields::NONCE_ACTION, MetaFields::NONCE_NAME);

@@ -208,7 +208,8 @@ class Settings
 			);
 		}
 
-		if (class_exists(FeatureGate::class) && FeatureGate::is_enabled() && class_exists(Wizard::class)) {
+		/* The wizard is for administrators: no link for roles that were only given the settings screen. */
+		if (class_exists(FeatureGate::class) && FeatureGate::is_enabled() && class_exists(Wizard::class) && current_user_can('manage_options')) {
 			$this->wposa->add_sidebar_card(
 				[
 					'id'    => 'setup_wizard',

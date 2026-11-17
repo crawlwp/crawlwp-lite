@@ -89,6 +89,11 @@ class TermFields
 			return;
 		}
 
+		/* The term fields follow the SEO box permission, like the screen that shows them. */
+		if (! \Mihdan\IndexNow\SEOCore\Permissions::can_term_seo()) {
+			return;
+		}
+
 		$values = FieldProcessor::process(self::field_definitions(), $_POST);
 
 		/* Robots and canonical need the "Advanced SEO fields" permission, as on posts. */

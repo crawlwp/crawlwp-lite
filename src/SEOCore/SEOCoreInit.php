@@ -50,7 +50,6 @@ class SEOCoreInit
 	 * @var string[]
 	 */
 	private const MODULES_ALWAYS = [
-		Permissions::class,
 		Graph::class,
 		SitemapStylesheet::class,
 		ImageSEO::class,
@@ -100,6 +99,10 @@ class SEOCoreInit
 		new SiteVerificationSettings();
 		new SiteVerificationFrontendOutput();
 		new EmailReportsUpsell();
+
+		// Before the gate: the settings permission (Premium's Role Manager) also
+		// applies on sites that keep the SEO features off.
+		new Permissions();
 
 		// The on-page SEO output features are gated behind the master toggle.
 		// Admins who are upgrading from another SEO plugin can review settings

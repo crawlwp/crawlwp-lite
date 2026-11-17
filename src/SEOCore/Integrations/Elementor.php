@@ -224,6 +224,11 @@ class Elementor
 	 */
 	public function enqueue_editor_scripts(): void
 	{
+		/* The script carries the SEO box's data and nonces: not for users without the SEO box. */
+		if (! \Mihdan\IndexNow\SEOCore\Permissions::can(\Mihdan\IndexNow\SEOCore\Permissions::SEO_BOX)) {
+			return;
+		}
+
 		$post_id = 0;
 		if (isset($_GET['post'])) {
 			$post_id = absint($_GET['post']);

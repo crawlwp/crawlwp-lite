@@ -1048,7 +1048,8 @@ class Assets
 	{
 		check_ajax_referer('crawlwp_check_keyword', 'nonce');
 
-		if (! current_user_can('edit_posts')) {
+		/* Roles that edit another post type (products…) without edit_posts get the SEO box too. */
+		if (! \Mihdan\IndexNow\SEOCore\Permissions::can_edit_content(get_current_user_id())) {
 			wp_send_json_error(['message' => 'Unauthorized'], 403);
 		}
 

@@ -246,7 +246,7 @@ class BulkEditorSettings
 	{
 		check_ajax_referer('crawlwp_bulk_editor_nonce', 'nonce');
 
-		if (! current_user_can('edit_posts') || ! \Mihdan\IndexNow\SEOCore\Permissions::can(\Mihdan\IndexNow\SEOCore\Permissions::BULK_EDITOR)) {
+		if (! \Mihdan\IndexNow\SEOCore\Permissions::can_edit_content(get_current_user_id()) || ! \Mihdan\IndexNow\SEOCore\Permissions::can(\Mihdan\IndexNow\SEOCore\Permissions::BULK_EDITOR)) {
 			wp_send_json_error(['message' => __('Permission denied.', 'mihdan-index-now')]);
 		}
 
@@ -313,7 +313,7 @@ class BulkEditorSettings
 	{
 		check_ajax_referer('crawlwp_bulk_editor_nonce', 'nonce');
 
-		if (! current_user_can('edit_posts') || ! \Mihdan\IndexNow\SEOCore\Permissions::can(\Mihdan\IndexNow\SEOCore\Permissions::BULK_EDITOR)) {
+		if (! \Mihdan\IndexNow\SEOCore\Permissions::can_edit_content(get_current_user_id()) || ! \Mihdan\IndexNow\SEOCore\Permissions::can(\Mihdan\IndexNow\SEOCore\Permissions::BULK_EDITOR)) {
 			wp_send_json_error(['message' => __('Permission denied.', 'mihdan-index-now')]);
 		}
 

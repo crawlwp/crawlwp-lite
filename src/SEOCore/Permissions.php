@@ -68,6 +68,7 @@ class Permissions
 		'crawlwp_check_duplicate_keyword',
 		'crawlwp_suggested_links',
 		'crawlwp_keyword_suggestions',
+		'crawlwp_rich_result_preview',
 	];
 
 	public function __construct()
@@ -175,6 +176,17 @@ class Permissions
 		return false;
 	}
 
+	/**
+	 * Whether the current user gets the SEO fields on category, tag and other term screens.
+	 *
+	 * They follow the SEO box permission. A user who can manage terms but can't edit any
+	 * content never had an SEO box to lose, so they keep the term fields as before.
+	 */
+	public static function can_term_seo(): bool
+	{
+		return self::can(self::SEO_BOX) || ! self::can_edit_content(get_current_user_id());
+	}
+
 	public static function can(string $permission, int $user_id = 0): bool
 	{
 		$user_id = $user_id ?: get_current_user_id();
@@ -208,7 +220,10 @@ class Permissions
 	public static function page_capability(string $capability, string $slug): string
 	{
 		if ($slug === CRAWLWP_SLUG) {
-			return self::can_open_settings() ? 'read' : $capability;
+			/* With the SEO features off there are no Redirects or Bulk Editor sections to open: only the settings permission counts. */
+			$allowed = FeatureGate\FeatureGate::is_enabled() ? self::can_open_settings() : self::can(self::SETTINGS);
+
+			return $allowed ? 'read' : $capability;
 		}
 
 		return $capability;
