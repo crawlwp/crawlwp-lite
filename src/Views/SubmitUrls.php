@@ -227,6 +227,8 @@ class SubmitUrls
 				'notOnSite'  => __('Not on this site. Search engines only accept URLs from the site that sends them.', 'mihdan-index-now'),
 				'notUrl'     => __('Not a web address.', 'mihdan-index-now'),
 				'failed'     => __('The request failed. Reload the page and try again.', 'mihdan-index-now'),
+				'expired'        => __('Your session has expired or this page is too old. Reload the page and try again.', 'mihdan-index-now'),
+				'notSentExpired' => __('Not sent: an earlier request was refused. Reload the page and try again.', 'mihdan-index-now'),
 				/* translators: 1: URLs done, 2: total URLs */
 				'progress'   => __('Sending %1$d of %2$d…', 'mihdan-index-now'),
 				/* translators: %d: number of URLs */

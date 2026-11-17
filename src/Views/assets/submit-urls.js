@@ -153,9 +153,27 @@
 
 			var chunk = chunks.shift();
 
+			// Mark every URL of a chunk "not sent" with one reason.
+			function failChunk(urls, message) {
+				var failed = { engines: {} };
+				$.each(ids, function (i, id) { failed.engines[id] = { ok: false, message: message }; });
+				$.each(urls, function (i, url) {
+					totals.problem++;
+					var $new = row(url, ids, failed);
+					rows[url].replaceWith($new);
+					rows[url] = $new;
+				});
+			}
+
 			$.post(cfg.ajaxUrl, { action: 'crawlwp_submit_urls', nonce: cfg.nonce, urls: chunk, removed: removed ? 1 : 0, services: ids })
 				.done(function (res) {
-					var results = res && res.success ? res.data.results : {};
+					// Refused as a whole (for example the daily limit): show the server's reason, not a generic one.
+					if (!res || !res.success) {
+						failChunk(chunk, (res && res.data && res.data.message) ? res.data.message : L.failed);
+						return;
+					}
+
+					var results = res.data && res.data.results ? res.data.results : {};
 					$.each(chunk, function (i, url) {
 						var r = results[url] || { skipped: L.failed }, any = false, bad = false;
 						if (r.skipped) totals.skipped++;
@@ -167,15 +185,20 @@
 						rows[url] = $new;
 					});
 				})
-				.fail(function () {
-					var failed = { engines: {} };
-					$.each(ids, function (i, id) { failed.engines[id] = { ok: false, message: L.failed }; });
-					$.each(chunk, function (i, url) {
-						totals.problem++;
-						var $new = row(url, ids, failed);
-						rows[url].replaceWith($new);
-						rows[url] = $new;
-					});
+				.fail(function (xhr) {
+					var data    = xhr && xhr.responseJSON && xhr.responseJSON.data ? xhr.responseJSON.data : {};
+					var refused = xhr && (xhr.status === 401 || xhr.status === 403);
+
+					failChunk(chunk, data.message || (refused ? (L.expired || L.failed) : L.failed));
+
+					// Signed out or the page is too old: the rest would be refused the same way, so don't send it.
+					if (refused) {
+						while (chunks.length) {
+							var rest = chunks.shift();
+							done += rest.length;
+							failChunk(rest, L.notSentExpired || L.expired || L.failed);
+						}
+					}
 				})
 				.always(function () {
 					done += chunk.length;
