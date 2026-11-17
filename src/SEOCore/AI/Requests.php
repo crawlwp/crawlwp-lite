@@ -236,8 +236,9 @@ class Requests
 			$wpdb->suppress_errors($quiet);
 		}
 
-		if ($result === null) {
-			/* No named locks here: fall back to a row in the options table. */
+		if ($result === null || ! in_array((string) $result, ['0', '1'], true)) {
+			/* No named locks here (a failed query, or a drop-in that answers something else, as the
+			   SQLite integration does with "1=1"): fall back to a row in the options table. */
 			$locked          = self::row_lock();
 			self::$lock_mode = $locked ? 'row' : '';
 		} else {

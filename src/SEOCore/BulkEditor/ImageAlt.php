@@ -178,16 +178,28 @@ class ImageAlt
 
 		$query = new \WP_Query(self::query_args(true, '', 1, 1) + ['fields' => 'ids', 'no_found_rows' => false]);
 
+		return self::store_count($counts, $scope, (int) $query->found_posts);
+	}
+
+	/**
+	 * Remember a freshly counted number of images without alt text for a scope.
+	 *
+	 * @param array  $counts The cached entry as read (already emptied when too old).
+	 * @param string $scope  'all' or 'u<user id>'.
+	 * @param int    $count
+	 */
+	private static function store_count(array $counts, string $scope, int $count): int
+	{
 		/* Keep the entry small on sites with many uploaders. */
 		if (count($counts) >= 50) {
 			$counts = [];
 		}
 
 		$counts += ['_at' => time()];
-		$counts[$scope] = (int) $query->found_posts;
+		$counts[$scope] = $count;
 		set_transient(self::COUNT_TRANSIENT, $counts, 12 * HOUR_IN_SECONDS);
 
-		return $counts[$scope];
+		return $count;
 	}
 
 	public function ajax_list(): void
@@ -225,6 +237,19 @@ class ImageAlt
 		/* The missing-alt list's total is the badge count; other views don't run a second query for it. */
 		if ($filter !== 'all' && $search === '') {
 			$response['missing'] = (int) $query->found_posts;
+
+			/*
+			 * It is also a fresh count, so it corrects the cached one: the hooks that keep the cache
+			 * right only run in wp-admin, and uploads and alt text also change over REST (the block
+			 * editor), WP-CLI and cron.
+			 */
+			$counts = get_transient(self::COUNT_TRANSIENT);
+			$counts = is_array($counts) ? $counts : [];
+			$scope  = current_user_can('edit_others_posts') ? 'all' : 'u' . get_current_user_id();
+
+			if (! isset($counts[$scope]) || (int) $counts[$scope] !== $response['missing']) {
+				self::store_count($counts, $scope, $response['missing']);
+			}
 		}
 
 		wp_send_json_success($response);

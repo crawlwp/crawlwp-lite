@@ -731,7 +731,12 @@
 			var message = data.message || (expired ? i18n.sessionExpired : '') || i18n.aiError;
 
 			fieldError($td, message);
-			done({ error: message, connectUrl: data.connectUrl, rateLimited: code === 429, dailyLimit: !!data.dailyLimit, status: code });
+			// transport: the server never answered properly (offline, timeout, 5xx). Only these count
+			// towards "several errors in a row"; a row refused with the server's own message does not.
+			done({
+				error: message, connectUrl: data.connectUrl, rateLimited: code === 429, dailyLimit: !!data.dailyLimit,
+				status: code, expired: expired, transport: status === 'timeout' || code === 0 || code >= 500
+			});
 		}).always(function () {
 			$td.removeClass('is-ai-busy').find('.cwp-bulk-ai-wait').remove();
 		});
@@ -943,16 +948,18 @@
 
 				if (result.ok) {
 					job.ok++;
-					job.streak = 0;
 				} else {
 					job.failed++;
-					job.streak++;
 				}
+
+				// A row the server refused for its own reason (unsupported image, deleted post) says
+				// nothing about the next row: only failed connections add up.
+				job.streak = result.transport ? job.streak + 1 : 0;
 
 				render();
 
 				// Signed out or the page is too old: every further request would be refused the same way.
-				if (result.status === 401 || result.status === 403) {
+				if (result.expired) {
 					finish(result.error, true);
 					return;
 				}
