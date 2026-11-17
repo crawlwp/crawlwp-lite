@@ -314,6 +314,9 @@ class Main
 		foreach ($hooks as $hook) {
 			wp_unschedule_hook($hook);
 		}
+
+		// Submissions still waiting are not kept for a reactivation weeks later.
+		Hooks::delete_queue();
 	}
 
 	/**

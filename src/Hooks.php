@@ -88,6 +88,9 @@ class Hooks {
 	 */
 	public const SAVE_DELAY = 45;
 
+	/** Submissions that could not be added to the queue because it stayed locked; the next run adds them. */
+	public const HELD_OPTION = 'crawlwp_submission_held';
+
 	/**
 	 * Submissions sent per background run; the rest wait for the next run. IndexNow takes
 	 * thousands of URLs per request, so a run with only IndexNow sends many.
@@ -249,7 +252,7 @@ class Hooks {
 		}
 
 		// queued per post, not per comment: many comments before the queue runs still mean one ping.
-		$this->submit( 'crawlwp/comment_updated', [ $post->ID ] );
+		$this->submit( 'crawlwp/comment_updated', [ $post->ID, (int) $comment->comment_ID ] );
 	}
 
 	/**
@@ -297,7 +300,7 @@ class Hooks {
 
 		if ( Indexing::get_post_skip_reason( $post ) !== '' ) {
 			// Noindex now, but the SEO box is saved after the status change: looked at again when the request ends.
-			if ( $post->post_status === 'publish' && Indexing::get_post_noindex_source( $post ) !== '' ) {
+			if ( $post->post_status === 'publish' && in_array( $post->post_type, Indexing::get_post_types(), true ) && Indexing::get_post_noindex_source( $post ) !== '' ) {
 				$this->recheck[ get_current_blog_id() ][ $post->ID ] = $action;
 			}
 
@@ -328,7 +331,10 @@ class Hooks {
 		}
 
 		if ( ! wp_next_scheduled( self::DELAYED_POST_EVENT, [ $post->ID ] ) ) {
-			wp_schedule_single_event( time() + $remaining, self::DELAYED_POST_EVENT, [ $post->ID ] );
+			// A block editor save: not before its second request has saved the SEO box (a noindex choice).
+			$wait = self::is_rest() ? max( $remaining, self::save_delay() ) : $remaining;
+
+			wp_schedule_single_event( time() + $wait, self::DELAYED_POST_EVENT, [ $post->ID ] );
 		}
 
 		return true;
@@ -669,6 +675,9 @@ class Hooks {
 		$old[2] = max( $old[2], $item[2] );
 		// A new save through the REST API waits again; anything else lets the entry go now.
 		$old[3] = $item[3] === 0 ? 0 : max( $old[3], $item[3] );
+		// The newer save's time, so a submission made between the two saves doesn't hide the second one.
+		// 0 (an item a run already tried to send) stays 0: it is sent whatever was recorded since.
+		$old[4] = $item[4] === 0 ? 0 : max( $old[4], $item[4] );
 
 		$queue[ $key ] = $old;
 
@@ -785,6 +794,11 @@ class Hooks {
 	 */
 	private function flush_site( array $items, bool $switched ): void {
 
+		if ( $switched && ! self::active_on_current_site() ) {
+			// Saved inside switch_to_blog() for a site that doesn't run this plugin: nothing there would ever send it.
+			return;
+		}
+
 		$background = $this->in_background();
 
 		if ( ! $background && self::waiting_since() === 0 ) {
@@ -823,8 +837,27 @@ class Hooks {
 		}
 
 		if ( ! self::lock_queue() ) {
-			// The queue stayed locked (a stuck request): send these now rather than lose them.
-			$this->send_items( $items );
+			/*
+			 * The queue stayed locked (a stuck request). Nothing is sent from here: a post just
+			 * saved in the block editor must wait for its SEO box, and this may be the editor's own
+			 * request. The items are set aside and the next run adds them to the queue.
+			 */
+			$held = self::read_fresh_option( self::HELD_OPTION );
+			$held = is_array( $held ) ? $held : [];
+
+			foreach ( $items as $key => $item ) {
+				self::add_to_queue( $held, (string) $key, (array) $item );
+			}
+
+			update_option( self::HELD_OPTION, $held, false );
+
+			$at = max( time() + 5, $earliest );
+
+			if ( $background ) {
+				self::schedule_next_run( $at );
+			} elseif ( self::waiting_since() === 0 || self::waiting_since() > $at ) {
+				update_option( self::WAITING_OPTION, $at, true );
+			}
 
 			return;
 		}
@@ -862,8 +895,9 @@ class Hooks {
 		}
 
 		if ( ! wp_schedule_single_event( $at, self::BACKGROUND_EVENT ) ) {
-			// Could not schedule the queue: send it now rather than lose it.
-			$this->process_queue( true );
+			// Could not schedule the queue: send what is due now (within the run's time budget) rather
+			// than lose it. Posts still waiting for their SEO box stay queued for the next run.
+			$this->process_queue();
 		} elseif ( $at <= time() ) {
 			if ( $switched ) {
 				// The event belongs to the switched-to site, so its cron is started while it is current.
@@ -874,6 +908,20 @@ class Hooks {
 				$this->spawn_cron = true;
 			}
 		}
+	}
+
+	/**
+	 * Whether this plugin is active on the current (switched-to) site.
+	 */
+	private static function active_on_current_site(): bool {
+
+		if ( ! defined( 'CRAWLWP_BASENAME' ) ) {
+			return true;
+		}
+
+		$network = (array) get_site_option( 'active_sitewide_plugins', [] );
+
+		return isset( $network[ CRAWLWP_BASENAME ] ) || in_array( CRAWLWP_BASENAME, (array) get_option( 'active_plugins', [] ), true );
 	}
 
 	/**
@@ -899,6 +947,12 @@ class Hooks {
 		$left = self::peek_count();
 		$at   = $left > 0 ? ( $this->next_due > 0 ? $this->next_due : time() + MINUTE_IN_SECONDS ) : 0;
 
+		if ( $at === 0 && self::read_fresh_option( self::CLAIM_OPTION ) ) {
+			// A batch is still claimed (by a run in progress, or one that died): looked at again
+			// once it can be taken over, so it is not left claimed until the next save.
+			$at = time() + self::CLAIM_TTL + 1;
+		}
+
 		if ( self::waiting_since() !== $at ) {
 			update_option( self::WAITING_OPTION, $at, true );
 		}
@@ -916,6 +970,12 @@ class Hooks {
 		$due = self::waiting_since();
 
 		if ( $due > 0 && $due <= time() ) {
+			// This can be any request, a visitor's page view included: on PHP-FPM the response is
+			// completed first (shutdown: the output is already written), so nobody waits on the sending.
+			if ( function_exists( 'fastcgi_finish_request' ) ) {
+				fastcgi_finish_request();
+			}
+
 			$this->drain_inline();
 		}
 	}
@@ -1015,7 +1075,43 @@ class Hooks {
 
 		$stored = self::read_fresh_option( self::QUEUE_INDEX );
 
-		return is_array( $stored ) ? max( 0, (int) ( $stored['n'] ?? 0 ) ) : 0;
+		if ( ! is_array( $stored ) ) {
+			return 0;
+		}
+
+		return max( self::has_buckets( $stored ) ? 1 : 0, (int) ( $stored['n'] ?? 0 ) );
+	}
+
+	/**
+	 * Whether the index still points at a bucket in either lane.
+	 *
+	 * @param array $index Queue index.
+	 */
+	private static function has_buckets( array $index ): bool {
+
+		foreach ( [ 'q', 'd' ] as $lane ) {
+			if ( isset( $index[ $lane ][0], $index[ $lane ][1] ) && (int) $index[ $lane ][0] <= (int) $index[ $lane ][1] ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Delete the stored queue of the current site (deactivation): buckets, index, claim, lock
+	 * and the waiting marker. Old submissions are not sent weeks later on reactivation.
+	 */
+	public static function delete_queue(): void {
+
+		global $wpdb;
+
+		foreach ( [ self::QUEUE_OPTION, self::QUEUE_INDEX, self::CLAIM_OPTION, self::CLAIM_BEAT, self::WAITING_OPTION, self::HELD_OPTION ] as $name ) {
+			delete_option( $name );
+		}
+
+		// Buckets and the lock row, also ones the index no longer points at.
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s", $wpdb->esc_like( self::QUEUE_OPTION . '_' ) . '%' ) ); // phpcs:ignore
 	}
 
 	/**
@@ -1223,6 +1319,12 @@ class Hooks {
 				++$item[2];
 			}
 
+			if ( $i < $to ) {
+				// The dead run may have got this one to a webmaster API but not to IndexNow (sent at
+				// the end of a chunk): it is sent again, not skipped as "submitted since queued".
+				$item[4] = 0;
+			}
+
 			if ( $item[2] >= self::MAX_TRIES ) {
 				$result['dropped'][] = (string) $key;
 
@@ -1423,6 +1525,17 @@ class Hooks {
 
 			$index   = self::read_index();
 			$dropped = $recovered['dropped'];
+			$held    = self::read_fresh_option( self::HELD_OPTION );
+
+			if ( is_array( $held ) && $held ) {
+				// Set aside by a request that could not get the lock (see flush_site()).
+				self::enqueue( $held, $index );
+				self::save_index( $index );
+			}
+
+			if ( $held ) {
+				delete_option( self::HELD_OPTION );
+			}
 
 			if ( $recovered['requeue'] ) {
 				self::enqueue( $recovered['requeue'], $index, true );
@@ -1448,7 +1561,8 @@ class Hooks {
 
 			self::save_index( $index );
 
-			if ( $index['n'] > 0 ) {
+			// By the buckets, not only the count: the count can be short after a request died between writing a bucket and the index.
+			if ( $index['n'] > 0 || self::has_buckets( $index ) ) {
 				self::schedule_next_run( ! $batch && $this->next_due > 0 ? $this->next_due : 0 );
 			}
 
@@ -1657,6 +1771,7 @@ class Hooks {
 			}
 
 			$item[3]      = time() + MINUTE_IN_SECONDS;
+			$item[4]      = 0; // one listener may have recorded it before another failed: not skipped next time.
 			$left[ $key ] = $item;
 		}
 
@@ -1742,11 +1857,21 @@ class Hooks {
 		do_action( 'crawlwp/submission_batch_start' );
 
 		try {
-			foreach ( $items as $item ) {
-				$this->send_item( $item );
+			foreach ( $items as $key => $item ) {
+				try {
+					$this->send_item( $item );
+				} catch ( \Throwable $e ) {
+					// A listener failed on this one: the others still go out.
+					/* translators: 1: queue entry, e.g. post:12, 2: error message */
+					self::log( sprintf( __( 'Not sent: the submission %1$s failed with: %2$s', 'mihdan-index-now' ), (string) $key, $e->getMessage() ) );
+				}
 			}
 		} finally {
-			do_action( 'crawlwp/submission_batch_end' );
+			try {
+				do_action( 'crawlwp/submission_batch_end' );
+			} catch ( \Throwable $e ) {
+				self::log( $e->getMessage() );
+			}
 		}
 	}
 
@@ -1851,7 +1976,10 @@ class Hooks {
 
 				// the comment was approved when queued; the post is re-checked as it may have changed since.
 				if ( $post instanceof WP_Post && Indexing::get_post_skip_reason( $post ) === '' ) {
-					do_action( $action, $post->ID, null );
+					// Listeners get the comment again, as before the queue; null when it no longer exists.
+					$comment = empty( $args[1] ) ? null : get_comment( (int) $args[1] );
+
+					do_action( $action, $post->ID, $comment instanceof WP_Comment ? $comment : null );
 				}
 				break;
 

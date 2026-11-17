@@ -189,13 +189,19 @@ class SubmissionQueueLockTest extends TestCase {
 
 		Hooks::enqueue( [ 'post:2' => [ 'crawlwp/post_updated', [ 2 ], 0, 2000, 900 ] ], $index );
 		Hooks::enqueue( [ 'post:2' => [ 'crawlwp/post_added', [ 2 ], 1, 0, 950 ] ], $index );
-		Hooks::enqueue( [ 'post:2' => [ 'crawlwp/comment_updated', [ 2 ] ] ], $index );
+		Hooks::enqueue( [ 'post:2' => [ 'crawlwp/comment_updated', [ 2 ], 0, 0, 940 ] ], $index );
 
 		$bucket = $this->options()[ Hooks::bucket_name( 'q', 1 ) ];
 
 		$this->assertSame( 1, $index['n'] );
-		// "added" won, the try is kept, it may go now, and it is still dated from when it was first queued.
-		$this->assertSame( [ 'post:2' => [ 'crawlwp/post_added', [ 2 ], 1, 0, 900 ] ], $bucket );
+		// "added" won, the try is kept, it may go now, and it is dated from the newest save, so a
+		// submission made between two saves doesn't hide the second one.
+		$this->assertSame( [ 'post:2' => [ 'crawlwp/post_added', [ 2 ], 1, 0, 950 ] ], $bucket );
+
+		// An item a run already tried to send (no date) is sent whatever was recorded since.
+		Hooks::enqueue( [ 'post:2' => [ 'crawlwp/post_updated', [ 2 ], 1, 0, 0 ] ], $index, true );
+
+		$this->assertSame( 0, $this->options()[ Hooks::bucket_name( 'q', 1 ) ]['post:2'][4] );
 	}
 
 	public function test_a_full_bucket_starts_the_next_one_and_only_the_last_is_written(): void {
