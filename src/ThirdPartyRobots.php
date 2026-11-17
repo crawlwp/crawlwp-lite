@@ -30,6 +30,14 @@ final class ThirdPartyRobots
 	private static $aioseo_rows = [];
 
 	/**
+	 * All in One SEO tables whose query failed in this request (the free version has no
+	 * terms table, for example), so they aren't queried again for every post or term.
+	 *
+	 * @var array<string, bool>
+	 */
+	private static $aioseo_missing = [];
+
+	/**
 	 * Load what checking many posts needs in one query instead of one per post
 	 * (All in One SEO keeps its per-post settings in its own table).
 	 *
@@ -45,7 +53,7 @@ final class ThirdPartyRobots
 
 		$ids = array_values(array_diff(array_unique(array_map('intval', $post_ids)), array_keys(self::$aioseo_rows)));
 
-		if ($ids === []) {
+		if ($ids === [] || ! empty(self::$aioseo_missing['posts'])) {
 			return;
 		}
 
@@ -57,6 +65,7 @@ final class ThirdPartyRobots
 		$table    = $wpdb->prefix . 'aioseo_posts';
 		$suppress = $wpdb->suppress_errors(true);
 		$rows     = $wpdb->get_results("SELECT post_id, robots_default, robots_noindex FROM {$table} WHERE post_id IN (" . implode(',', $ids) . ')', ARRAY_A); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- integers only
+		self::$aioseo_missing['posts'] = $rows === null || (string) ($wpdb->last_error ?? '') !== '';
 		$wpdb->suppress_errors($suppress);
 
 		foreach ($ids as $id) {
@@ -145,11 +154,14 @@ final class ThirdPartyRobots
 
 		if (array_key_exists($post->ID, self::$aioseo_rows)) {
 			$row = self::$aioseo_rows[$post->ID];
+		} elseif ( ! empty(self::$aioseo_missing['posts'])) {
+			$row = null;
 		} else {
 			$table = $wpdb->prefix . 'aioseo_posts';
 
 			$suppress = $wpdb->suppress_errors(true);
 			$row      = $wpdb->get_row($wpdb->prepare("SELECT robots_default, robots_noindex FROM {$table} WHERE post_id = %d", $post->ID), ARRAY_A); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			self::$aioseo_missing['posts'] = $row === null && (string) ($wpdb->last_error ?? '') !== '';
 			$wpdb->suppress_errors($suppress);
 		}
 
@@ -278,10 +290,15 @@ final class ThirdPartyRobots
 		global $wpdb;
 
 		// Per-term settings only exist in All in One SEO Pro, in its own table.
-		$table    = $wpdb->prefix . 'aioseo_terms';
-		$suppress = $wpdb->suppress_errors(true);
-		$row      = $wpdb->get_row($wpdb->prepare("SELECT robots_default, robots_noindex FROM {$table} WHERE term_id = %d", $term->term_id), ARRAY_A); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		$wpdb->suppress_errors($suppress);
+		$row = null;
+
+		if (empty(self::$aioseo_missing['terms'])) {
+			$table    = $wpdb->prefix . 'aioseo_terms';
+			$suppress = $wpdb->suppress_errors(true);
+			$row      = $wpdb->get_row($wpdb->prepare("SELECT robots_default, robots_noindex FROM {$table} WHERE term_id = %d", $term->term_id), ARRAY_A); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			self::$aioseo_missing['terms'] = $row === null && (string) ($wpdb->last_error ?? '') !== '';
+			$wpdb->suppress_errors($suppress);
+		}
 
 		if (is_array($row) && empty($row['robots_default'])) {
 			return ! empty($row['robots_noindex']);

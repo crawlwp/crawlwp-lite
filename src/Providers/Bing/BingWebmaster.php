@@ -42,6 +42,9 @@ class BingWebmaster extends WebmasterAbstract
 
 		add_action('crawlwp/post_added', [$this, 'ping']);
 		add_action('crawlwp/post_updated', [$this, 'ping']);
+
+		// tells the background queue to send smaller batches: this makes a request per post.
+		add_filter('crawlwp/submission_slow_listeners', '__return_true');
 	}
 
 	/**

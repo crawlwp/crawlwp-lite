@@ -303,6 +303,7 @@ class Main
 			Hooks::DELAYED_POST_EVENT,
 			Hooks::DELAYED_TERM_EVENT,
 			Hooks::BACKGROUND_EVENT,
+			Hooks::RECOVER_EVENT,
 			'crawlwp_backfill_robots_index_meta',
 			'crawlwp_redirects_flush_hits',
 			'crawlwp_404_prune',

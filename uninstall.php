@@ -95,6 +95,7 @@ function crawlwp_lite_mo_uninstall_function($force = false)
 		'crawlwp_redirects_flush_hits',
 		'crawlwp_404_prune',
 		'crawlwp_background_submission',
+		'crawlwp_background_submission_recover',
 	];
 
 	if ( ! $keep_pro) {
