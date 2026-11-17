@@ -1,0 +1,30 @@
+/* CrawlWP Local SEO settings (also used on Premium's location screen) */
+.cwp-local-address { display: grid; gap: 8px; max-width: 440px; }
+.cwp-local-address div { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.cwp-local-address input.regular-text { width: 100%; max-width: none; }
+.cwp-local-geo input { width: 190px; }
+
+.cwp-hours { display: grid; gap: 4px; }
+.cwp-hours__day { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; min-height: 36px; padding: 2px 0 6px; }
+.cwp-hours__name { display: inline-flex; align-items: center; gap: 6px; width: 120px; }
+.cwp-hours__ranges { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; }
+.cwp-hours__range { display: inline-flex; align-items: center; gap: 6px; }
+.cwp-hours__range[hidden], .cwp-hours__add[hidden] { display: none; }
+.cwp-hours__range input[type="time"] { width: 132px; }
+.cwp-hours__closed { display: none; color: #8c8f94; }
+.cwp-hours__day.is-closed .cwp-hours__range, .cwp-hours__day.is-closed .cwp-hours__add { display: none; }
+.cwp-hours__day.is-closed .cwp-hours__closed { display: inline; }
+.cwp-hours__remove { color: #b32d2e; }
+
+.cwp-local-upsell { max-width: 640px; margin: 8px 0 0; padding: 22px 24px; border: 1px solid #c5d9ed; border-radius: 10px; background: linear-gradient(180deg, #f6f9ff, #fff); }
+.cwp-local-upsell__tag { display: inline-block; margin-bottom: 8px; padding: 2px 8px; border-radius: 99px; background: #eef2ff; color: #3858e9; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.cwp-local-upsell h3 { margin: 0 0 6px; font-size: 17px; }
+.cwp-local-upsell p { margin: 0 0 12px; color: #50575e; }
+.cwp-local-upsell ul { margin: 0 0 16px; padding: 0; list-style: none; }
+.cwp-local-upsell li { position: relative; margin: 0 0 8px; padding-left: 22px; }
+.cwp-local-upsell li::before { content: "\2713"; position: absolute; left: 0; color: #00a32a; font-weight: 700; }
+
+@media (max-width: 600px) {
+	.cwp-local-address div { grid-template-columns: 1fr; }
+	.cwp-hours__name { width: 100%; }
+}
