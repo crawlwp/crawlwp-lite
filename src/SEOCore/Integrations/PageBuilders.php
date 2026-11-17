@@ -28,6 +28,7 @@ class PageBuilders
 	{
 		add_filter('crawlwp_metabox_localize_data', [$this, 'localize'], 10, 2);
 		add_filter('crawlwp_post_content_for_text', [$this, 'content_for_text'], 10, 2);
+		add_filter('crawlwp_post_content_for_analysis', [$this, 'content_for_analysis'], 10, 2);
 
 		/* Bricks saves its content as post meta, which may not change the post's modified date. */
 		foreach (['added_post_meta', 'updated_post_meta', 'deleted_post_meta'] as $hook) {
@@ -100,6 +101,26 @@ class PageBuilders
 		}
 
 		return $text;
+	}
+
+	/**
+	 * The whole text of a builder page, for checks that look past the first words
+	 * (the post list's keyword signal, which keeps its own result per post).
+	 *
+	 * @param mixed $content The post content.
+	 * @param mixed $post    The post.
+	 */
+	public function content_for_analysis($content, $post = null): string
+	{
+		$content = (string) $content;
+
+		if (! $post instanceof \WP_Post) {
+			return self::shortcodes_to_text($content);
+		}
+
+		$builder = self::for_post($post);
+
+		return $builder !== null ? str_replace('><', '> <', $builder['html']) : self::shortcodes_to_text($content);
 	}
 
 	/**
