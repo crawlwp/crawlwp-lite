@@ -48,6 +48,7 @@ function crawlwp_lite_pro_owned_options()
 			'crawlwp_email_reports',
 			'crawlwp_email_reports_sent',
 			'crawlwp_internal_links',
+			'crawlwp_analytics',
 			'crawlwp_google_inspect_url_limit_expiration',
 			'crawlwp_bing_inspect_url_limit_expiration',
 			'crawlwp_yandex_inspect_url_limit_expiration',

@@ -279,4 +279,32 @@ class OAuthTest extends TestCase
 	{
 		$this->assertNull(OAuth::bing_request('GetPageStats'));
 	}
+
+	public function test_has_feature_reads_the_granted_scopes(): void
+	{
+		$this->assertFalse(OAuth::has_feature('google', 'analytics'));
+
+		update_option(OAuth::OPTION_PREFIX . 'google', [
+			'access_token'  => 'a',
+			'refresh_token' => 'r',
+			'expires_at'    => time() + 3600,
+			'scope'         => 'openid https://www.googleapis.com/auth/webmasters.readonly https://www.googleapis.com/auth/analytics.readonly',
+		]);
+
+		$this->assertTrue(OAuth::has_feature('google', 'analytics'));
+		$this->assertFalse(OAuth::has_feature('google', 'unknown'));
+		$this->assertFalse(OAuth::has_feature('bing', 'analytics'));
+	}
+
+	public function test_has_feature_needs_the_exact_scope(): void
+	{
+		update_option(OAuth::OPTION_PREFIX . 'google', [
+			'access_token'  => 'a',
+			'refresh_token' => 'r',
+			'expires_at'    => time() + 3600,
+			'scope'         => 'https://www.googleapis.com/auth/analytics.readonly.extra',
+		]);
+
+		$this->assertFalse(OAuth::has_feature('google', 'analytics'));
+	}
 }
