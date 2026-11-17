@@ -733,9 +733,10 @@
 			fieldError($td, message);
 			// transport: the server never answered properly (offline, timeout, 5xx). Only these count
 			// towards "several errors in a row"; a row refused with the server's own message does not.
+			// An answer with no message at all (signed out: 400 and "0"; broken JSON) counts too.
 			done({
 				error: message, connectUrl: data.connectUrl, rateLimited: code === 429, dailyLimit: !!data.dailyLimit,
-				status: code, expired: expired, transport: status === 'timeout' || code === 0 || code >= 500
+				status: code, expired: expired, transport: status === 'timeout' || code === 0 || code >= 500 || !data.message
 			});
 		}).always(function () {
 			$td.removeClass('is-ai-busy').find('.cwp-bulk-ai-wait').remove();
