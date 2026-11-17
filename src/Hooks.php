@@ -919,6 +919,11 @@ class Hooks {
 			return true;
 		}
 
+		// Loaded as a must-use plugin: it runs on every site and is in neither list below.
+		if ( defined( 'WPMU_PLUGIN_DIR' ) && defined( 'CRAWLWP_FILE' ) && strpos( wp_normalize_path( CRAWLWP_FILE ), wp_normalize_path( WPMU_PLUGIN_DIR ) . '/' ) === 0 ) {
+			return true;
+		}
+
 		$network = (array) get_site_option( 'active_sitewide_plugins', [] );
 
 		return isset( $network[ CRAWLWP_BASENAME ] ) || in_array( CRAWLWP_BASENAME, (array) get_option( 'active_plugins', [] ), true );
@@ -946,6 +951,12 @@ class Hooks {
 
 		$left = self::peek_count();
 		$at   = $left > 0 ? ( $this->next_due > 0 ? $this->next_due : time() + MINUTE_IN_SECONDS ) : 0;
+
+		if ( $at === 0 && self::read_fresh_option( self::HELD_OPTION ) ) {
+			// Submissions set aside while the queue was locked: they are only merged by a run, so
+			// keep a later request coming back for them.
+			$at = time() + MINUTE_IN_SECONDS;
+		}
 
 		if ( $at === 0 && self::read_fresh_option( self::CLAIM_OPTION ) ) {
 			// A batch is still claimed (by a run in progress, or one that died): looked at again
