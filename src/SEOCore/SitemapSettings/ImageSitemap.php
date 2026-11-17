@@ -22,6 +22,15 @@ class ImageSitemap extends \WP_Sitemaps_Provider
 	/** Bumped to drop every cached sitemap page at once. */
 	private const VERSION_OPTION = 'crawlwp_image_sitemap_version';
 
+	/** Post meta that decides what a post lists: its featured image, product gallery and noindex setting. */
+	private const WATCHED_META = ['_thumbnail_id', '_product_image_gallery', '_crawlwp_robots_index'];
+
+	/** @var bool The cache was already emptied in this request. */
+	private $flushed = false;
+
+	/** @var bool Another change came after that, so it is emptied once more when the request ends. */
+	private $flush_again = false;
+
 	public function __construct()
 	{
 		$this->name        = self::PROVIDER_NAME;
@@ -39,6 +48,12 @@ class ImageSitemap extends \WP_Sitemaps_Provider
 		add_action('attachment_updated', [$this, 'flush_on_attachment']);
 		add_filter('update_attached_file', [$this, 'flush_on_file_change'], 10, 2);
 		add_action('crawlwp_sitemap_settings_saved', [$this, 'flush_cache']);
+
+		/* Changes that don't save the post: a featured image set from the editor sidebar, noindex written by an importer. */
+		add_action('added_post_meta', [$this, 'flush_on_meta'], 10, 3);
+		add_action('updated_post_meta', [$this, 'flush_on_meta'], 10, 3);
+		add_action('deleted_post_meta', [$this, 'flush_on_meta'], 10, 3);
+		add_action('permalink_structure_changed', [$this, 'flush_cache']);
 	}
 
 	public static function is_enabled(): bool
@@ -100,11 +115,76 @@ class ImageSitemap extends \WP_Sitemaps_Provider
 			return 0;
 		}
 
-		$args                  = $this->query_args($object_subtype, 1);
-		$args['no_found_rows'] = false;
-		$query                 = new \WP_Query($args);
+		/* Counting is the heaviest query here, and it runs for the sitemap index and every page. */
+		$key    = self::cache_key('n|' . $object_subtype);
+		$cached = get_transient($key);
 
-		return (int) ceil($query->found_posts / self::PER_PAGE);
+		if (is_string($cached) && strpos($cached, 'n:') === 0) {
+			return (int) substr($cached, 2);
+		}
+
+		$pages = 0;
+
+		/* A post type without a single image gets no image sitemap: an empty one is invalid. */
+		if ($this->has_images($object_subtype)) {
+			$args                  = $this->query_args($object_subtype, 1);
+			$args['no_found_rows'] = false;
+			$query                 = new \WP_Query($args);
+			$pages                 = (int) ceil($query->found_posts / self::PER_PAGE);
+		}
+
+		set_transient($key, 'n:' . $pages, DAY_IN_SECONDS);
+
+		return $pages;
+	}
+
+	/**
+	 * Whether any published post of this type has an image in its content, a featured image
+	 * or a product gallery. One query that stops at the first match.
+	 */
+	private function has_images(string $post_type): bool
+	{
+		global $wpdb;
+
+		$found = (bool) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT 1 FROM {$wpdb->posts} p
+				WHERE p.post_type = %s AND p.post_status = 'publish'
+				AND (p.post_content LIKE %s OR EXISTS (
+					SELECT 1 FROM {$wpdb->postmeta} m
+					WHERE m.post_id = p.ID AND m.meta_key IN ('_thumbnail_id', '_product_image_gallery') AND m.meta_value NOT IN ('', '0')
+				))
+				LIMIT 1",
+				$post_type,
+				'%' . $wpdb->esc_like('<img') . '%'
+			)
+		);
+
+		/**
+		 * Filter whether a post type has images to list. Return true for a post type whose
+		 * images are only added through the crawlwp_image_sitemap_images filter.
+		 *
+		 * @param bool   $found     Whether a published post of this type has an image.
+		 * @param string $post_type Post type.
+		 */
+		return (bool) apply_filters('crawlwp_image_sitemap_has_images', $found, $post_type);
+	}
+
+	/**
+	 * Cache key for a sitemap page or page count. It holds the site address and language, so
+	 * a multilingual site (WPML, Polylang) keeps one copy per language, and the version, so
+	 * every copy misses after a flush.
+	 */
+	private static function cache_key(string $part): string
+	{
+		/**
+		 * Filter what makes a cached image sitemap page unique, besides the post type and page.
+		 *
+		 * @param string $scope Site address and locale.
+		 */
+		$scope = (string) apply_filters('crawlwp_image_sitemap_cache_scope', home_url('/') . '|' . determine_locale());
+
+		return 'crawlwp_imgsm_' . md5($part . '|' . $scope . '|' . get_option(self::VERSION_OPTION, '1'));
 	}
 
 	public function get_url_list($page_num, $object_subtype = ''): array
@@ -271,7 +351,7 @@ class ImageSitemap extends \WP_Sitemaps_Provider
 			return;
 		}
 
-		$key = 'crawlwp_imgsm_' . md5($subtype . '|' . $page . '|' . get_option(self::VERSION_OPTION, '1'));
+		$key = self::cache_key($subtype . '|' . $page);
 		$xml = get_transient($key);
 
 		if (! is_string($xml) || $xml === '') {
@@ -312,10 +392,27 @@ class ImageSitemap extends \WP_Sitemaps_Provider
 
 	public function flush_cache(): void
 	{
+		/* An import or bulk edit changes many posts in one request: empty the cache at the first
+		   change and once more when the request ends, not once per post. */
+		if ($this->flushed) {
+			if (! $this->flush_again) {
+				$this->flush_again = true;
+				add_action('shutdown', [$this, 'flush_now']);
+			}
+
+			return;
+		}
+
+		$this->flushed = true;
+		$this->flush_now();
+	}
+
+	public function flush_now(): void
+	{
 		global $wpdb;
 
 		/* A new version makes every cached page miss (this also covers persistent object caches). */
-		update_option(self::VERSION_OPTION, (string) time(), false);
+		update_option(self::VERSION_OPTION, uniqid('', true), false);
 
 		/*
 		 * Without an object cache the old pages are rows in the options table: delete them now
@@ -361,10 +458,25 @@ class ImageSitemap extends \WP_Sitemaps_Provider
 	}
 
 	/**
-	 * Whether posts of this type can be in the image sitemap.
+	 * A featured image, product gallery or noindex setting changed without the post being saved.
 	 *
-	 * @param mixed $post
+	 * @param mixed $meta_id
+	 * @param mixed $post_id
+	 * @param mixed $meta_key
 	 */
+	public function flush_on_meta($meta_id, $post_id, $meta_key): void
+	{
+		if (! in_array($meta_key, self::WATCHED_META, true)) {
+			return;
+		}
+
+		$post = get_post((int) $post_id);
+
+		if ($post instanceof \WP_Post && $post->post_status === 'publish' && self::listed_type($post)) {
+			$this->flush_cache();
+		}
+	}
+
 	/**
 	 * An image was deleted or edited. Only images can be in the sitemap.
 	 *
@@ -398,6 +510,11 @@ class ImageSitemap extends \WP_Sitemaps_Provider
 		return $file;
 	}
 
+	/**
+	 * Whether posts of this type can be in the image sitemap.
+	 *
+	 * @param mixed $post
+	 */
 	private static function listed_type($post): bool
 	{
 		return $post instanceof \WP_Post
