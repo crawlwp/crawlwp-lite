@@ -311,7 +311,9 @@ class SeoSignals
 		$secondaries = array_slice($keywords, 1);
 
 		$needle  = self::normalize_text($primary);
-		$content = self::normalize_text(wp_strip_all_tags(strip_shortcodes((string) $post->post_content)));
+		/* The same filter the automatic description uses, so page builder content (Divi, Avada, Bricks) is read like the SEO box reads it. */
+		$content = (string) apply_filters('crawlwp_post_content_for_text', (string) $post->post_content, $post);
+		$content = self::normalize_text(wp_strip_all_tags(strip_shortcodes($content)));
 
 		$in_title   = mb_stripos(self::normalize_text($resolved_title), $needle) !== false;
 		$in_slug    = self::keyword_in_slug($primary, self::slug($post));
