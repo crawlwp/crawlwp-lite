@@ -111,6 +111,13 @@ class Redirection extends Source
 				? sprintf(__('Imported from Redirection: %s', 'mihdan-index-now'), $redirect['note'])
 				: __('Imported from Redirection', 'mihdan-index-now');
 
+			/* Say so on the rule itself: the import summary only has counts. */
+			if (! empty($redirect['matches_more'])) {
+				$redirect['note'] .= ' ' . __('(In Redirection this only matched the address without a query string. Here it also matches it with one, and passes the query string on.)', 'mihdan-index-now');
+			}
+
+			unset($redirect['matches_more']);
+
 			$manager->insert($redirect) ? $imported++ : $skipped++;
 		}
 
@@ -123,7 +130,7 @@ class Redirection extends Source
 	 * @param array<string,mixed>                       $row
 	 * @param array{module: int, enabled: bool}|null    $group
 	 *
-	 * @return array{from_url: string, to_url: string, redirect_type: int, match_type: string, note: string, ignore_query_string: int, enabled: int}|null
+	 * @return array{from_url: string, to_url: string, redirect_type: int, match_type: string, note: string, ignore_query_string: int, enabled: int, matches_more: bool}|null
 	 */
 	public static function map_row(array $row, ?array $group, string $default_query_flag = 'exact'): ?array
 	{
@@ -162,6 +169,20 @@ class Redirection extends Source
 			$query = 'exact';
 		}
 
+		/*
+		 * Redirection's three query settings, in CrawlWP's terms. A CrawlWP rule without a query
+		 * string always matches on the path; "ignore query string" then decides whether the
+		 * visitor's query is dropped (1) or carried over to the destination (0).
+		 *  - "ignore":          match the path, drop the query            -> 1
+		 *  - "pass":            match the path, pass the query on         -> 0
+		 *  - "exact" (default): only matched an address with no query; CrawlWP has no such rule,
+		 *    so it also matches addresses with a query and passes it on   -> 0, flagged below.
+		 * A source that names a query string itself is compared in full   -> 0.
+		 */
+		$source_has_query = ! $regex && strpos($from, '?') !== false;
+		$ignore_query     = (! $regex && ! $source_has_query && $query === 'ignore') ? 1 : 0;
+		$matches_more     = ! $regex && ! $source_has_query && ! in_array($query, ['ignore', 'pass'], true);
+
 		$enabled = ($row['status'] ?? 'enabled') === 'enabled' && ($group === null || $group['enabled']);
 
 		return [
@@ -170,8 +191,9 @@ class Redirection extends Source
 			'redirect_type'       => $type,
 			'match_type'          => $regex ? 'regex' : 'exact',
 			'note'                => trim((string) ($row['title'] ?? '')),
-			'ignore_query_string' => in_array($query, ['ignore', 'pass'], true) ? 1 : 0,
+			'ignore_query_string' => $ignore_query,
 			'enabled'             => $enabled ? 1 : 0,
+			'matches_more'        => $matches_more,
 		];
 	}
 

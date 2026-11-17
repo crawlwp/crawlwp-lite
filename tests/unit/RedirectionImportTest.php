@@ -63,6 +63,31 @@ class RedirectionImportTest extends TestCase
 		$this->assertSame(0, $regex['ignore_query_string']);
 	}
 
+	public function test_query_flags_keep_what_redirection_did(): void
+	{
+		$group = ['module' => 1, 'enabled' => true];
+
+		// "Ignore & pass parameters to the target": match the path, carry the query over.
+		$pass = Redirection::map_row($this->row(['match_data' => '{"source":{"flag_query":"pass"}}']), $group);
+		$this->assertSame(0, $pass['ignore_query_string']);
+		$this->assertFalse($pass['matches_more']);
+
+		// "Ignore all parameters": match the path, drop the query.
+		$ignore = Redirection::map_row($this->row(['match_data' => '{"source":{"flag_query":"ignore"}}']), $group);
+		$this->assertSame(1, $ignore['ignore_query_string']);
+		$this->assertFalse($ignore['matches_more']);
+
+		// "Exact match": CrawlWP also matches the address with a query string, so the rule is flagged.
+		$exact = Redirection::map_row($this->row(), $group);
+		$this->assertSame(0, $exact['ignore_query_string']);
+		$this->assertTrue($exact['matches_more']);
+
+		// A source with its own query string is compared in full, whatever the flag.
+		$own = Redirection::map_row($this->row(['url' => '/old-page/?ref=a', 'match_data' => '{"source":{"flag_query":"ignore"}}']), $group);
+		$this->assertSame(0, $own['ignore_query_string']);
+		$this->assertFalse($own['matches_more']);
+	}
+
 	public function test_410_error_keeps_no_target(): void
 	{
 		$r = Redirection::map_row($this->row(['action_type' => 'error', 'action_code' => 410, 'action_data' => '']), null);
