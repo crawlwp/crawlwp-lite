@@ -1143,8 +1143,13 @@ class Assets
 
 		$permissions = '\Mihdan\IndexNow\SEOCore\Permissions';
 
+		/* Roles that edit another post type (products…) without edit_posts get the SEO box too. */
+		$can_edit = class_exists($permissions) && method_exists($permissions, 'can_edit_content')
+			? $permissions::can_edit_content(get_current_user_id())
+			: current_user_can('edit_posts');
+
 		if (
-			! current_user_can('edit_posts')
+			! $can_edit
 			|| ! self::keyword_suggestions_enabled()
 			|| (class_exists($permissions) && ! $permissions::can($permissions::SEO_BOX))
 		) {
