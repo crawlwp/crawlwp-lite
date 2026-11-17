@@ -78,6 +78,11 @@ class SeoSignalsTest extends TestCase
 			'short word not a prefix'    => ['c programming', 'programming-in-cobol', false],
 			'single short word'          => ['c', 'cobol-guide', false],
 			'two real words, small gone' => ['seo for beginners', 'seo-beginners-guide', true],
+			'chinese, keyword mid-slug'  => ['搜索引擎优化', '什么是搜索引擎优化', true],
+			'chinese, encoded slug'      => ['搜索引擎优化', rawurlencode('什么是搜索引擎优化'), true],
+			'thai, keyword mid-slug'     => ['การตลาด', 'คู่มือการตลาดออนไลน์', true],
+			'japanese, keyword missing'  => ['検索エンジン', '料理のレシピ', false],
+			'latin still needs a start'  => ['rank', 'frank-搜索', false],
 		];
 	}
 

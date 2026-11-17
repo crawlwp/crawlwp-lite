@@ -437,7 +437,8 @@ if (!function_exists('wp_strip_all_tags')) {
 if (!function_exists('sanitize_title')) {
 	function sanitize_title($title, $fallback_title = '', $context = 'save')
 	{
-		$title = strtolower(preg_replace('/[^a-z0-9\-_ ]/i', '', (string)$title));
+		// like WordPress, letters of every script are kept (it percent-encodes them; callers decode).
+		$title = mb_strtolower(preg_replace('/[^\p{L}\p{M}\p{N}\-_ ]/u', '', (string)$title));
 
 		return trim(preg_replace('/[\s_]+/', '-', $title), '-');
 	}

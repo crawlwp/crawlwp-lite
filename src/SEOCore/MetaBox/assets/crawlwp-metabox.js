@@ -1179,6 +1179,12 @@
         }
       }
       var kwWords = split(serverSlug || this.decodeSlug(this.slugify(kwText)));
+      /* Scripts written without spaces (Chinese, Japanese, Thai, Lao, Khmer, Myanmar): the slug is
+         one long word. Also try the keyword as typed, because the rough slugify above can drop
+         the vowel and tone marks that WordPress keeps in the real slug. */
+      var unspaced = /[\u0E00-\u0EFF\u1000-\u109F\u1780-\u17FF\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF]/;
+      var typed = $.trim(kwText).toLowerCase().replace(/\s+/g, '-');
+      if (typed && unspaced.test(typed) && slugWords.join('-').indexOf(typed) !== -1) return true;
       if (!slugWords.length || !kwWords.length) return false;
 
       var joined = '-' + slugWords.join('-') + '-';
@@ -1195,7 +1201,11 @@
 
       for (var i = 0; i < meaningful.length; i++) {
         var word = meaningful[i], long = word.length >= 3, found = false;
-        for (var j = 0; j < slugWords.length; j++) {
+        /* Unspaced scripts: match anywhere in the slug. */
+        if (unspaced.test(word)) {
+          found = slugWords.join('-').indexOf(word) !== -1;
+        }
+        for (var j = 0; !found && j < slugWords.length; j++) {
           if (slugWords[j] === word || (long && slugWords[j].indexOf(word) === 0)) { found = true; break; }
         }
         if (!found) return false;

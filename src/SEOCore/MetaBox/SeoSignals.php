@@ -678,6 +678,9 @@ class SeoSignals
 		return array_values(array_filter(array_map('strval', (array) apply_filters('crawlwp_slug_stop_words', $words))));
 	}
 
+	/** Letters of scripts written without spaces between words. */
+	private const UNSPACED_SCRIPTS = '/[\x{0E00}-\x{0EFF}\x{1000}-\x{109F}\x{1780}-\x{17FF}\x{3040}-\x{30FF}\x{3400}-\x{4DBF}\x{4E00}-\x{9FFF}]/u';
+
 	/**
 	 * Whether a keyword is in a slug. Words may be in any order, and small words
 	 * may be left out when at least two other words remain ("best plugin for seo"
@@ -723,7 +726,13 @@ class SeoSignals
 			$long  = mb_strlen($word) >= 3;
 			$found = false;
 
-			foreach ($slug_words as $slug_word) {
+			// Chinese, Japanese, Thai, Lao, Khmer and Myanmar are written without spaces, so the
+			// slug is one long word and the keyword can sit anywhere inside it.
+			if (preg_match(self::UNSPACED_SCRIPTS, $word)) {
+				$found = mb_strpos(implode('-', $slug_words), $word) !== false;
+			}
+
+			foreach ($found ? [] : $slug_words as $slug_word) {
 				if ($slug_word === $word || ($long && str_starts_with($slug_word, $word))) {
 					$found = true;
 					break;
