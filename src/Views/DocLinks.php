@@ -20,10 +20,14 @@ class DocLinks
 	const SECTIONS = [
 		// Settings.
 		'crawlwp_site_info'            => 'setting-up-organization-vs-person',
+		'crawlwp_local_seo'            => 'setting-up-local-seo',
+		'crawlwp_authors'              => 'author-profiles-and-author-box',
 		'crawlwp_site_verification'    => 'verify-website-google-search-console',
 		'crawlwp_social'               => 'setting-up-open-graph-for-facebook',
 		'crawlwp_sitemap_settings'     => 'understanding-crawlwp-sitemaps',
 		'crawlwp_email_reports'        => 'seo-performance-email-reports',
+		'crawlwp_alerts'               => 'index-and-ranking-alerts', // Premium section.
+		'crawlwp_role_manager'         => 'roles-and-permissions', // Premium section.
 		'crawlwp_code'                 => 'adding-header-footer-scripts-wordpress',
 		'crawlwp_breadcrumbs_settings' => 'setting-up-breadcrumbs',
 		'crawlwp_rss'                  => 'rss-footer-and-content-attribution',
@@ -49,6 +53,7 @@ class DocLinks
 		'crawlwp_google_webmaster'     => 'integrating-wordpress-with-google-search',
 		'crawlwp_yandex_webmaster'     => 'integrating-wordpress-with-yandex',
 		'crawlwp_logs'                 => 'reading-the-indexing-submission-log',
+		'crawlwp_submit_urls'          => 'submitting-urls-to-search-engines',
 	];
 
 	const PREFIXES = [
