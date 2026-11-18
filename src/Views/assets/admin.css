@@ -968,3 +968,8 @@ body:not(.cwpWP7higher) .cwp-premium-sidebar-upsell-cta .button-primary {
 	overflow-wrap: anywhere;
 	word-break: break-all;
 }
+
+/* "Learn more" docs link next to a settings section heading. */
+.wposa-doc-link { margin-left: 10px; font-size: 13px; font-weight: 400; text-decoration: none; vertical-align: middle; white-space: nowrap; }
+.wposa-doc-link::after { content: " \2197"; }
+.wposa-doc-link:hover, .wposa-doc-link:focus { text-decoration: underline; }

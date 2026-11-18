@@ -238,6 +238,7 @@ class Settings
 					'header_menu_id' => 'index_settings',
 					'id'             => 'general',
 					'title'          => __('General', 'mihdan-index-now'),
+					'desc'           => __('Choose what CrawlWP sends to search engines, and when. Drafts, private posts and pages set to noindex are never sent.', 'mihdan-index-now'),
 				)
 			);
 
@@ -249,7 +250,7 @@ class Settings
 					'name'    => __('Post Types', 'mihdan-index-now'),
 					'options' => $this->get_post_types(),
 					'default' => Indexing::get_default('post_types', 'general'),
-					'desc'    => esc_html__('Select the custom post types that can be submitted to Search Engines for indexing.', 'mihdan-index-now')
+					'desc'    => esc_html__('Posts of these types are sent to search engines when they are published or updated.', 'mihdan-index-now')
 				)
 			);
 
@@ -261,7 +262,7 @@ class Settings
 					'name'    => __('Taxonomies', 'mihdan-index-now'),
 					'options' => $this->get_taxonomies(),
 					'default' => Indexing::get_default('taxonomies', 'general'),
-					'desc'    => esc_html__('Select the taxonomies that can be submitted to Search Engines for indexing.', 'mihdan-index-now')
+					'desc'    => esc_html__('Archive pages of these taxonomies (for example a category page) are sent when "Term added or updated" is on.', 'mihdan-index-now')
 				)
 			);
 
@@ -280,6 +281,7 @@ class Settings
 					'id'      => 'ping_on_post',
 					'type'    => 'switch',
 					'name'    => __('Post added', 'mihdan-index-now'),
+					'desc'    => esc_html__('Send a post the first time it is published.', 'mihdan-index-now'),
 					'default' => Indexing::get_default('ping_on_post', 'general'),
 				)
 			);
@@ -290,6 +292,7 @@ class Settings
 					'id'      => 'ping_on_post_updated',
 					'type'    => 'switch',
 					'name'    => __('Post updated', 'mihdan-index-now'),
+					'desc'    => esc_html__('Send a published post again each time you save changes to it.', 'mihdan-index-now'),
 					'default' => Indexing::get_default('ping_on_post_updated', 'general'),
 				)
 			);
@@ -300,6 +303,7 @@ class Settings
 					'id'      => 'ping_on_term',
 					'type'    => 'switch',
 					'name'    => __('Term added or updated', 'mihdan-index-now'),
+					'desc'    => esc_html__('Send a category, tag or other term page when it is created or edited.', 'mihdan-index-now'),
 					'default' => Indexing::get_default('ping_on_term', 'general'),
 				)
 			);
@@ -310,7 +314,7 @@ class Settings
 					'id'      => 'ping_on_comment',
 					'type'    => 'switch',
 					'name'    => __('Comment approved', 'mihdan-index-now'),
-					'desc'    => esc_html__('Resubmit the post to IndexNow when one of its comments is approved.', 'mihdan-index-now'),
+					'desc'    => esc_html__('Send the post to IndexNow again when one of its comments is approved.', 'mihdan-index-now'),
 					'default' => Indexing::get_default('ping_on_comment', 'general'),
 				)
 			);
@@ -321,6 +325,7 @@ class Settings
 					'id'      => 'disable_for_bulk_edit',
 					'type'    => 'switch',
 					'name'    => __('Disable for Bulk Edit', 'mihdan-index-now'),
+					'desc'    => esc_html__('Don\'t send posts changed with Bulk Edit on the Posts screen, so a bulk change doesn\'t send many URLs at once.', 'mihdan-index-now'),
 					'default' => Indexing::get_default('disable_for_bulk_edit', 'general'),
 				)
 			);
@@ -331,6 +336,7 @@ class Settings
 					'id'      => 'show_last_update_column',
 					'type'    => 'switch',
 					'name'    => __('Show last update column', 'mihdan-index-now'),
+					'desc'    => esc_html__('Add a column to the post lists showing when each post was last sent.', 'mihdan-index-now'),
 					'default' => Indexing::get_default('show_last_update_column', 'general'),
 				)
 			);
@@ -341,7 +347,7 @@ class Settings
 					'id'      => 'ping_delay',
 					'type'    => 'select',
 					'name'    => __('Ping Delay', 'mihdan-index-now'),
-					'desc'    => __('Minimum time between submissions of a single URL. Changes saved within this window are submitted when it ends.', 'mihdan-index-now'),
+					'desc'    => __('Wait at least this long before sending the same URL again. Changes you save during the wait are sent when it ends.', 'mihdan-index-now'),
 					'default' => Indexing::get_default('ping_delay', 'general'),
 					'options' => [
 						60   => __('1 minute', 'mihdan-index-now'),
@@ -360,7 +366,7 @@ class Settings
 					'header_menu_id' => 'index_settings',
 					'id'             => 'index_now',
 					'title'          => __('IndexNow', 'mihdan-index-now'),
-					'desc'           => __('IndexNow is an easy way for websites owners to instantly inform search engines about latest content changes on their website. In its simplest form, IndexNow is a simple ping so that search engines know that a URL and its content has been added, updated, or deleted, allowing search engines to quickly reflect this change in their search results.', 'mihdan-index-now'),
+					'desc'           => __('IndexNow tells search engines as soon as you publish, update or delete a page. Search engines that support IndexNow share what you send with each other, so you only need one. Google doesn\'t use IndexNow; use the Google option for Google.', 'mihdan-index-now'),
 				)
 			);
 
@@ -394,7 +400,7 @@ class Settings
 					'name'     => __('Search Engine', 'mihdan-index-now'),
 					'default'  => Indexing::get_default('search_engine', 'index_now'),
 					'help_tab' => 'https://crawlwp.com/article/setting-up-search-engine-indexing-for-wordpress/?utm_source=wp_dashboard&utm_medium=indexing_settings_page&utm_campaign=indexnow#wordpress-indexing-via-indexnow',
-					'desc'     => __('You only need to select one search engine because with the IndexNow protocol, the selected one will notify the others.', 'mihdan-index-now'),
+					'desc'     => __('Pick one. It passes your submissions on to the other IndexNow search engines.', 'mihdan-index-now'),
 					'options'  => [
 						'bing-index-now'   => __('Bing', 'mihdan-index-now'),
 						'index-now'        => __('IndexNow', 'mihdan-index-now'),
@@ -410,7 +416,7 @@ class Settings
 					'header_menu_id' => 'index_settings',
 					'id'             => 'bing_webmaster',
 					'title'          => __('Bing', 'mihdan-index-now'),
-					'desc'           => sprintf(__('Enable to use Bing API to request indexing. %sBing supports the IndexNow protocol. You might not need to enable this if IndexNow is active.%s', 'mihdan-index-now'), '<strong>', '</strong>'),
+					'desc'           => __('Also send URLs through the Bing Webmaster API. Most sites don\'t need this, because IndexNow already tells Bing.', 'mihdan-index-now'),
 				)
 			);
 
@@ -441,7 +447,7 @@ class Settings
 					'header_menu_id' => 'index_settings',
 					'id'             => 'google_webmaster',
 					'title'          => __('Google', 'mihdan-index-now'),
-					'desc'           => __('Enable to use Google Instant Indexing API to request indexing', 'mihdan-index-now')
+					'desc'           => __('Send URLs to Google through the Google Indexing API. Google says this API is meant for pages with job postings or livestream videos, and it limits how many URLs you can send each day.', 'mihdan-index-now')
 				)
 			);
 
@@ -472,7 +478,7 @@ class Settings
 					'header_menu_id' => 'index_settings',
 					'id'             => 'yandex_webmaster',
 					'title'          => __('Yandex', 'mihdan-index-now'),
-					'desc'           => sprintf(__('Enable to use Yandex API to request indexing. %sYandex supports the IndexNow protocol. You might not need to enable this if IndexNow is active.%s', 'mihdan-index-now'), '<strong>', '</strong>'),
+					'desc'           => __('Also send URLs through the Yandex Webmaster API. Most sites don\'t need this, because IndexNow already tells Yandex.', 'mihdan-index-now'),
 				)
 			);
 
@@ -504,7 +510,7 @@ class Settings
 					'header_menu_id' => 'index_settings',
 					'id'             => 'logs',
 					'title'          => __('Logs', 'mihdan-index-now'),
-					'desc'           => __('Module for logging incoming request from search engine and outgoing request from site.', 'mihdan-index-now'),
+					'desc'           => __('Keep a record of what CrawlWP sends to search engines. You can read it on the Log tab.', 'mihdan-index-now'),
 				)
 			);
 
@@ -514,6 +520,7 @@ class Settings
 					'id'      => 'enable',
 					'type'    => 'switch',
 					'name'    => __('Enable', 'mihdan-index-now'),
+					'desc'    => esc_html__('Turn off to stop logging completely.', 'mihdan-index-now'),
 					'default' => 'on',
 				)
 			);
@@ -524,6 +531,7 @@ class Settings
 					'id'      => 'key_logging',
 					'type'    => 'switch',
 					'name'    => __('IndexNow logging', 'mihdan-index-now'),
+					'desc'    => esc_html__('Also log each time a search engine checks your IndexNow key file.', 'mihdan-index-now'),
 					'default' => 'on',
 				)
 			);
@@ -546,7 +554,7 @@ class Settings
 					'type'    => 'number',
 					'name'    => __('Lifetime', 'mihdan-index-now'),
 					'default' => 7,
-					'desc'    => __('Logs lifetime in days', 'mihdan-index-now'),
+					'desc'    => __('Delete log entries older than this many days.', 'mihdan-index-now'),
 				)
 			);
 

@@ -704,7 +704,7 @@ class WPOSA
 			 *
 			 * @since 1.0.0
 			 */
-			add_settings_section($section['id'], $section['title'] ?? '', $callback, $section['id']);
+			add_settings_section($section['id'], DocLinks::title((string)($section['title'] ?? ''), $section['id']), $callback, $section['id']);
 		} // foreach ended.
 		/**
 		 * Register settings fields.
