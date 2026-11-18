@@ -71,6 +71,8 @@ class ImporterSettings
 				'terms'     => __('terms', 'mihdan-index-now'),
 				'users'     => __('authors', 'mihdan-index-now'),
 				'redirects' => __('redirects', 'mihdan-index-now'),
+				'import'    => __('Import', 'mihdan-index-now'),
+				'noData'    => __('No data', 'mihdan-index-now'),
 			],
 			'stageLabels' => [
 				'settings'  => __('Global settings', 'mihdan-index-now'),
