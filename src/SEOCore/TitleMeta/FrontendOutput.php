@@ -1644,7 +1644,7 @@ class FrontendOutput
 			Graph::add_node($schema);
 
 			if ($posts_page instanceof \WP_Post) {
-				Graph::add_nodes(Graph::nodes_for_post($posts_page));
+				Graph::add_nodes(Graph::nodes_for_post($posts_page, $this->schema_id('webpage')));
 			}
 
 			return;
@@ -1803,7 +1803,7 @@ class FrontendOutput
 		Graph::add_node($schema);
 
 		/* Custom JSON-LD from the metabox — only on pages that carry structured data. */
-		Graph::add_nodes(Graph::nodes_for_post($post));
+		Graph::add_nodes(Graph::nodes_for_post($post, $webpage_id));
 	}
 
 	/**

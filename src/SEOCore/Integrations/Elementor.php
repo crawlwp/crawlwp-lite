@@ -736,9 +736,15 @@ class Elementor
 			$values[MetaFields::REDIRECT_URL] = '';
 		}
 
+		// Rich result values are only cleaned by RichResults::sanitize() (see MetaFields::save()).
+		if (isset($values[MetaFields::SCHEMA_RICH])) {
+			$values[MetaFields::SCHEMA_RICH] = \Mihdan\IndexNow\SEOCore\Schema\RichResults::sanitize((string) $values[MetaFields::SCHEMA_RICH], (string) get_post_meta($post_id, MetaFields::SCHEMA_RICH, true));
+		}
+
 		// Persist verified post meta
+		// update_post_meta() unslashes: slash the clean values so JSON keeps its backslashes.
 		foreach ($values as $meta_key => $meta_val) {
-			update_post_meta($post_id, $meta_key, $meta_val);
+			update_post_meta($post_id, $meta_key, wp_slash($meta_val));
 		}
 
 		// Ensure default values are written for empty keys
