@@ -34,7 +34,7 @@
 				src.redirects + ' ' + crawlwpImporter.i18n.redirects
 			].join(' · ');
 			var $btn = $('<button type="button" class="button button-primary"/>')
-				.text(src.available ? 'Import' : 'No data')
+				.text(src.available ? (crawlwpImporter.i18n.import || 'Import') : (crawlwpImporter.i18n.noData || 'No data'))
 				.prop('disabled', !src.available)
 				.attr('data-source', src.id);
 

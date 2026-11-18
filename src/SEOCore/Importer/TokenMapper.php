@@ -12,6 +12,7 @@ namespace Mihdan\IndexNow\SEOCore\Importer;
  *   AIOSEO    — app/Common/Utils/Tags.php
  *   SEOPress  — inc/functions/variables/dynamic-variables.php
  *   Slim SEO  — src/Settings/MetaTags/RestApi.php
+ *   SureRank  — inc/meta-variables/*.php
  *
  * Pure PHP — no WordPress dependency — so it can be unit-tested in isolation.
  */
@@ -55,6 +56,8 @@ class TokenMapper
 				return self::seopress_map();
 			case 'slimseo':
 				return self::slim_seo_map();
+			case 'surerank':
+				return self::surerank_map();
 			case 'tsf':
 				return self::tsf_map();
 			default:
@@ -486,6 +489,57 @@ class TokenMapper
 			'{{ user.description }}'    => '{{ author.description }}',
 			'{{ site.facebook_image }}' => '',
 			'{{ site.twitter_image }}'  => '',
+		];
+	}
+
+	/**
+	 * SureRank wraps tags in single percent signs, like Rank Math.
+	 *
+	 * @return array<string,string>
+	 */
+	private static function surerank_map(): array
+	{
+		return [
+			/* Post. */
+			'%title%'              => '{{ post.title }}',
+			'%excerpt%'            => '{{ post.auto_description }}',
+			'%content%'            => '{{ post.auto_description }}',
+			'%permalink%'          => '{{ post.url }}',
+			'%post_url%'           => '{{ post.url }}',
+			'%id%'                 => '{{ post.id }}',
+			'%published%'          => '{{ post.date }}',
+			'%modified%'           => '{{ post.modified }}',
+			'%author_name%'        => '{{ post.author }}',
+			'%archive_title%'      => '{{ term.title }}',
+
+			/* Terms. */
+			'%term_title%'         => '{{ term.title }}',
+			'%term_description%'   => '{{ term.description }}',
+
+			/* Author archives. */
+			'%author_description%' => '{{ author.description }}',
+			'%author_nicename%'    => '{{ author.display_name }}',
+
+			/* Site. */
+			'%site_name%'          => '{{ site.title }}',
+			'%tagline%'            => '{{ site.description }}',
+			'%site_url%'           => '{{ site.url }}',
+			'%org_name%'           => '{{ site.title }}',
+			'%org_url%'            => '{{ site.url }}',
+			'%org_logo%'           => '',
+			'%separator%'          => '{{ sep }}',
+			'%sep%'                => '{{ sep }}',
+
+			/* Current date and time. */
+			'%currentdate%'        => '{{ current.date }}',
+			'%currentday%'         => '{{ current.day }}',
+			'%currentmonth%'       => '{{ current.month }}',
+			'%currentyear%'        => '{{ current.year }}',
+			'%currenttime%'        => '{{ current.time }}',
+
+			/* Search and pagination. */
+			'%search_query%'       => '{{ search.query }}',
+			'%page%'               => '{{ page }}',
 		];
 	}
 }
