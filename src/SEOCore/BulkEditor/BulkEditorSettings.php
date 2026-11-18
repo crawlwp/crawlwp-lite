@@ -273,6 +273,14 @@ class BulkEditorSettings
 			'perm'                => 'editable',
 		];
 
+		// With several post types, WordPress checks "edit others" against a capability no role has
+		// and so lists only the user's own posts. Drop the restriction when the user can edit
+		// everyone's posts, including private ones, in every listed type; each row is still
+		// checked with edit_post on save.
+		if (is_array($post_type) && self::can_edit_all_of($post_type)) {
+			unset($args['perm']);
+		}
+
 		if ($search !== '') {
 			$args['s'] = $search;
 		}
@@ -485,6 +493,25 @@ class BulkEditorSettings
 	// -------------------------------------------------------------------------
 	// Helpers
 	// -------------------------------------------------------------------------
+
+	/**
+	 * True when the current user can edit other people's posts, private ones included, of every
+	 * given post type.
+	 *
+	 * @param string[] $post_types
+	 */
+	public static function can_edit_all_of(array $post_types): bool
+	{
+		foreach ($post_types as $post_type) {
+			$object = get_post_type_object($post_type);
+
+			if (! $object || ! current_user_can($object->cap->edit_others_posts) || ! current_user_can($object->cap->edit_private_posts)) {
+				return false;
+			}
+		}
+
+		return $post_types !== [];
+	}
 
 	/**
 	 * @return string[]
