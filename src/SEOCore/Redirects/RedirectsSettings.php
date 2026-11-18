@@ -2,6 +2,8 @@
 
 namespace Mihdan\IndexNow\SEOCore\Redirects;
 
+use Mihdan\IndexNow\SEOCore\Permissions;
+
 use Mihdan\IndexNow\Utils;
 use Mihdan\IndexNow\Views\WPOSA;
 
@@ -126,7 +128,7 @@ class RedirectsSettings
 	{
 		check_ajax_referer('crawlwp_redirects_nonce', 'nonce');
 
-		if (!current_user_can('manage_options')) {
+		if (!Permissions::can(Permissions::REDIRECTS)) {
 			wp_send_json_error(['message' => __('Permission denied.', 'mihdan-index-now')]);
 		}
 
@@ -158,7 +160,7 @@ class RedirectsSettings
 	{
 		check_ajax_referer('crawlwp_redirects_nonce', 'nonce');
 
-		if (!current_user_can('manage_options')) {
+		if (!Permissions::can(Permissions::REDIRECTS)) {
 			wp_send_json_error(['message' => __('Permission denied.', 'mihdan-index-now')]);
 		}
 
@@ -175,6 +177,25 @@ class RedirectsSettings
 
 		$data['priority']       = (int) ($_POST['priority'] ?? RedirectsManager::DEFAULT_PRIORITY);
 		$data['allow_external'] = (int) ($_POST['allow_external'] ?? 0);
+
+		/*
+		 * Sending visitors to another site is for administrators, as in the SEO box
+		 * (crawlwp_allow_external_redirects). Other roles given the Redirects
+		 * permission can still re-save an existing external rule, but only unchanged in what it
+		 * matches and where it goes: otherwise a catch-all "from" could send every page off-site.
+		 */
+		if ($data['allow_external'] && ! (bool) apply_filters('crawlwp_allow_external_redirects', current_user_can('manage_options'), 0)) {
+			$existing  = $id > 0 ? $this->manager->get($id) : null;
+			$unchanged = $existing
+				&& (int) ($existing->allow_external ?? 0) === 1
+				&& (string) $existing->to_url === (string) wp_unslash($data['to_url'])
+				&& (string) $existing->from_url === (string) wp_unslash($data['from_url'])
+				&& (string) $existing->match_type === (string) wp_unslash($data['match_type']);
+
+			if (! $unchanged) {
+				$data['allow_external'] = 0;
+			}
+		}
 
 		if (empty($data['from_url'])) {
 			wp_send_json_error(['message' => __('From URL is required.', 'mihdan-index-now')]);
@@ -234,7 +255,7 @@ class RedirectsSettings
 	{
 		check_ajax_referer('crawlwp_redirects_nonce', 'nonce');
 
-		if (!current_user_can('manage_options')) {
+		if (!Permissions::can(Permissions::REDIRECTS)) {
 			wp_send_json_error(['message' => __('Permission denied.', 'mihdan-index-now')]);
 		}
 
@@ -254,7 +275,7 @@ class RedirectsSettings
 	{
 		check_ajax_referer('crawlwp_redirects_nonce', 'nonce');
 
-		if (!current_user_can('manage_options')) {
+		if (!Permissions::can(Permissions::REDIRECTS)) {
 			wp_send_json_error(['message' => __('Permission denied.', 'mihdan-index-now')]);
 		}
 
@@ -278,7 +299,7 @@ class RedirectsSettings
 	{
 		check_ajax_referer('crawlwp_redirects_nonce', 'nonce');
 
-		if (!current_user_can('manage_options')) {
+		if (!Permissions::can(Permissions::REDIRECTS)) {
 			wp_send_json_error(['message' => __('Permission denied.', 'mihdan-index-now')]);
 		}
 

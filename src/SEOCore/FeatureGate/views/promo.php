@@ -74,11 +74,13 @@ if (!defined('ABSPATH')) {
 					'mihdan-index-now'
 				); ?>
 			</p>
+			<?php if (current_user_can('manage_options')) : /* the wizard is administrators-only */ ?>
 			<div style="margin-top: 14px;">
 				<a href="<?php echo esc_url(wp_nonce_url(admin_url('admin-post.php?action=crawlwp_enable_and_launch_wizard'), 'crawlwp_enable_wizard')); ?>" class="button button-primary button-hero">
 					<?php esc_html_e('Enable & Launch Setup Wizard →', 'mihdan-index-now'); ?>
 				</a>
 			</div>
+			<?php endif; ?>
 		</div>
 	</div>
 

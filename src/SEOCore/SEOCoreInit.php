@@ -100,6 +100,10 @@ class SEOCoreInit
 		new SiteVerificationFrontendOutput();
 		new EmailReportsUpsell();
 
+		// Before the gate: the settings permission (Premium's Role Manager) also
+		// applies on sites that keep the SEO features off.
+		new Permissions();
+
 		// The on-page SEO output features are gated behind the master toggle.
 		// Admins who are upgrading from another SEO plugin can review settings
 		// first, then flip the switch on the "SEO Features" tab.

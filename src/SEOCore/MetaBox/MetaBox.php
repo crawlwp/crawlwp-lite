@@ -15,6 +15,10 @@ class MetaBox
 
 	public function register($post_type = '')
 	{
+		if (! \Mihdan\IndexNow\SEOCore\Permissions::can(\Mihdan\IndexNow\SEOCore\Permissions::SEO_BOX)) {
+			return;
+		}
+
 		$post_types = get_post_types(['public' => true]);
 
 		/*

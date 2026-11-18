@@ -30,6 +30,10 @@ class TermMetaBox
 
 	public function render_add(): void
 	{
+		if (! \Mihdan\IndexNow\SEOCore\Permissions::can_term_seo()) {
+			return;
+		}
+
 		wp_nonce_field(MetaFields::NONCE_ACTION, MetaFields::NONCE_NAME);
 		?>
 		<div class="form-field">
@@ -45,6 +49,10 @@ class TermMetaBox
 
 	public function render_edit(\WP_Term $term): void
 	{
+		if (! \Mihdan\IndexNow\SEOCore\Permissions::can_term_seo()) {
+			return;
+		}
+
 		$data       = TermFields::get_all((int) $term->term_id);
 		$entity_key = Entities::taxonomy_key($term->taxonomy);
 		wp_nonce_field(MetaFields::NONCE_ACTION, MetaFields::NONCE_NAME);
@@ -65,6 +73,7 @@ class TermMetaBox
 				<textarea name="<?php echo esc_attr(MetaFields::SEO_DESCRIPTION); ?>" id="cwpTermDesc" rows="3" class="large-text"><?php echo esc_textarea($data['seo_description']); ?></textarea>
 			</td>
 		</tr>
+		<?php if (\Mihdan\IndexNow\SEOCore\Permissions::can(\Mihdan\IndexNow\SEOCore\Permissions::SEO_ADVANCED)) : ?>
 		<tr class="form-field">
 			<th scope="row"><label for="cwpTermCanonical"><?php esc_html_e('Canonical URL', 'mihdan-index-now'); ?></label></th>
 			<td>
@@ -86,6 +95,7 @@ class TermMetaBox
 				</select>
 			</td>
 		</tr>
+		<?php endif; ?>
 		<tr class="form-field">
 			<th scope="row"><label for="cwpTermOgTitle"><?php esc_html_e('Open Graph title', 'mihdan-index-now'); ?></label></th>
 			<td>

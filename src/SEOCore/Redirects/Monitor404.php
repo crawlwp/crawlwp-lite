@@ -2,6 +2,8 @@
 
 namespace Mihdan\IndexNow\SEOCore\Redirects;
 
+use Mihdan\IndexNow\SEOCore\Permissions;
+
 use Mihdan\IndexNow\Utils;
 use Mihdan\IndexNow\Views\WPOSA;
 
@@ -332,7 +334,7 @@ class Monitor404
 
 	private function guard(): void
 	{
-		if (! current_user_can('manage_options')) {
+		if (! Permissions::can(Permissions::REDIRECTS)) {
 			wp_send_json_error(['message' => __('Permission denied.', 'mihdan-index-now')], 403);
 		}
 		check_ajax_referer('crawlwp_404_nonce', 'nonce');

@@ -254,8 +254,8 @@ class PostListColumn
 			return;
 		}
 
-		/* Only for registered public post types. */
-		if (! in_array($post_type, $this->get_public_post_types(), true)) {
+		/* Only for registered public post types, and users allowed the SEO box. */
+		if (! in_array($post_type, $this->get_public_post_types(), true) || ! \Mihdan\IndexNow\SEOCore\Permissions::can(\Mihdan\IndexNow\SEOCore\Permissions::SEO_BOX)) {
 			return;
 		}
 
@@ -311,7 +311,7 @@ class PostListColumn
 			return;
 		}
 
-		if (! current_user_can('edit_post', $post_id)) {
+		if (! current_user_can('edit_post', $post_id) || ! \Mihdan\IndexNow\SEOCore\Permissions::can(\Mihdan\IndexNow\SEOCore\Permissions::SEO_BOX)) {
 			return;
 		}
 

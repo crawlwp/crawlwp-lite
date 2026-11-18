@@ -47,7 +47,7 @@ class BulkAI
 		$previous = isset($_POST['previous']) ? sanitize_textarea_field(wp_unslash($_POST['previous'])) : '';
 		$batch    = ! empty($_POST['batch']) && self::batch_enabled();
 
-		if (! $id || ! current_user_can('edit_post', $id)) {
+		if (! $id || ! current_user_can('edit_post', $id) || ! \Mihdan\IndexNow\SEOCore\Permissions::can(\Mihdan\IndexNow\SEOCore\Permissions::BULK_EDITOR)) {
 			wp_send_json_error(['message' => __('You are not allowed to edit this item.', 'mihdan-index-now')], 403);
 		}
 

@@ -246,7 +246,7 @@ class BulkEditorSettings
 	{
 		check_ajax_referer('crawlwp_bulk_editor_nonce', 'nonce');
 
-		if (! current_user_can('edit_posts')) {
+		if (! \Mihdan\IndexNow\SEOCore\Permissions::can_edit_content(get_current_user_id()) || ! \Mihdan\IndexNow\SEOCore\Permissions::can(\Mihdan\IndexNow\SEOCore\Permissions::BULK_EDITOR)) {
 			wp_send_json_error(['message' => __('Permission denied.', 'mihdan-index-now')]);
 		}
 
@@ -321,7 +321,7 @@ class BulkEditorSettings
 	{
 		check_ajax_referer('crawlwp_bulk_editor_nonce', 'nonce');
 
-		if (! current_user_can('edit_posts')) {
+		if (! \Mihdan\IndexNow\SEOCore\Permissions::can_edit_content(get_current_user_id()) || ! \Mihdan\IndexNow\SEOCore\Permissions::can(\Mihdan\IndexNow\SEOCore\Permissions::BULK_EDITOR)) {
 			wp_send_json_error(['message' => __('Permission denied.', 'mihdan-index-now')]);
 		}
 
@@ -432,7 +432,7 @@ class BulkEditorSettings
 		$id   = isset($_POST['id']) ? (int) $_POST['id'] : 0;
 		$post = $id > 0 ? get_post($id) : null;
 
-		if (! $post instanceof \WP_Post || ! current_user_can('edit_post', $id)) {
+		if (! $post instanceof \WP_Post || ! current_user_can('edit_post', $id) || ! \Mihdan\IndexNow\SEOCore\Permissions::can(\Mihdan\IndexNow\SEOCore\Permissions::BULK_EDITOR)) {
 			wp_send_json_error(['message' => __('Permission denied.', 'mihdan-index-now')]);
 		}
 
