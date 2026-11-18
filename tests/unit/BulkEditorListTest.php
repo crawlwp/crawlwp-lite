@@ -3,6 +3,8 @@
 use Mihdan\IndexNow\SEOCore\BulkEditor\BulkEditorSettings;
 use PHPUnit\Framework\TestCase;
 
+require_once CRAWLWP_TESTS_PLUGIN_DIR . '/src/SEOCore/BulkEditor/BulkEditorSettings.php';
+
 class BulkEditorListTest extends TestCase
 {
 	protected function setUp(): void
