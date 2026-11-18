@@ -48,7 +48,7 @@
     }
 
     /*
-     * Why a number or web address won't be saved, or ''. The server applies the same rules
+     * Why a number, web address, currency or length won't be saved, or ''. The server applies the same rules
      * (RichResults::clean_value()); the inputs are plain text fields because the
      * browser's own number checks would silently block the editor's Update button
      * when the Schema tab is hidden.
@@ -57,6 +57,9 @@
         v = String(v).trim();
         if (v === '') return '';
         if (field.type === 'minutes') return /^\d+$/.test(v) ? '' : i18n.wholeNumber;
+        // Currency and length: the same patterns RichResults::clean_value() keeps.
+        if (field.type === 'currency') return /^[A-Z]{3}$/.test(v.toUpperCase()) ? '' : i18n.notCurrency;
+        if (field.type === 'duration') return /^(\d{1,2}:)?\d{1,2}:\d{2}$/.test(v) ? '' : i18n.notDuration;
         // Web addresses: the server keeps http and https only, and adds http:// to "www.example.com".
         if (field.type === 'url') return /\s/.test(v) || (/^[a-z][a-z0-9+.-]*:/i.test(v) && !/^https?:\/\//i.test(v)) ? i18n.notUrl : '';
         if (field.type !== 'number') return '';

@@ -619,6 +619,8 @@ class RichResults
 				'notDate'     => __('The date was incomplete, so it was cleared.', 'mihdan-index-now'),
 				'wholeNumber' => __('Use a whole number of minutes. This won\'t be saved.', 'mihdan-index-now'),
 				'notUrl'      => __('Not a web address (it should start with https://), so it won\'t be saved.', 'mihdan-index-now'),
+				'notCurrency' => __('Use a three-letter currency code such as USD, so it is saved.', 'mihdan-index-now'),
+				'notDuration' => __('Use minutes:seconds or hours:minutes:seconds, such as 12:30, so it is saved.', 'mihdan-index-now'),
 				/* translators: 1: lowest allowed number, 2: highest allowed number */
 				'between'     => __('Use a number from %1$s to %2$s. This won\'t be saved.', 'mihdan-index-now'),
 				/* translators: %s: lowest allowed number */
