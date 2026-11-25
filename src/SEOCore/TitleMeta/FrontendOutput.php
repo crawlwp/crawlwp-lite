@@ -51,6 +51,13 @@ class FrontendOutput
 	private $breadcrumb_node = null;
 
 	/**
+	 * Memoised {@see self::virtual_page()}, false until asked.
+	 *
+	 * @var array|false|null
+	 */
+	private static array|false|null $virtual_page = false;
+
+	/**
 	 * Request level url => attachment id map.
 	 *
 	 * `attachment_url_to_postid()` runs an uncached database query, so every
@@ -254,13 +261,19 @@ class FrontendOutput
 		$user = $context['user'] ?? null;
 		$user = $user instanceof \WP_User ? $user : null;
 
-		/* Singular / term / author requests may carry per-object overrides. */
+		/* A page from `crawlwp_virtual_page`. */
+		$virtual = $entity_key === 'virtual' ? self::virtual_page() : null;
+
+		/* Singular / term / author / virtual requests may carry per-object overrides. */
 		if ($meta_post !== null) {
 			$overrides = $this->post_overrides($meta_post->ID);
 		} elseif ($term !== null) {
 			$overrides = $this->term_overrides($term->term_id);
 		} elseif ($user !== null) {
 			$overrides = $this->user_overrides($user->ID);
+		} elseif ($virtual !== null) {
+			/* Empty values are left out, so they fall back like any other. */
+			$overrides = array_filter(['title' => $virtual['title'], 'description' => $virtual['description'], 'canonical_url' => $virtual['url']], 'strlen');
 		} else {
 			$overrides = [];
 		}
@@ -351,7 +364,9 @@ class FrontendOutput
 		 */
 		$is_article = $post !== null && is_singular() && ! is_home() && ! is_front_page();
 
-		$og_image = $this->image($entity_key, $prefix, 'og_image', $meta_post, $term);
+		$og_image = $virtual !== null && $virtual['image'] !== ''
+			? ['id' => 0, 'url' => $virtual['image']]
+			: $this->image($entity_key, $prefix, 'og_image', $meta_post, $term);
 		/* No featured image fallback here: an X image that is not set must fall
 		 * back to the OG image chain, which already ends with the featured image. */
 		$x_image  = $this->image($entity_key, $prefix, 'x_image', $meta_post, $term, false);
@@ -516,7 +531,61 @@ class FrontendOutput
 			return ['date', '', []];
 		}
 
-		return null;
+		return self::virtual_page() !== null ? ['virtual', '', []] : null;
+	}
+
+	/**
+	 * Forget the memoised virtual page, e.g. between tests.
+	 */
+	public static function flush_cache(): void
+	{
+		self::$virtual_page = false;
+	}
+
+	/**
+	 * The page a theme or plugin renders from its own route, with no post, term
+	 * or archive behind it, as described through `crawlwp_virtual_page`.
+	 *
+	 * @return array{title: string, description: string, url: string, image: string, breadcrumbs: array<int, array{text: string, url: string}>}|null
+	 */
+	public static function virtual_page(): ?array
+	{
+		/* Not cached: asked before the query is parsed, or outside a front-end page. */
+		if (! did_action('wp') || is_admin() || wp_doing_ajax() || is_feed() || is_robots()) {
+			return null;
+		}
+
+		if (self::$virtual_page !== false) {
+			return self::$virtual_page;
+		}
+
+		/**
+		 * Describe a page that no post, term or archive backs, such as one a theme
+		 * renders from its own rewrite rule, so CrawlWP prints its title, meta
+		 * description, canonical, social tags, breadcrumbs and WebPage schema.
+		 * Only asked when no other page type matches the request.
+		 *
+		 * @param array|null $page Null to leave the request alone, or:
+		 *     'url'         => (string) The canonical URL. Required.
+		 *     'title'       => (string) The meta title.
+		 *     'description' => (string) The meta description.
+		 *     'image'       => (string) The social image URL.
+		 *     'breadcrumbs' => (array)  The trail after Home, ending with this page:
+		 *                               [['text' => …, 'url' => …], …].
+		 */
+		$page = apply_filters('crawlwp_virtual_page', null);
+
+		if (! is_array($page) || empty($page['url'])) {
+			return self::$virtual_page = null;
+		}
+
+		return self::$virtual_page = [
+			'url'         => (string) $page['url'],
+			'title'       => (string) ($page['title'] ?? ''),
+			'description' => (string) ($page['description'] ?? ''),
+			'image'       => (string) ($page['image'] ?? ''),
+			'breadcrumbs' => array_values(array_filter((array) ($page['breadcrumbs'] ?? []), fn($crumb) => isset($crumb['text'], $crumb['url']))),
+		];
 	}
 
 	/**
@@ -1015,7 +1084,8 @@ class FrontendOutput
 		$data = $this->resolve();
 		$base = $data !== false ? (string) $data['canonical_base'] : '';
 
-		if ($base === '') {
+		/* A virtual page has no pages of its own, whatever the main query holds. */
+		if ($base === '' || $data['entity'] === 'virtual') {
 			return;
 		}
 
@@ -1594,6 +1664,8 @@ class FrontendOutput
 				$schema_type = 'ProfilePage';
 			} elseif (is_search()) {
 				$schema_type = 'SearchResultsPage';
+			} elseif ($data['entity'] === 'virtual') {
+				$schema_type = 'WebPage';
 			} else {
 				return;
 			}
