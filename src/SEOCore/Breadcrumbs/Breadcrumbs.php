@@ -4,6 +4,7 @@ namespace Mihdan\IndexNow\SEOCore\Breadcrumbs;
 
 use Mihdan\IndexNow\SEOCore\Breadcrumbs\BreadcrumbSettings;
 use Mihdan\IndexNow\SEOCore\MetaBox\MetaFields;
+use Mihdan\IndexNow\SEOCore\TitleMeta\FrontendOutput;
 use Mihdan\IndexNow\Utils;
 
 /**
@@ -381,6 +382,17 @@ class Breadcrumbs
 			$this->current = $author instanceof \WP_User ? $author->display_name : '';
 		} elseif (is_date()) {
 			$this->add_date_links();
+		} elseif (($virtual = FrontendOutput::virtual_page()) !== null) {
+			/* A page from `crawlwp_virtual_page`: its own trail, or just itself. */
+			$trail = $virtual['breadcrumbs'] ?: [['text' => $virtual['title'], 'url' => $virtual['url']]];
+			$last  = array_pop($trail);
+
+			foreach ($trail as $crumb) {
+				$this->add_link((string) $crumb['url'], (string) $crumb['text']);
+			}
+
+			$this->current     = (string) $last['text'];
+			$this->current_url = (string) $last['url'];
 		}
 
 		$this->add_pagination();
